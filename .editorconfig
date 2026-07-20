@@ -6,6 +6,9 @@ insert_final_newline = true
 trim_trailing_whitespace = true
 indent_style = space
 
+# CA1711: "Permission" es un concepto explícito del dominio del POS (Pos.Domain.Security.Permission)
+dotnet_code_quality.ca1711.allowed_suffixes = Permission
+
 [*.cs]
 end_of_line = crlf
 indent_size = 4
