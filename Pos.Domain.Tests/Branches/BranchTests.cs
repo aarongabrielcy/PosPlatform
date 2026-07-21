@@ -83,4 +83,51 @@ public class BranchTests
         branch.Activate();
         Assert.True(branch.IsActive);
     }
+
+    [Fact]
+    public void RehydrateRestoresActiveState()
+    {
+        var id = BranchId.New();
+        var organizationId = OrganizationId.New();
+
+        var branch = Branch.Rehydrate(id, organizationId, "Sucursal Centro", "SUC-1", true, UtcNow);
+
+        Assert.Equal(id, branch.Id);
+        Assert.Equal(organizationId, branch.OrganizationId);
+        Assert.Equal("Sucursal Centro", branch.Name);
+        Assert.Equal("SUC-1", branch.Code);
+        Assert.True(branch.IsActive);
+        Assert.Equal(UtcNow, branch.CreatedAtUtc);
+    }
+
+    [Fact]
+    public void RehydrateRestoresInactiveState()
+    {
+        var branch = Branch.Rehydrate(BranchId.New(), OrganizationId.New(), "Sucursal Centro", "SUC-1", false, UtcNow);
+
+        Assert.False(branch.IsActive);
+    }
+
+    [Fact]
+    public void RehydrateRejectsEmptyOrganizationId()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => Branch.Rehydrate(BranchId.New(), default, "Sucursal Centro", "SUC-1", true, UtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultId()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => Branch.Rehydrate(default, OrganizationId.New(), "Sucursal Centro", "SUC-1", true, UtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNonUtcDate()
+    {
+        var nonUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.FromHours(-5));
+
+        Assert.Throws<DomainValidationException>(
+            () => Branch.Rehydrate(BranchId.New(), OrganizationId.New(), "Sucursal Centro", "SUC-1", true, nonUtc));
+    }
 }

@@ -18,14 +18,35 @@ public sealed class Register
     public DateTimeOffset CreatedAtUtc { get; }
 
     public Register(RegisterId id, BranchId branchId, string name, string code, DateTimeOffset createdAtUtc)
+        : this(id, branchId, name, code, true, createdAtUtc)
+    {
+    }
+
+    private Register(
+        RegisterId id,
+        BranchId branchId,
+        string name,
+        string code,
+        bool isActive,
+        DateTimeOffset createdAtUtc)
     {
         Id = EnsureNotEmpty(id);
         BranchId = EnsureNotEmpty(branchId);
         Name = NormalizeName(name);
         Code = NormalizeCode(code);
         CreatedAtUtc = EnsureUtc(createdAtUtc);
-        IsActive = true;
+        IsActive = isActive;
     }
+
+    // Reconstruye estado ya persistido, incluyendo IsActive, sin pasar por Activate/Deactivate.
+    public static Register Rehydrate(
+        RegisterId id,
+        BranchId branchId,
+        string name,
+        string code,
+        bool isActive,
+        DateTimeOffset createdAtUtc) =>
+        new(id, branchId, name, code, isActive, createdAtUtc);
 
     public void Rename(string name)
     {

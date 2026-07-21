@@ -487,4 +487,110 @@ public class ProductTests
         Assert.Equal(new Money(100m, "MXN"), product.SalePrice);
         Assert.Equal(new Money(50m, "MXN"), product.Cost);
     }
+
+    [Fact]
+    public void RehydrateRestoresActiveState()
+    {
+        var id = ProductId.New();
+        var organizationId = OrganizationId.New();
+        var sku = new Sku("PROD-001");
+        var barcode = new Barcode("1234567890");
+        var salePrice = new Money(100m, "MXN");
+        var cost = new Money(50m, "MXN");
+
+        var product = Product.Rehydrate(
+            id,
+            organizationId,
+            sku,
+            barcode,
+            "Producto de prueba",
+            "Descripción",
+            salePrice,
+            cost,
+            true,
+            true,
+            FixedUtcNow);
+
+        Assert.Equal(id, product.Id);
+        Assert.Equal(organizationId, product.OrganizationId);
+        Assert.Equal(sku, product.Sku);
+        Assert.Equal(barcode, product.Barcode);
+        Assert.Equal("Producto de prueba", product.Name);
+        Assert.Equal("Descripción", product.Description);
+        Assert.Equal(salePrice, product.SalePrice);
+        Assert.Equal(cost, product.Cost);
+        Assert.True(product.TracksInventory);
+        Assert.True(product.IsActive);
+        Assert.Equal(FixedUtcNow, product.CreatedAtUtc);
+    }
+
+    [Fact]
+    public void RehydrateRestoresInactiveState()
+    {
+        var product = Product.Rehydrate(
+            ProductId.New(),
+            OrganizationId.New(),
+            new Sku("PROD-001"),
+            null,
+            "Producto de prueba",
+            null,
+            new Money(100m, "MXN"),
+            null,
+            true,
+            false,
+            FixedUtcNow);
+
+        Assert.False(product.IsActive);
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultProductId()
+    {
+        Assert.Throws<DomainValidationException>(() => Product.Rehydrate(
+            default,
+            OrganizationId.New(),
+            new Sku("PROD-001"),
+            null,
+            "Producto de prueba",
+            null,
+            new Money(100m, "MXN"),
+            null,
+            true,
+            true,
+            FixedUtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNegativeSalePrice()
+    {
+        Assert.Throws<DomainValidationException>(() => Product.Rehydrate(
+            ProductId.New(),
+            OrganizationId.New(),
+            new Sku("PROD-001"),
+            null,
+            "Producto de prueba",
+            null,
+            new Money(-1m, "MXN"),
+            null,
+            true,
+            true,
+            FixedUtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsMismatchedCurrenciesBetweenSalePriceAndCost()
+    {
+        Assert.Throws<DomainValidationException>(() => Product.Rehydrate(
+            ProductId.New(),
+            OrganizationId.New(),
+            new Sku("PROD-001"),
+            null,
+            "Producto de prueba",
+            null,
+            new Money(100m, "MXN"),
+            new Money(50m, "USD"),
+            true,
+            true,
+            FixedUtcNow));
+    }
 }
