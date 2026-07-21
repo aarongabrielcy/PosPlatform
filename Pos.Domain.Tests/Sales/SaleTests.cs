@@ -1596,4 +1596,331 @@ public class SaleTests
 
         Assert.Throws<DomainValidationException>(() => sale.EnsureCanComplete(beforeCreation));
     }
+
+    // ---------- Rehydrate ----------
+
+    private static SaleLine CreateDomainLine(
+        SaleLineId? id = null,
+        ProductId? productId = null,
+        Sku? sku = null,
+        string productName = "Producto de prueba",
+        decimal quantity = 1m,
+        Money? unitPrice = null) =>
+        new(
+            id ?? SaleLineId.New(),
+            productId ?? ProductId.New(),
+            sku ?? new Sku("SKU-001"),
+            productName,
+            quantity,
+            unitPrice ?? new Money(10m, "MXN"));
+
+    private static Payment CreateDomainPayment(
+        PaymentId? id = null,
+        PaymentMethod method = PaymentMethod.Cash,
+        Money? amount = null,
+        DateTimeOffset? paidAtUtc = null) =>
+        new(
+            id ?? PaymentId.New(),
+            method,
+            amount ?? new Money(10m, "MXN"),
+            paidAtUtc ?? CreatedAtUtc);
+
+    private static Sale Rehydrate(
+        SaleId? id = null,
+        OrganizationId? organizationId = null,
+        BranchId? branchId = null,
+        RegisterSessionId? registerSessionId = null,
+        UserId? createdByUserId = null,
+        string currency = "MXN",
+        DateTimeOffset? createdAtUtc = null,
+        IReadOnlyCollection<SaleLine>? lines = null,
+        IReadOnlyCollection<Payment>? payments = null,
+        SaleStatus status = SaleStatus.Draft,
+        DateTimeOffset? completedAtUtc = null) =>
+        Sale.Rehydrate(
+            id ?? SaleId.New(),
+            organizationId ?? OrganizationId.New(),
+            branchId ?? BranchId.New(),
+            registerSessionId ?? RegisterSessionId.New(),
+            createdByUserId ?? UserId.New(),
+            currency,
+            createdAtUtc ?? CreatedAtUtc,
+            lines ?? [],
+            payments ?? [],
+            status,
+            completedAtUtc);
+
+    [Fact]
+    public void RehydrateDraftPreservesIdentifiersLinesAndPayments()
+    {
+        var id = SaleId.New();
+        var organizationId = OrganizationId.New();
+        var branchId = BranchId.New();
+        var registerSessionId = RegisterSessionId.New();
+        var createdByUserId = UserId.New();
+        var lineId = SaleLineId.New();
+        var productId = ProductId.New();
+        var paymentId = PaymentId.New();
+        var line = CreateDomainLine(id: lineId, productId: productId, quantity: 2m, unitPrice: new Money(10m, "MXN"));
+        var payment = CreateDomainPayment(id: paymentId, amount: new Money(20m, "MXN"));
+
+        var sale = Sale.Rehydrate(
+            id,
+            organizationId,
+            branchId,
+            registerSessionId,
+            createdByUserId,
+            "MXN",
+            CreatedAtUtc,
+            [line],
+            [payment],
+            SaleStatus.Draft,
+            null);
+
+        Assert.Equal(id, sale.Id);
+        Assert.Equal(organizationId, sale.OrganizationId);
+        Assert.Equal(branchId, sale.BranchId);
+        Assert.Equal(registerSessionId, sale.RegisterSessionId);
+        Assert.Equal(createdByUserId, sale.CreatedByUserId);
+        Assert.Equal(CreatedAtUtc, sale.CreatedAtUtc);
+        Assert.Equal(SaleStatus.Draft, sale.Status);
+        Assert.Null(sale.CompletedAtUtc);
+        Assert.Single(sale.Lines);
+        Assert.Contains(sale.Lines, l => l.Id == lineId);
+        Assert.Single(sale.Payments);
+        Assert.Contains(sale.Payments, p => p.Id == paymentId);
+    }
+
+    [Fact]
+    public void RehydrateCompletedReconstructsCompletedSale()
+    {
+        var line = CreateDomainLine(quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var payment = CreateDomainPayment(amount: new Money(100m, "MXN"));
+        var completedAtUtc = CreatedAtUtc.AddMinutes(5);
+
+        var sale = Rehydrate(
+            lines: [line],
+            payments: [payment],
+            status: SaleStatus.Completed,
+            completedAtUtc: completedAtUtc);
+
+        Assert.Equal(SaleStatus.Completed, sale.Status);
+        Assert.Equal(completedAtUtc, sale.CompletedAtUtc);
+    }
+
+    [Fact]
+    public void RehydrateRecalculatesTotalsFromLinesAndPayments()
+    {
+        var line1 = CreateDomainLine(quantity: 2m, unitPrice: new Money(10m, "MXN"));
+        var line2 = CreateDomainLine(quantity: 3m, unitPrice: new Money(5m, "MXN"));
+        var payment = CreateDomainPayment(method: PaymentMethod.Cash, amount: new Money(50m, "MXN"));
+
+        var sale = Rehydrate(lines: [line1, line2], payments: [payment]);
+
+        Assert.Equal(new Money(35m, "MXN"), sale.Subtotal);
+        Assert.Equal(new Money(35m, "MXN"), sale.Total);
+        Assert.Equal(new Money(50m, "MXN"), sale.PaidAmount);
+        Assert.Equal(new Money(0m, "MXN"), sale.BalanceDue);
+        Assert.Equal(new Money(15m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void RehydrateIgnoresPersistedLineSubtotalAndRecomputesFromQuantityAndUnitPrice()
+    {
+        var line = CreateDomainLine(quantity: 4m, unitPrice: new Money(2.5m, "MXN"));
+
+        var sale = Rehydrate(lines: [line]);
+
+        Assert.Equal(new Money(10m, "MXN"), sale.Lines.Single().LineSubtotal);
+        Assert.Equal(new Money(10m, "MXN"), sale.Total);
+    }
+
+    [Fact]
+    public void RehydrateCopiesLinesCollectionInsteadOfAliasingIt()
+    {
+        var line = CreateDomainLine();
+        var originalList = new List<SaleLine> { line };
+
+        var sale = Rehydrate(lines: originalList);
+        originalList.Clear();
+
+        Assert.Single(sale.Lines);
+    }
+
+    [Fact]
+    public void RehydrateCopiesPaymentsCollectionInsteadOfAliasingIt()
+    {
+        var payment = CreateDomainPayment();
+        var originalList = new List<Payment> { payment };
+
+        var sale = Rehydrate(payments: originalList);
+        originalList.Clear();
+
+        Assert.Single(sale.Payments);
+    }
+
+    [Fact]
+    public void RehydrateDoesNotShareLineInstanceWithCaller()
+    {
+        var line = CreateDomainLine(quantity: 1m, unitPrice: new Money(10m, "MXN"));
+
+        var sale = Rehydrate(lines: [line]);
+        line.ChangeQuantity(999m);
+
+        Assert.Equal(1m, sale.Lines.Single().Quantity);
+        Assert.Equal(new Money(10m, "MXN"), sale.Total);
+    }
+
+    [Fact]
+    public void RehydrateRejectsDuplicateSaleLineId()
+    {
+        var lineId = SaleLineId.New();
+        var line1 = CreateDomainLine(id: lineId, productId: ProductId.New());
+        var line2 = CreateDomainLine(id: lineId, productId: ProductId.New());
+
+        Assert.Throws<DomainValidationException>(() => Rehydrate(lines: [line1, line2]));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDuplicateProductId()
+    {
+        var productId = ProductId.New();
+        var line1 = CreateDomainLine(productId: productId);
+        var line2 = CreateDomainLine(productId: productId);
+
+        Assert.Throws<DomainValidationException>(() => Rehydrate(lines: [line1, line2]));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDuplicatePaymentId()
+    {
+        var paymentId = PaymentId.New();
+        var payment1 = CreateDomainPayment(id: paymentId, amount: new Money(10m, "MXN"));
+        var payment2 = CreateDomainPayment(id: paymentId, amount: new Money(20m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(() => Rehydrate(payments: [payment1, payment2]));
+    }
+
+    [Fact]
+    public void RehydrateRejectsLineWithDifferentCurrency()
+    {
+        var line = CreateDomainLine(unitPrice: new Money(10m, "USD"));
+
+        Assert.Throws<DomainValidationException>(() => Rehydrate(currency: "MXN", lines: [line]));
+    }
+
+    [Fact]
+    public void RehydrateRejectsPaymentWithDifferentCurrency()
+    {
+        var payment = CreateDomainPayment(amount: new Money(10m, "USD"));
+
+        Assert.Throws<DomainValidationException>(() => Rehydrate(currency: "MXN", payments: [payment]));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNonCashPaymentsExceedingTotal()
+    {
+        var line = CreateDomainLine(quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var payment = CreateDomainPayment(method: PaymentMethod.Card, amount: new Money(120m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(() => Rehydrate(lines: [line], payments: [payment]));
+    }
+
+    [Fact]
+    public void RehydrateAllowsCashPaymentsExceedingTotal()
+    {
+        var line = CreateDomainLine(quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var payment = CreateDomainPayment(method: PaymentMethod.Cash, amount: new Money(120m, "MXN"));
+
+        var sale = Rehydrate(lines: [line], payments: [payment]);
+
+        Assert.Equal(new Money(20m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void RehydrateRejectsDraftWithCompletedAtUtc()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => Rehydrate(status: SaleStatus.Draft, completedAtUtc: CreatedAtUtc));
+    }
+
+    [Fact]
+    public void RehydrateRejectsCompletedWithoutCompletedAtUtc()
+    {
+        var line = CreateDomainLine(quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var payment = CreateDomainPayment(amount: new Money(100m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(
+            () => Rehydrate(lines: [line], payments: [payment], status: SaleStatus.Completed, completedAtUtc: null));
+    }
+
+    [Fact]
+    public void RehydrateRejectsCompletedWithInsufficientPayment()
+    {
+        var line = CreateDomainLine(quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var payment = CreateDomainPayment(amount: new Money(50m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(() => Rehydrate(
+            lines: [line], payments: [payment], status: SaleStatus.Completed, completedAtUtc: CreatedAtUtc));
+    }
+
+    [Fact]
+    public void RehydrateRejectsCompletedDateBeforeCreatedAtUtc()
+    {
+        var line = CreateDomainLine(quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var payment = CreateDomainPayment(amount: new Money(100m, "MXN"));
+        var beforeCreation = CreatedAtUtc.AddMinutes(-1);
+
+        Assert.Throws<DomainValidationException>(() => Rehydrate(
+            lines: [line], payments: [payment], status: SaleStatus.Completed, completedAtUtc: beforeCreation));
+    }
+
+    [Fact]
+    public void RehydrateRejectsUndefinedStatus()
+    {
+        Assert.Throws<DomainValidationException>(() => Rehydrate(status: (SaleStatus)999));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNullLines()
+    {
+        Assert.Throws<DomainValidationException>(() => Sale.Rehydrate(
+            SaleId.New(), OrganizationId.New(), BranchId.New(), RegisterSessionId.New(), UserId.New(),
+            "MXN", CreatedAtUtc, null!, [], SaleStatus.Draft, null));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNullPayments()
+    {
+        Assert.Throws<DomainValidationException>(() => Sale.Rehydrate(
+            SaleId.New(), OrganizationId.New(), BranchId.New(), RegisterSessionId.New(), UserId.New(),
+            "MXN", CreatedAtUtc, [], null!, SaleStatus.Draft, null));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNullLineElement()
+    {
+        Assert.Throws<DomainValidationException>(() => Rehydrate(lines: [null!]));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNullPaymentElement()
+    {
+        Assert.Throws<DomainValidationException>(() => Rehydrate(payments: [null!]));
+    }
+
+    [Fact]
+    public void RehydratedCompletedSaleRemainsFrozen()
+    {
+        var line = CreateDomainLine(quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var payment = CreateDomainPayment(amount: new Money(100m, "MXN"));
+
+        var sale = Rehydrate(lines: [line], payments: [payment], status: SaleStatus.Completed, completedAtUtc: CreatedAtUtc);
+
+        Assert.Throws<DomainValidationException>(() => AddLine(sale, productId: ProductId.New()));
+        Assert.Throws<DomainValidationException>(
+            () => sale.AddPayment(PaymentId.New(), PaymentMethod.Cash, new Money(1m, "MXN"), CreatedAtUtc));
+        Assert.Throws<DomainValidationException>(() => sale.RemoveLine(line.Id));
+        Assert.Throws<DomainValidationException>(() => sale.RemovePayment(payment.Id));
+    }
 }

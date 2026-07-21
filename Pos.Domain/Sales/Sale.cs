@@ -221,6 +221,156 @@ public sealed class Sale
         CompletedAtUtc = EnsureUtc(completedAtUtc, nameof(completedAtUtc));
     }
 
+    // Reconstruye una venta ya persistida. A diferencia del constructor, acepta líneas y pagos
+    // existentes y puede reconstruir directamente en estado Completed.
+    public static Sale Rehydrate(
+        SaleId id,
+        OrganizationId organizationId,
+        BranchId branchId,
+        RegisterSessionId registerSessionId,
+        UserId createdByUserId,
+        string currency,
+        DateTimeOffset createdAtUtc,
+        IReadOnlyCollection<SaleLine> lines,
+        IReadOnlyCollection<Payment> payments,
+        SaleStatus status,
+        DateTimeOffset? completedAtUtc) =>
+        new(
+            id,
+            organizationId,
+            branchId,
+            registerSessionId,
+            createdByUserId,
+            currency,
+            createdAtUtc,
+            lines,
+            payments,
+            status,
+            completedAtUtc);
+
+    private Sale(
+        SaleId id,
+        OrganizationId organizationId,
+        BranchId branchId,
+        RegisterSessionId registerSessionId,
+        UserId createdByUserId,
+        string currency,
+        DateTimeOffset createdAtUtc,
+        IReadOnlyCollection<SaleLine> lines,
+        IReadOnlyCollection<Payment> payments,
+        SaleStatus status,
+        DateTimeOffset? completedAtUtc)
+    {
+        Id = EnsureNotEmpty(id);
+        OrganizationId = EnsureNotEmpty(organizationId);
+        BranchId = EnsureNotEmpty(branchId);
+        RegisterSessionId = EnsureNotEmpty(registerSessionId);
+        CreatedByUserId = EnsureNotEmpty(createdByUserId);
+        CreatedAtUtc = EnsureUtc(createdAtUtc, nameof(createdAtUtc));
+
+        var zero = Money.Zero(currency);
+        _currency = zero.Currency;
+        Subtotal = zero;
+        Total = zero;
+        PaidAmount = zero;
+        BalanceDue = zero;
+        ChangeDue = zero;
+
+        if (lines is null)
+        {
+            throw new DomainValidationException("lines no puede ser nulo.");
+        }
+
+        if (payments is null)
+        {
+            throw new DomainValidationException("payments no puede ser nulo.");
+        }
+
+        foreach (var line in lines)
+        {
+            if (line is null)
+            {
+                throw new DomainValidationException("Las líneas no pueden contener elementos nulos.");
+            }
+
+            if (line.UnitPrice.Currency != _currency)
+            {
+                throw new DomainValidationException("UnitPrice.Currency debe coincidir con la moneda de la venta.");
+            }
+
+            if (_lines.Any(l => l.Id == line.Id))
+            {
+                throw new DomainValidationException("Ya existe una línea con el mismo SaleLineId.");
+            }
+
+            if (_lines.Any(l => l.ProductId == line.ProductId))
+            {
+                throw new DomainValidationException("Ya existe una línea con el mismo ProductId.");
+            }
+
+            _lines.Add(line.CreateSnapshot());
+        }
+
+        foreach (var payment in payments)
+        {
+            if (payment is null)
+            {
+                throw new DomainValidationException("Los pagos no pueden contener elementos nulos.");
+            }
+
+            if (payment.Amount.Currency != _currency)
+            {
+                throw new DomainValidationException("Amount.Currency debe coincidir con la moneda de la venta.");
+            }
+
+            if (_payments.Any(p => p.Id == payment.Id))
+            {
+                throw new DomainValidationException("Ya existe un pago con el mismo PaymentId.");
+            }
+
+            _payments.Add(new Payment(payment.Id, payment.Method, payment.Amount, payment.PaidAtUtc));
+        }
+
+        RecalculateTotals();
+
+        var nonCashPaidAmount = CalculateNonCashPaidAmount();
+
+        if (nonCashPaidAmount.Amount > Total.Amount)
+        {
+            throw new DomainValidationException(
+                "Los pagos Card o BankTransfer no pueden superar el Total de la venta.");
+        }
+
+        switch (status)
+        {
+            case SaleStatus.Draft:
+                if (completedAtUtc is not null)
+                {
+                    throw new DomainValidationException("Una venta Draft no puede tener CompletedAtUtc.");
+                }
+
+                Status = SaleStatus.Draft;
+                CompletedAtUtc = null;
+                break;
+
+            case SaleStatus.Completed:
+                if (completedAtUtc is null)
+                {
+                    throw new DomainValidationException("Una venta Completed requiere CompletedAtUtc.");
+                }
+
+                var validCompletedAtUtc = EnsureUtc(completedAtUtc.Value, nameof(completedAtUtc));
+                EnsureCanComplete(validCompletedAtUtc);
+
+                Status = SaleStatus.Completed;
+                CompletedAtUtc = validCompletedAtUtc;
+                break;
+
+            default:
+                throw new DomainValidationException("status no es un valor válido de SaleStatus.");
+        }
+    }
+
     public bool ContainsProduct(ProductId productId)
     {
         if (productId.Value == Guid.Empty)
