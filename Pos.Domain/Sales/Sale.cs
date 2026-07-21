@@ -9,6 +9,8 @@ public sealed class Sale
 {
     private readonly List<SaleLine> _lines = new();
 
+    private readonly List<Payment> _payments = new();
+
     private readonly string _currency;
 
     public SaleId Id { get; }
@@ -28,6 +30,18 @@ public sealed class Sale
     public Money Subtotal { get; private set; }
 
     public Money Total { get; private set; }
+
+    public SaleStatus Status { get; private set; }
+
+    public IReadOnlyCollection<Payment> Payments => _payments.ToList();
+
+    public Money PaidAmount { get; private set; }
+
+    public Money BalanceDue { get; private set; }
+
+    public Money ChangeDue { get; private set; }
+
+    public DateTimeOffset? CompletedAtUtc { get; private set; }
 
     public Sale(
         SaleId id,
@@ -49,6 +63,10 @@ public sealed class Sale
         _currency = zero.Currency;
         Subtotal = zero;
         Total = zero;
+        Status = SaleStatus.Draft;
+        PaidAmount = zero;
+        BalanceDue = zero;
+        ChangeDue = zero;
     }
 
     public void AddLine(
@@ -59,6 +77,8 @@ public sealed class Sale
         decimal quantity,
         Money unitPrice)
     {
+        EnsureDraft();
+
         var newLine = new SaleLine(saleLineId, productId, productSku, productName, quantity, unitPrice);
 
         if (unitPrice.Currency != _currency)
@@ -82,7 +102,15 @@ public sealed class Sale
 
     public void ChangeLineQuantity(SaleLineId saleLineId, decimal quantity)
     {
+        EnsureDraft();
+
         var line = FindLineOrThrow(saleLineId);
+
+        var projectedLine = line.CreateSnapshot();
+        projectedLine.ChangeQuantity(quantity);
+
+        var projectedTotal = Total - line.LineSubtotal + projectedLine.LineSubtotal;
+        EnsureNonCashPaymentsDoNotExceed(projectedTotal);
 
         line.ChangeQuantity(quantity);
         RecalculateTotals();
@@ -90,10 +118,102 @@ public sealed class Sale
 
     public void RemoveLine(SaleLineId saleLineId)
     {
+        EnsureDraft();
+
         var line = FindLineOrThrow(saleLineId);
+
+        var projectedTotal = Total - line.LineSubtotal;
+        EnsureNonCashPaymentsDoNotExceed(projectedTotal);
 
         _lines.Remove(line);
         RecalculateTotals();
+    }
+
+    public void AddPayment(
+        PaymentId paymentId,
+        PaymentMethod method,
+        Money amount,
+        DateTimeOffset paidAtUtc)
+    {
+        EnsureDraft();
+
+        var payment = new Payment(paymentId, method, amount, paidAtUtc);
+
+        if (payment.Amount.Currency != _currency)
+        {
+            throw new DomainValidationException("Amount.Currency debe coincidir con la moneda de la venta.");
+        }
+
+        if (_payments.Any(p => p.Id == payment.Id))
+        {
+            throw new DomainValidationException("Ya existe un pago con el mismo PaymentId.");
+        }
+
+        var projectedPaidAmount = PaidAmount + payment.Amount;
+
+        if (payment.Method != PaymentMethod.Cash && projectedPaidAmount.Amount > Total.Amount)
+        {
+            throw new DomainValidationException(
+                "Un pago Card o BankTransfer no puede provocar que PaidAmount supere Total.");
+        }
+
+        _payments.Add(payment);
+        RecalculatePaymentAmounts();
+    }
+
+    public void RemovePayment(PaymentId paymentId)
+    {
+        EnsureDraft();
+
+        if (paymentId.Value == Guid.Empty)
+        {
+            throw new DomainValidationException("PaymentId no puede ser vacío.");
+        }
+
+        var payment = _payments.FirstOrDefault(p => p.Id == paymentId);
+
+        if (payment is null)
+        {
+            throw new DomainValidationException("No existe un pago con el PaymentId indicado.");
+        }
+
+        _payments.Remove(payment);
+        RecalculatePaymentAmounts();
+    }
+
+    public void Complete(DateTimeOffset completedAtUtc)
+    {
+        EnsureDraft();
+
+        if (_lines.Count == 0)
+        {
+            throw new DomainValidationException("No se puede completar una venta sin líneas.");
+        }
+
+        if (Total.Amount <= 0m)
+        {
+            throw new DomainValidationException("Total debe ser mayor que cero para completar la venta.");
+        }
+
+        if (PaidAmount.Amount < Total.Amount)
+        {
+            throw new DomainValidationException("PaidAmount debe ser igual o mayor que Total para completar la venta.");
+        }
+
+        if (BalanceDue.Amount != 0m)
+        {
+            throw new DomainValidationException("BalanceDue debe ser cero para completar la venta.");
+        }
+
+        var validCompletedAtUtc = EnsureUtc(completedAtUtc, nameof(completedAtUtc));
+
+        if (validCompletedAtUtc < CreatedAtUtc)
+        {
+            throw new DomainValidationException("completedAtUtc no puede ser anterior a CreatedAtUtc.");
+        }
+
+        Status = SaleStatus.Completed;
+        CompletedAtUtc = validCompletedAtUtc;
     }
 
     public bool ContainsProduct(ProductId productId)
@@ -128,6 +248,14 @@ public sealed class Sale
         return line;
     }
 
+    private void EnsureDraft()
+    {
+        if (Status != SaleStatus.Draft)
+        {
+            throw new DomainValidationException("La operación solo es válida para una venta en estado Draft.");
+        }
+    }
+
     private void RecalculateTotals()
     {
         var subtotal = Money.Zero(_currency);
@@ -139,6 +267,48 @@ public sealed class Sale
 
         Subtotal = subtotal;
         Total = subtotal;
+
+        RecalculatePaymentAmounts();
+    }
+
+    private void RecalculatePaymentAmounts()
+    {
+        var paidAmount = Money.Zero(_currency);
+
+        foreach (var payment in _payments)
+        {
+            paidAmount += payment.Amount;
+        }
+
+        PaidAmount = paidAmount;
+        BalanceDue = paidAmount.Amount >= Total.Amount ? Money.Zero(_currency) : Total - paidAmount;
+        ChangeDue = paidAmount.Amount > Total.Amount ? paidAmount - Total : Money.Zero(_currency);
+    }
+
+    private Money CalculateNonCashPaidAmount()
+    {
+        var nonCashPaidAmount = Money.Zero(_currency);
+
+        foreach (var payment in _payments)
+        {
+            if (payment.Method != PaymentMethod.Cash)
+            {
+                nonCashPaidAmount += payment.Amount;
+            }
+        }
+
+        return nonCashPaidAmount;
+    }
+
+    private void EnsureNonCashPaymentsDoNotExceed(Money projectedTotal)
+    {
+        var nonCashPaidAmount = CalculateNonCashPaidAmount();
+
+        if (nonCashPaidAmount.Amount > projectedTotal.Amount)
+        {
+            throw new DomainValidationException(
+                "Los pagos Card o BankTransfer no pueden superar el Total proyectado de la venta.");
+        }
     }
 
     private static SaleId EnsureNotEmpty(SaleId id)
