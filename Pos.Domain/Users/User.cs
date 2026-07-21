@@ -15,6 +15,8 @@ public sealed class User
 
     public string DisplayName { get; private set; }
 
+    public PasswordHash PasswordHash { get; private set; }
+
     public bool IsActive { get; private set; }
 
     public DateTimeOffset CreatedAtUtc { get; }
@@ -25,8 +27,9 @@ public sealed class User
         RoleId roleId,
         string username,
         string displayName,
+        PasswordHash passwordHash,
         DateTimeOffset createdAtUtc)
-        : this(id, organizationId, roleId, username, displayName, true, createdAtUtc)
+        : this(id, organizationId, roleId, username, displayName, passwordHash, true, createdAtUtc)
     {
     }
 
@@ -36,6 +39,7 @@ public sealed class User
         RoleId roleId,
         string username,
         string displayName,
+        PasswordHash passwordHash,
         bool isActive,
         DateTimeOffset createdAtUtc)
     {
@@ -44,6 +48,7 @@ public sealed class User
         RoleId = EnsureNotEmpty(roleId);
         Username = NormalizeUsername(username);
         DisplayName = NormalizeDisplayName(displayName);
+        PasswordHash = EnsureNotEmpty(passwordHash);
         CreatedAtUtc = EnsureUtc(createdAtUtc);
         IsActive = isActive;
     }
@@ -55,13 +60,19 @@ public sealed class User
         RoleId roleId,
         string username,
         string displayName,
+        PasswordHash passwordHash,
         bool isActive,
         DateTimeOffset createdAtUtc) =>
-        new(id, organizationId, roleId, username, displayName, isActive, createdAtUtc);
+        new(id, organizationId, roleId, username, displayName, passwordHash, isActive, createdAtUtc);
 
     public void ChangeDisplayName(string displayName)
     {
         DisplayName = NormalizeDisplayName(displayName);
+    }
+
+    public void ChangePasswordHash(PasswordHash passwordHash)
+    {
+        PasswordHash = EnsureNotEmpty(passwordHash);
     }
 
     public void ChangeRole(RoleId roleId)
@@ -107,6 +118,16 @@ public sealed class User
         }
 
         return roleId;
+    }
+
+    private static PasswordHash EnsureNotEmpty(PasswordHash passwordHash)
+    {
+        if (string.IsNullOrWhiteSpace(passwordHash.Value))
+        {
+            throw new DomainValidationException("PasswordHash no puede ser vacío.");
+        }
+
+        return passwordHash;
     }
 
     private static string NormalizeUsername(string username)

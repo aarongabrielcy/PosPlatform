@@ -15,6 +15,7 @@ using Pos.Application.Users;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Persistence.Repositories;
+using Pos.Infrastructure.Security;
 using Pos.Infrastructure.Storage;
 using Pos.Infrastructure.Time;
 
@@ -258,6 +259,51 @@ public class DependencyInjectionTests
         {
             using var scope = provider.CreateScope();
             scope.ServiceProvider.GetRequiredService<ILocalDatabaseInitializer>();
+
+            Assert.False(Directory.Exists(pathProvider.DataDirectory));
+            Assert.False(File.Exists(pathProvider.DatabasePath));
+        }
+    }
+
+    [Fact]
+    public void IPasswordHasherResolvesPbkdf2PasswordHasher()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            Assert.IsType<Pbkdf2PasswordHasher>(provider.GetRequiredService<IPasswordHasher>());
+        }
+    }
+
+    [Fact]
+    public void IPasswordHasherIsSingletonAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            var rootHasher = provider.GetRequiredService<IPasswordHasher>();
+
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var hasherA = scopeA.ServiceProvider.GetRequiredService<IPasswordHasher>();
+            var hasherB = scopeB.ServiceProvider.GetRequiredService<IPasswordHasher>();
+
+            Assert.Same(rootHasher, hasherA);
+            Assert.Same(rootHasher, hasherB);
+        }
+    }
+
+    [Fact]
+    public void ResolvingIPasswordHasherDoesNotCreateAnySqliteFile()
+    {
+        var (provider, pathProvider) = BuildProvider();
+
+        using (provider)
+        {
+            provider.GetRequiredService<IPasswordHasher>();
 
             Assert.False(Directory.Exists(pathProvider.DataDirectory));
             Assert.False(File.Exists(pathProvider.DatabasePath));

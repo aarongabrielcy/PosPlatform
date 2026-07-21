@@ -8,8 +8,14 @@ public class UserTests
 {
     private static readonly DateTimeOffset UtcNow = DateTimeOffset.UtcNow;
 
+    private static readonly PasswordHash ValidPasswordHash =
+        new("v1$pbkdf2-sha256$210000$c2FsdC1zeW50aGV0aWM=$aGFzaC1zeW50aGV0aWM=");
+
+    private static readonly PasswordHash OtherPasswordHash =
+        new("v1$pbkdf2-sha256$210000$b3RoZXItc2FsdA==$b3RoZXItaGFzaA==");
+
     private static User CreateUser() =>
-        new(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", UtcNow);
+        new(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", ValidPasswordHash, UtcNow);
 
     [Fact]
     public void IsCreatedActive()
@@ -22,7 +28,8 @@ public class UserTests
     [Fact]
     public void NormalizesUsernameToUppercase()
     {
-        var user = new User(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", UtcNow);
+        var user = new User(
+            UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", ValidPasswordHash, UtcNow);
 
         Assert.Equal("JPEREZ", user.Username);
     }
@@ -30,31 +37,47 @@ public class UserTests
     [Fact]
     public void TrimsUsernameAndDisplayName()
     {
-        var user = new User(UserId.New(), OrganizationId.New(), RoleId.New(), "  jperez  ", "  Juan Pérez  ", UtcNow);
+        var user = new User(
+            UserId.New(), OrganizationId.New(), RoleId.New(), "  jperez  ", "  Juan Pérez  ", ValidPasswordHash, UtcNow);
 
         Assert.Equal("JPEREZ", user.Username);
         Assert.Equal("Juan Pérez", user.DisplayName);
     }
 
     [Fact]
+    public void CreationPreservesPasswordHash()
+    {
+        var user = CreateUser();
+
+        Assert.Equal(ValidPasswordHash, user.PasswordHash);
+    }
+
+    [Fact]
     public void RejectsDefaultId()
     {
         Assert.Throws<DomainValidationException>(
-            () => new User(default, OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", UtcNow));
+            () => new User(default, OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", ValidPasswordHash, UtcNow));
     }
 
     [Fact]
     public void RejectsDefaultOrganizationId()
     {
         Assert.Throws<DomainValidationException>(
-            () => new User(UserId.New(), default, RoleId.New(), "jperez", "Juan Pérez", UtcNow));
+            () => new User(UserId.New(), default, RoleId.New(), "jperez", "Juan Pérez", ValidPasswordHash, UtcNow));
     }
 
     [Fact]
     public void RejectsDefaultRoleId()
     {
         Assert.Throws<DomainValidationException>(
-            () => new User(UserId.New(), OrganizationId.New(), default, "jperez", "Juan Pérez", UtcNow));
+            () => new User(UserId.New(), OrganizationId.New(), default, "jperez", "Juan Pérez", ValidPasswordHash, UtcNow));
+    }
+
+    [Fact]
+    public void RejectsDefaultPasswordHash()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => new User(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", default, UtcNow));
     }
 
     [Theory]
@@ -68,7 +91,7 @@ public class UserTests
     public void RejectsInvalidUsername(string? username)
     {
         Assert.Throws<DomainValidationException>(
-            () => new User(UserId.New(), OrganizationId.New(), RoleId.New(), username!, "Juan Pérez", UtcNow));
+            () => new User(UserId.New(), OrganizationId.New(), RoleId.New(), username!, "Juan Pérez", ValidPasswordHash, UtcNow));
     }
 
     [Theory]
@@ -79,7 +102,7 @@ public class UserTests
     public void RejectsInvalidDisplayName(string? displayName)
     {
         Assert.Throws<DomainValidationException>(
-            () => new User(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", displayName!, UtcNow));
+            () => new User(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", displayName!, ValidPasswordHash, UtcNow));
     }
 
     [Fact]
@@ -88,7 +111,7 @@ public class UserTests
         var nonUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.FromHours(-5));
 
         Assert.Throws<DomainValidationException>(
-            () => new User(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", nonUtc));
+            () => new User(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", ValidPasswordHash, nonUtc));
     }
 
     [Fact]
@@ -115,6 +138,34 @@ public class UserTests
     }
 
     [Fact]
+    public void ChangePasswordHashUpdatesOnlyTheHash()
+    {
+        var user = CreateUser();
+        var username = user.Username;
+        var displayName = user.DisplayName;
+        var roleId = user.RoleId;
+        var isActive = user.IsActive;
+        var createdAtUtc = user.CreatedAtUtc;
+
+        user.ChangePasswordHash(OtherPasswordHash);
+
+        Assert.Equal(OtherPasswordHash, user.PasswordHash);
+        Assert.Equal(username, user.Username);
+        Assert.Equal(displayName, user.DisplayName);
+        Assert.Equal(roleId, user.RoleId);
+        Assert.Equal(isActive, user.IsActive);
+        Assert.Equal(createdAtUtc, user.CreatedAtUtc);
+    }
+
+    [Fact]
+    public void ChangePasswordHashRejectsDefault()
+    {
+        var user = CreateUser();
+
+        Assert.Throws<DomainValidationException>(() => user.ChangePasswordHash(default));
+    }
+
+    [Fact]
     public void ActivateAndDeactivateChangeState()
     {
         var user = CreateUser();
@@ -135,7 +186,7 @@ public class UserTests
         var organizationId = OrganizationId.New();
         var roleId = RoleId.New();
 
-        var user = User.Rehydrate(id, organizationId, roleId, "jperez", "Juan Pérez", true, UtcNow);
+        var user = User.Rehydrate(id, organizationId, roleId, "jperez", "Juan Pérez", ValidPasswordHash, true, UtcNow);
 
         Assert.Equal(id, user.Id);
         Assert.Equal(organizationId, user.OrganizationId);
@@ -146,9 +197,19 @@ public class UserTests
     }
 
     [Fact]
+    public void RehydrateRestoresPasswordHash()
+    {
+        var user = User.Rehydrate(
+            UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", ValidPasswordHash, true, UtcNow);
+
+        Assert.Equal(ValidPasswordHash, user.PasswordHash);
+    }
+
+    [Fact]
     public void RehydrateRestoresActiveState()
     {
-        var user = User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", true, UtcNow);
+        var user = User.Rehydrate(
+            UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", ValidPasswordHash, true, UtcNow);
 
         Assert.True(user.IsActive);
     }
@@ -156,7 +217,8 @@ public class UserTests
     [Fact]
     public void RehydrateRestoresInactiveState()
     {
-        var user = User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", false, UtcNow);
+        var user = User.Rehydrate(
+            UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", ValidPasswordHash, false, UtcNow);
 
         Assert.False(user.IsActive);
     }
@@ -165,35 +227,42 @@ public class UserTests
     public void RehydrateRejectsDefaultId()
     {
         Assert.Throws<DomainValidationException>(
-            () => User.Rehydrate(default, OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", true, UtcNow));
+            () => User.Rehydrate(default, OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", ValidPasswordHash, true, UtcNow));
     }
 
     [Fact]
     public void RehydrateRejectsDefaultOrganizationId()
     {
         Assert.Throws<DomainValidationException>(
-            () => User.Rehydrate(UserId.New(), default, RoleId.New(), "jperez", "Juan Pérez", true, UtcNow));
+            () => User.Rehydrate(UserId.New(), default, RoleId.New(), "jperez", "Juan Pérez", ValidPasswordHash, true, UtcNow));
     }
 
     [Fact]
     public void RehydrateRejectsDefaultRoleId()
     {
         Assert.Throws<DomainValidationException>(
-            () => User.Rehydrate(UserId.New(), OrganizationId.New(), default, "jperez", "Juan Pérez", true, UtcNow));
+            () => User.Rehydrate(UserId.New(), OrganizationId.New(), default, "jperez", "Juan Pérez", ValidPasswordHash, true, UtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultPasswordHash()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", default, true, UtcNow));
     }
 
     [Fact]
     public void RehydrateRejectsInvalidUsername()
     {
         Assert.Throws<DomainValidationException>(
-            () => User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "a", "Juan Pérez", true, UtcNow));
+            () => User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "a", "Juan Pérez", ValidPasswordHash, true, UtcNow));
     }
 
     [Fact]
     public void RehydrateRejectsInvalidDisplayName()
     {
         Assert.Throws<DomainValidationException>(
-            () => User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "A", true, UtcNow));
+            () => User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "A", ValidPasswordHash, true, UtcNow));
     }
 
     [Fact]
@@ -202,6 +271,6 @@ public class UserTests
         var nonUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.FromHours(-5));
 
         Assert.Throws<DomainValidationException>(
-            () => User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", true, nonUtc));
+            () => User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", ValidPasswordHash, true, nonUtc));
     }
 }

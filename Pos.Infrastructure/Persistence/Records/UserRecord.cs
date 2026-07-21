@@ -12,6 +12,8 @@ internal sealed class UserRecord
 
     public string DisplayName { get; set; } = string.Empty;
 
+    public string PasswordHash { get; set; } = string.Empty;
+
     public bool IsActive { get; set; }
 
     public DateTimeOffset CreatedAtUtc { get; set; }

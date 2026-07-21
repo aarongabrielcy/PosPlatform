@@ -34,6 +34,11 @@ internal sealed class UserRecordConfiguration : IEntityTypeConfiguration<UserRec
             .HasMaxLength(120)
             .IsRequired();
 
+        builder.Property(record => record.PasswordHash)
+            .HasColumnName("password_hash")
+            .HasMaxLength(512)
+            .IsRequired();
+
         builder.Property(record => record.IsActive)
             .HasColumnName("is_active")
             .IsRequired();
