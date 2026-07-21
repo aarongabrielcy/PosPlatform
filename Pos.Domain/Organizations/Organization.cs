@@ -14,12 +14,21 @@ public sealed class Organization
     public DateTimeOffset CreatedAtUtc { get; }
 
     public Organization(OrganizationId id, string name, DateTimeOffset createdAtUtc)
+        : this(id, name, true, createdAtUtc)
+    {
+    }
+
+    private Organization(OrganizationId id, string name, bool isActive, DateTimeOffset createdAtUtc)
     {
         Id = EnsureNotEmpty(id);
         Name = NormalizeName(name);
         CreatedAtUtc = EnsureUtc(createdAtUtc);
-        IsActive = true;
+        IsActive = isActive;
     }
+
+    // Reconstruye estado ya persistido, incluyendo IsActive, sin pasar por Activate/Deactivate.
+    public static Organization Rehydrate(OrganizationId id, string name, bool isActive, DateTimeOffset createdAtUtc) =>
+        new(id, name, isActive, createdAtUtc);
 
     public void Rename(string name)
     {

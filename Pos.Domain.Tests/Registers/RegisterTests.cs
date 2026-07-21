@@ -83,4 +83,51 @@ public class RegisterTests
         register.Activate();
         Assert.True(register.IsActive);
     }
+
+    [Fact]
+    public void RehydrateRestoresActiveState()
+    {
+        var id = RegisterId.New();
+        var branchId = BranchId.New();
+
+        var register = Register.Rehydrate(id, branchId, "Caja 1", "CAJA-1", true, UtcNow);
+
+        Assert.Equal(id, register.Id);
+        Assert.Equal(branchId, register.BranchId);
+        Assert.Equal("Caja 1", register.Name);
+        Assert.Equal("CAJA-1", register.Code);
+        Assert.True(register.IsActive);
+        Assert.Equal(UtcNow, register.CreatedAtUtc);
+    }
+
+    [Fact]
+    public void RehydrateRestoresInactiveState()
+    {
+        var register = Register.Rehydrate(RegisterId.New(), BranchId.New(), "Caja 1", "CAJA-1", false, UtcNow);
+
+        Assert.False(register.IsActive);
+    }
+
+    [Fact]
+    public void RehydrateRejectsEmptyBranchId()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => Register.Rehydrate(RegisterId.New(), default, "Caja 1", "CAJA-1", true, UtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultId()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => Register.Rehydrate(default, BranchId.New(), "Caja 1", "CAJA-1", true, UtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNonUtcDate()
+    {
+        var nonUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.FromHours(-5));
+
+        Assert.Throws<DomainValidationException>(
+            () => Register.Rehydrate(RegisterId.New(), BranchId.New(), "Caja 1", "CAJA-1", true, nonUtc));
+    }
 }

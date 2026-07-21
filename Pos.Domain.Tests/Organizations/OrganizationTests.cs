@@ -73,4 +73,45 @@ public class OrganizationTests
         organization.Activate();
         Assert.True(organization.IsActive);
     }
+
+    [Fact]
+    public void RehydrateRestoresActiveState()
+    {
+        var id = OrganizationId.New();
+
+        var organization = Organization.Rehydrate(id, "Acme", true, UtcNow);
+
+        Assert.Equal(id, organization.Id);
+        Assert.Equal("Acme", organization.Name);
+        Assert.True(organization.IsActive);
+        Assert.Equal(UtcNow, organization.CreatedAtUtc);
+    }
+
+    [Fact]
+    public void RehydrateRestoresInactiveState()
+    {
+        var organization = Organization.Rehydrate(OrganizationId.New(), "Acme", false, UtcNow);
+
+        Assert.False(organization.IsActive);
+    }
+
+    [Fact]
+    public void RehydrateRejectsInvalidName()
+    {
+        Assert.Throws<DomainValidationException>(() => Organization.Rehydrate(OrganizationId.New(), "A", true, UtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultId()
+    {
+        Assert.Throws<DomainValidationException>(() => Organization.Rehydrate(default, "Acme", true, UtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNonUtcDate()
+    {
+        var nonUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.FromHours(-5));
+
+        Assert.Throws<DomainValidationException>(() => Organization.Rehydrate(OrganizationId.New(), "Acme", true, nonUtc));
+    }
 }

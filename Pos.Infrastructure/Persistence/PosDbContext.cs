@@ -22,6 +22,14 @@ public sealed class PosDbContext : DbContext, IUnitOfWork
 
     internal DbSet<PaymentRecord> Payments => Set<PaymentRecord>();
 
+    internal DbSet<OrganizationRecord> Organizations => Set<OrganizationRecord>();
+
+    internal DbSet<BranchRecord> Branches => Set<BranchRecord>();
+
+    internal DbSet<RegisterRecord> Registers => Set<RegisterRecord>();
+
+    internal DbSet<ProductRecord> Products => Set<ProductRecord>();
+
     public Task CommitAsync(CancellationToken cancellationToken) => SaveChangesAsync(cancellationToken);
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -31,5 +39,9 @@ public sealed class PosDbContext : DbContext, IUnitOfWork
         modelBuilder.ApplyConfiguration(new SaleRecordConfiguration());
         modelBuilder.ApplyConfiguration(new SaleLineRecordConfiguration());
         modelBuilder.ApplyConfiguration(new PaymentRecordConfiguration());
+        modelBuilder.ApplyConfiguration(new OrganizationRecordConfiguration());
+        modelBuilder.ApplyConfiguration(new BranchRecordConfiguration());
+        modelBuilder.ApplyConfiguration(new RegisterRecordConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductRecordConfiguration());
     }
 }

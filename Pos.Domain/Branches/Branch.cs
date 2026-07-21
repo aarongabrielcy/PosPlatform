@@ -18,14 +18,35 @@ public sealed class Branch
     public DateTimeOffset CreatedAtUtc { get; }
 
     public Branch(BranchId id, OrganizationId organizationId, string name, string code, DateTimeOffset createdAtUtc)
+        : this(id, organizationId, name, code, true, createdAtUtc)
+    {
+    }
+
+    private Branch(
+        BranchId id,
+        OrganizationId organizationId,
+        string name,
+        string code,
+        bool isActive,
+        DateTimeOffset createdAtUtc)
     {
         Id = EnsureNotEmpty(id);
         OrganizationId = EnsureNotEmpty(organizationId);
         Name = NormalizeName(name);
         Code = NormalizeCode(code);
         CreatedAtUtc = EnsureUtc(createdAtUtc);
-        IsActive = true;
+        IsActive = isActive;
     }
+
+    // Reconstruye estado ya persistido, incluyendo IsActive, sin pasar por Activate/Deactivate.
+    public static Branch Rehydrate(
+        BranchId id,
+        OrganizationId organizationId,
+        string name,
+        string code,
+        bool isActive,
+        DateTimeOffset createdAtUtc) =>
+        new(id, organizationId, name, code, isActive, createdAtUtc);
 
     public void Rename(string name)
     {

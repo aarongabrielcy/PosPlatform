@@ -467,4 +467,482 @@ public class PosDbContextModelTests
         Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(PaymentRecord.Method)]));
         Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(PaymentRecord.PaidAtUtc)]));
     }
+
+    // ---------- OrganizationRecord ----------
+
+    [Fact]
+    public void OrganizationRecordShouldMapToOrganizationsTable()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(OrganizationRecord))!;
+
+        Assert.Equal("organizations", entityType.GetTableName());
+    }
+
+    [Fact]
+    public void OrganizationRecordShouldHaveIdAsPrimaryKey()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(OrganizationRecord))!;
+        var primaryKey = entityType.FindPrimaryKey()!;
+
+        var keyPropertyName = Assert.Single(primaryKey.Properties).Name;
+        Assert.Equal(nameof(OrganizationRecord.Id), keyPropertyName);
+    }
+
+    [Fact]
+    public void OrganizationRecordShouldHaveExpectedColumnNames()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(OrganizationRecord))!;
+
+        Assert.Equal("id", entityType.FindProperty(nameof(OrganizationRecord.Id))!.GetColumnName());
+        Assert.Equal("name", entityType.FindProperty(nameof(OrganizationRecord.Name))!.GetColumnName());
+        Assert.Equal("is_active", entityType.FindProperty(nameof(OrganizationRecord.IsActive))!.GetColumnName());
+        Assert.Equal(
+            "created_at_utc_ticks",
+            entityType.FindProperty(nameof(OrganizationRecord.CreatedAtUtc))!.GetColumnName());
+    }
+
+    [Fact]
+    public void OrganizationRecordNameShouldHaveMaxLength120()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(OrganizationRecord))!;
+
+        Assert.Equal(120, entityType.FindProperty(nameof(OrganizationRecord.Name))!.GetMaxLength());
+    }
+
+    [Fact]
+    public void OrganizationRecordCreatedAtShouldBeConvertedToLong()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(OrganizationRecord))!;
+        var createdAt = entityType.FindProperty(nameof(OrganizationRecord.CreatedAtUtc))!;
+
+        Assert.Equal(typeof(long), createdAt.GetValueConverter()!.ProviderClrType);
+    }
+
+    [Fact]
+    public void OrganizationRecordShouldHaveExpectedIndexes()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(OrganizationRecord))!;
+        var indexPropertySets = entityType.GetIndexes()
+            .Select(index => index.Properties.Select(p => p.Name).ToArray())
+            .ToArray();
+
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(OrganizationRecord.IsActive)]));
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(OrganizationRecord.Name)]));
+    }
+
+    [Fact]
+    public void OrganizationRecordShouldNotHaveUniqueIndexOnName()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(OrganizationRecord))!;
+
+        var uniqueIndex = entityType.GetIndexes().SingleOrDefault(index =>
+            index.IsUnique &&
+            index.Properties.Select(p => p.Name).SequenceEqual([nameof(OrganizationRecord.Name)]));
+
+        Assert.Null(uniqueIndex);
+    }
+
+    // ---------- BranchRecord ----------
+
+    [Fact]
+    public void BranchRecordShouldMapToBranchesTable()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(BranchRecord))!;
+
+        Assert.Equal("branches", entityType.GetTableName());
+    }
+
+    [Fact]
+    public void BranchRecordShouldHaveIdAsPrimaryKey()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(BranchRecord))!;
+        var primaryKey = entityType.FindPrimaryKey()!;
+
+        var keyPropertyName = Assert.Single(primaryKey.Properties).Name;
+        Assert.Equal(nameof(BranchRecord.Id), keyPropertyName);
+    }
+
+    [Fact]
+    public void BranchRecordShouldHaveExpectedColumnNames()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(BranchRecord))!;
+
+        Assert.Equal("id", entityType.FindProperty(nameof(BranchRecord.Id))!.GetColumnName());
+        Assert.Equal(
+            "organization_id",
+            entityType.FindProperty(nameof(BranchRecord.OrganizationId))!.GetColumnName());
+        Assert.Equal("name", entityType.FindProperty(nameof(BranchRecord.Name))!.GetColumnName());
+        Assert.Equal("code", entityType.FindProperty(nameof(BranchRecord.Code))!.GetColumnName());
+        Assert.Equal("is_active", entityType.FindProperty(nameof(BranchRecord.IsActive))!.GetColumnName());
+        Assert.Equal(
+            "created_at_utc_ticks",
+            entityType.FindProperty(nameof(BranchRecord.CreatedAtUtc))!.GetColumnName());
+    }
+
+    [Fact]
+    public void BranchRecordShouldHaveExpectedLengths()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(BranchRecord))!;
+
+        Assert.Equal(120, entityType.FindProperty(nameof(BranchRecord.Name))!.GetMaxLength());
+        Assert.Equal(20, entityType.FindProperty(nameof(BranchRecord.Code))!.GetMaxLength());
+    }
+
+    [Fact]
+    public void BranchRecordCreatedAtShouldBeConvertedToLong()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(BranchRecord))!;
+        var createdAt = entityType.FindProperty(nameof(BranchRecord.CreatedAtUtc))!;
+
+        Assert.Equal(typeof(long), createdAt.GetValueConverter()!.ProviderClrType);
+    }
+
+    [Fact]
+    public void BranchRecordShouldHaveRestrictForeignKeyToOrganizations()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(BranchRecord))!;
+        var foreignKey = Assert.Single(entityType.GetForeignKeys());
+
+        Assert.Equal(typeof(OrganizationRecord), foreignKey.PrincipalEntityType.ClrType);
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(BranchRecord.OrganizationId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void BranchRecordShouldHaveNonUniqueIndexOnOrganizationIdAndName()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(BranchRecord))!;
+
+        var index = entityType.GetIndexes().SingleOrDefault(index =>
+            !index.IsUnique &&
+            index.Properties.Select(p => p.Name).SequenceEqual(
+            [
+                nameof(BranchRecord.OrganizationId),
+                nameof(BranchRecord.Name),
+            ]));
+
+        Assert.NotNull(index);
+    }
+
+    [Fact]
+    public void BranchRecordShouldNotHaveUniqueIndexOnOrganizationIdAndName()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(BranchRecord))!;
+
+        var uniqueIndex = entityType.GetIndexes().SingleOrDefault(index =>
+            index.IsUnique &&
+            index.Properties.Select(p => p.Name).SequenceEqual(
+            [
+                nameof(BranchRecord.OrganizationId),
+                nameof(BranchRecord.Name),
+            ]));
+
+        Assert.Null(uniqueIndex);
+    }
+
+    [Fact]
+    public void BranchRecordShouldHaveExpectedIndexes()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(BranchRecord))!;
+        var indexPropertySets = entityType.GetIndexes()
+            .Where(index => !index.IsUnique)
+            .Select(index => index.Properties.Select(p => p.Name).ToArray())
+            .ToArray();
+
+        Assert.Contains(
+            indexPropertySets,
+            set => set.SequenceEqual([nameof(BranchRecord.OrganizationId), nameof(BranchRecord.Name)]));
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(BranchRecord.IsActive)]));
+    }
+
+    // ---------- RegisterRecord ----------
+
+    [Fact]
+    public void RegisterRecordShouldMapToRegistersTable()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterRecord))!;
+
+        Assert.Equal("registers", entityType.GetTableName());
+    }
+
+    [Fact]
+    public void RegisterRecordShouldHaveIdAsPrimaryKey()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterRecord))!;
+        var primaryKey = entityType.FindPrimaryKey()!;
+
+        var keyPropertyName = Assert.Single(primaryKey.Properties).Name;
+        Assert.Equal(nameof(RegisterRecord.Id), keyPropertyName);
+    }
+
+    [Fact]
+    public void RegisterRecordShouldHaveExpectedColumnNames()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterRecord))!;
+
+        Assert.Equal("id", entityType.FindProperty(nameof(RegisterRecord.Id))!.GetColumnName());
+        Assert.Equal("branch_id", entityType.FindProperty(nameof(RegisterRecord.BranchId))!.GetColumnName());
+        Assert.Equal("name", entityType.FindProperty(nameof(RegisterRecord.Name))!.GetColumnName());
+        Assert.Equal("code", entityType.FindProperty(nameof(RegisterRecord.Code))!.GetColumnName());
+        Assert.Equal("is_active", entityType.FindProperty(nameof(RegisterRecord.IsActive))!.GetColumnName());
+        Assert.Equal(
+            "created_at_utc_ticks",
+            entityType.FindProperty(nameof(RegisterRecord.CreatedAtUtc))!.GetColumnName());
+    }
+
+    [Fact]
+    public void RegisterRecordShouldHaveExpectedLengths()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterRecord))!;
+
+        Assert.Equal(80, entityType.FindProperty(nameof(RegisterRecord.Name))!.GetMaxLength());
+        Assert.Equal(20, entityType.FindProperty(nameof(RegisterRecord.Code))!.GetMaxLength());
+    }
+
+    [Fact]
+    public void RegisterRecordCreatedAtShouldBeConvertedToLong()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterRecord))!;
+        var createdAt = entityType.FindProperty(nameof(RegisterRecord.CreatedAtUtc))!;
+
+        Assert.Equal(typeof(long), createdAt.GetValueConverter()!.ProviderClrType);
+    }
+
+    [Fact]
+    public void RegisterRecordShouldHaveRestrictForeignKeyToBranches()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterRecord))!;
+        var foreignKey = Assert.Single(entityType.GetForeignKeys());
+
+        Assert.Equal(typeof(BranchRecord), foreignKey.PrincipalEntityType.ClrType);
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(RegisterRecord.BranchId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void RegisterRecordShouldHaveNonUniqueIndexOnBranchIdAndName()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterRecord))!;
+
+        var index = entityType.GetIndexes().SingleOrDefault(index =>
+            !index.IsUnique &&
+            index.Properties.Select(p => p.Name).SequenceEqual(
+            [
+                nameof(RegisterRecord.BranchId),
+                nameof(RegisterRecord.Name),
+            ]));
+
+        Assert.NotNull(index);
+    }
+
+    [Fact]
+    public void RegisterRecordShouldNotHaveUniqueIndexOnBranchIdAndName()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterRecord))!;
+
+        var uniqueIndex = entityType.GetIndexes().SingleOrDefault(index =>
+            index.IsUnique &&
+            index.Properties.Select(p => p.Name).SequenceEqual(
+            [
+                nameof(RegisterRecord.BranchId),
+                nameof(RegisterRecord.Name),
+            ]));
+
+        Assert.Null(uniqueIndex);
+    }
+
+    [Fact]
+    public void RegisterRecordShouldHaveExpectedIndexes()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterRecord))!;
+        var indexPropertySets = entityType.GetIndexes()
+            .Where(index => !index.IsUnique)
+            .Select(index => index.Properties.Select(p => p.Name).ToArray())
+            .ToArray();
+
+        Assert.Contains(
+            indexPropertySets,
+            set => set.SequenceEqual([nameof(RegisterRecord.BranchId), nameof(RegisterRecord.Name)]));
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(RegisterRecord.IsActive)]));
+    }
+
+    // ---------- ProductRecord ----------
+
+    [Fact]
+    public void ProductRecordShouldMapToProductsTable()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+
+        Assert.Equal("products", entityType.GetTableName());
+    }
+
+    [Fact]
+    public void ProductRecordShouldHaveIdAsPrimaryKey()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+        var primaryKey = entityType.FindPrimaryKey()!;
+
+        var keyPropertyName = Assert.Single(primaryKey.Properties).Name;
+        Assert.Equal(nameof(ProductRecord.Id), keyPropertyName);
+    }
+
+    [Fact]
+    public void ProductRecordShouldHaveExpectedColumnNames()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+
+        Assert.Equal("id", entityType.FindProperty(nameof(ProductRecord.Id))!.GetColumnName());
+        Assert.Equal(
+            "organization_id",
+            entityType.FindProperty(nameof(ProductRecord.OrganizationId))!.GetColumnName());
+        Assert.Equal("sku", entityType.FindProperty(nameof(ProductRecord.Sku))!.GetColumnName());
+        Assert.Equal("barcode", entityType.FindProperty(nameof(ProductRecord.Barcode))!.GetColumnName());
+        Assert.Equal("name", entityType.FindProperty(nameof(ProductRecord.Name))!.GetColumnName());
+        Assert.Equal("description", entityType.FindProperty(nameof(ProductRecord.Description))!.GetColumnName());
+        Assert.Equal(
+            "sale_price_amount",
+            entityType.FindProperty(nameof(ProductRecord.SalePriceAmount))!.GetColumnName());
+        Assert.Equal(
+            "sale_price_currency",
+            entityType.FindProperty(nameof(ProductRecord.SalePriceCurrency))!.GetColumnName());
+        Assert.Equal("cost_amount", entityType.FindProperty(nameof(ProductRecord.CostAmount))!.GetColumnName());
+        Assert.Equal("cost_currency", entityType.FindProperty(nameof(ProductRecord.CostCurrency))!.GetColumnName());
+        Assert.Equal(
+            "tracks_inventory",
+            entityType.FindProperty(nameof(ProductRecord.TracksInventory))!.GetColumnName());
+        Assert.Equal("is_active", entityType.FindProperty(nameof(ProductRecord.IsActive))!.GetColumnName());
+        Assert.Equal(
+            "created_at_utc_ticks",
+            entityType.FindProperty(nameof(ProductRecord.CreatedAtUtc))!.GetColumnName());
+    }
+
+    [Fact]
+    public void ProductRecordShouldHaveExpectedLengths()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+
+        Assert.Equal(40, entityType.FindProperty(nameof(ProductRecord.Sku))!.GetMaxLength());
+        Assert.Equal(32, entityType.FindProperty(nameof(ProductRecord.Barcode))!.GetMaxLength());
+        Assert.Equal(160, entityType.FindProperty(nameof(ProductRecord.Name))!.GetMaxLength());
+        Assert.Equal(500, entityType.FindProperty(nameof(ProductRecord.Description))!.GetMaxLength());
+        Assert.Equal(3, entityType.FindProperty(nameof(ProductRecord.SalePriceCurrency))!.GetMaxLength());
+        Assert.Equal(3, entityType.FindProperty(nameof(ProductRecord.CostCurrency))!.GetMaxLength());
+    }
+
+    [Fact]
+    public void ProductRecordShouldHaveExpectedPrecision()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+
+        var salePrice = entityType.FindProperty(nameof(ProductRecord.SalePriceAmount))!;
+        Assert.Equal(18, salePrice.GetPrecision());
+        Assert.Equal(2, salePrice.GetScale());
+
+        var cost = entityType.FindProperty(nameof(ProductRecord.CostAmount))!;
+        Assert.Equal(18, cost.GetPrecision());
+        Assert.Equal(2, cost.GetScale());
+    }
+
+    [Fact]
+    public void ProductRecordAmountsShouldRemainDecimal()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+
+        Assert.Equal(typeof(decimal), entityType.FindProperty(nameof(ProductRecord.SalePriceAmount))!.ClrType);
+        Assert.Equal(typeof(decimal?), entityType.FindProperty(nameof(ProductRecord.CostAmount))!.ClrType);
+    }
+
+    [Fact]
+    public void ProductRecordBarcodeAndCostShouldBeNullable()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+
+        Assert.True(entityType.FindProperty(nameof(ProductRecord.Barcode))!.IsNullable);
+        Assert.True(entityType.FindProperty(nameof(ProductRecord.CostAmount))!.IsNullable);
+        Assert.True(entityType.FindProperty(nameof(ProductRecord.CostCurrency))!.IsNullable);
+        Assert.True(entityType.FindProperty(nameof(ProductRecord.Description))!.IsNullable);
+        Assert.False(entityType.FindProperty(nameof(ProductRecord.Sku))!.IsNullable);
+        Assert.False(entityType.FindProperty(nameof(ProductRecord.SalePriceAmount))!.IsNullable);
+    }
+
+    [Fact]
+    public void ProductRecordCreatedAtShouldBeConvertedToLong()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+        var createdAt = entityType.FindProperty(nameof(ProductRecord.CreatedAtUtc))!;
+
+        Assert.Equal(typeof(long), createdAt.GetValueConverter()!.ProviderClrType);
+    }
+
+    [Fact]
+    public void ProductRecordShouldHaveRestrictForeignKeyToOrganizations()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+        var foreignKey = Assert.Single(entityType.GetForeignKeys());
+
+        Assert.Equal(typeof(OrganizationRecord), foreignKey.PrincipalEntityType.ClrType);
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(ProductRecord.OrganizationId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void ProductRecordShouldHaveUniqueIndexOnOrganizationIdAndSku()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+
+        var uniqueIndex = entityType.GetIndexes().SingleOrDefault(index =>
+            index.IsUnique &&
+            index.Properties.Select(p => p.Name).SequenceEqual(
+            [
+                nameof(ProductRecord.OrganizationId),
+                nameof(ProductRecord.Sku),
+            ]));
+
+        Assert.NotNull(uniqueIndex);
+    }
+
+    [Fact]
+    public void ProductRecordShouldHaveNonUniqueIndexOnOrganizationIdAndBarcode()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+
+        var index = entityType.GetIndexes().SingleOrDefault(index =>
+            !index.IsUnique &&
+            index.Properties.Select(p => p.Name).SequenceEqual(
+            [
+                nameof(ProductRecord.OrganizationId),
+                nameof(ProductRecord.Barcode),
+            ]));
+
+        Assert.NotNull(index);
+    }
+
+    [Fact]
+    public void ProductRecordShouldNotHaveAnyUniqueIndexContainingOnlyBarcode()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+
+        var uniqueIndex = entityType.GetIndexes().SingleOrDefault(index =>
+            index.IsUnique &&
+            index.Properties.Select(p => p.Name).SequenceEqual([nameof(ProductRecord.Barcode)]));
+
+        Assert.Null(uniqueIndex);
+    }
+
+    [Fact]
+    public void ProductRecordShouldHaveExpectedIndexes()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+        var indexPropertySets = entityType.GetIndexes()
+            .Where(index => !index.IsUnique)
+            .Select(index => index.Properties.Select(p => p.Name).ToArray())
+            .ToArray();
+
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(ProductRecord.OrganizationId)]));
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(ProductRecord.IsActive)]));
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(ProductRecord.Name)]));
+        Assert.Contains(
+            indexPropertySets,
+            set => set.SequenceEqual([nameof(ProductRecord.OrganizationId), nameof(ProductRecord.Barcode)]));
+    }
 }

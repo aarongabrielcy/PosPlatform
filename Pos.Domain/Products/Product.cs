@@ -39,6 +39,22 @@ public sealed class Product
         Money? cost,
         bool tracksInventory,
         DateTimeOffset createdAtUtc)
+        : this(id, organizationId, sku, barcode, name, description, salePrice, cost, tracksInventory, true, createdAtUtc)
+    {
+    }
+
+    private Product(
+        ProductId id,
+        OrganizationId organizationId,
+        Sku sku,
+        Barcode? barcode,
+        string name,
+        string? description,
+        Money salePrice,
+        Money? cost,
+        bool tracksInventory,
+        bool isActive,
+        DateTimeOffset createdAtUtc)
     {
         var validSalePrice = EnsureSalePrice(salePrice);
         var validCost = EnsureCost(cost);
@@ -54,8 +70,23 @@ public sealed class Product
         Cost = validCost;
         TracksInventory = tracksInventory;
         CreatedAtUtc = EnsureUtc(createdAtUtc);
-        IsActive = true;
+        IsActive = isActive;
     }
+
+    // Reconstruye estado ya persistido, incluyendo IsActive, sin pasar por Activate/Deactivate.
+    public static Product Rehydrate(
+        ProductId id,
+        OrganizationId organizationId,
+        Sku sku,
+        Barcode? barcode,
+        string name,
+        string? description,
+        Money salePrice,
+        Money? cost,
+        bool tracksInventory,
+        bool isActive,
+        DateTimeOffset createdAtUtc) =>
+        new(id, organizationId, sku, barcode, name, description, salePrice, cost, tracksInventory, isActive, createdAtUtc);
 
     public void Rename(string name)
     {
