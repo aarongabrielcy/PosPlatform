@@ -96,3 +96,9 @@ indent_size = 2
 [*.csproj]
 end_of_line = crlf
 indent_size = 2
+
+# Código generado por EF Core (migraciones): no reescribir manualmente los
+# arrays de columnas generados por migrationBuilder.CreateIndex.
+[Pos.Infrastructure/Persistence/Migrations/*.cs]
+generated_code = true
+dotnet_diagnostic.CA1861.severity = none
