@@ -34,13 +34,160 @@ public sealed class RegisterSession
         UserId openedByUserId,
         Money openingFloat,
         DateTimeOffset openedAtUtc)
+        : this(
+            id,
+            registerId,
+            openedByUserId,
+            openingFloat,
+            openedAtUtc,
+            RegisterSessionStatus.Open,
+            closedByUserId: null,
+            expectedCash: null,
+            countedCash: null,
+            cashDifference: null,
+            closedAtUtc: null)
+    {
+    }
+
+    private RegisterSession(
+        RegisterSessionId id,
+        RegisterId registerId,
+        UserId openedByUserId,
+        Money openingFloat,
+        DateTimeOffset openedAtUtc,
+        RegisterSessionStatus status,
+        UserId? closedByUserId,
+        Money? expectedCash,
+        Money? countedCash,
+        Money? cashDifference,
+        DateTimeOffset? closedAtUtc)
     {
         Id = EnsureNotEmpty(id);
         RegisterId = EnsureNotEmpty(registerId);
         OpenedByUserId = EnsureNotEmpty(openedByUserId);
         OpeningFloat = EnsureNonNegative(openingFloat, nameof(openingFloat));
         OpenedAtUtc = EnsureUtc(openedAtUtc, nameof(openedAtUtc));
-        Status = RegisterSessionStatus.Open;
+
+        switch (status)
+        {
+            case RegisterSessionStatus.Open:
+                EnsureNoCloseDataForOpenStatus(closedByUserId, expectedCash, countedCash, cashDifference, closedAtUtc);
+                Status = RegisterSessionStatus.Open;
+                break;
+
+            case RegisterSessionStatus.Closed:
+                AssignClosedState(closedByUserId, expectedCash, countedCash, cashDifference, closedAtUtc);
+                Status = RegisterSessionStatus.Closed;
+                break;
+
+            default:
+                throw new DomainValidationException($"Status '{status}' no es un RegisterSessionStatus válido.");
+        }
+    }
+
+    // Reconstruye estado histórico ya persistido, sin recalcular mediante Close(). Valida coherencia
+    // entre Status y los datos de cierre, incluyendo que CashDifference == CountedCash - ExpectedCash.
+    public static RegisterSession Rehydrate(
+        RegisterSessionId id,
+        RegisterId registerId,
+        UserId openedByUserId,
+        Money openingFloat,
+        DateTimeOffset openedAtUtc,
+        RegisterSessionStatus status,
+        UserId? closedByUserId,
+        Money? expectedCash,
+        Money? countedCash,
+        Money? cashDifference,
+        DateTimeOffset? closedAtUtc) =>
+        new(
+            id,
+            registerId,
+            openedByUserId,
+            openingFloat,
+            openedAtUtc,
+            status,
+            closedByUserId,
+            expectedCash,
+            countedCash,
+            cashDifference,
+            closedAtUtc);
+
+    private static void EnsureNoCloseDataForOpenStatus(
+        UserId? closedByUserId,
+        Money? expectedCash,
+        Money? countedCash,
+        Money? cashDifference,
+        DateTimeOffset? closedAtUtc)
+    {
+        if (closedByUserId is not null
+            || expectedCash is not null
+            || countedCash is not null
+            || cashDifference is not null
+            || closedAtUtc is not null)
+        {
+            throw new DomainValidationException("Una sesión con Status Open no puede tener datos de cierre.");
+        }
+    }
+
+    private void AssignClosedState(
+        UserId? closedByUserId,
+        Money? expectedCash,
+        Money? countedCash,
+        Money? cashDifference,
+        DateTimeOffset? closedAtUtc)
+    {
+        if (closedByUserId is null)
+        {
+            throw new DomainValidationException("ClosedByUserId es obligatorio para una sesión Closed.");
+        }
+
+        if (expectedCash is null)
+        {
+            throw new DomainValidationException("ExpectedCash es obligatorio para una sesión Closed.");
+        }
+
+        if (countedCash is null)
+        {
+            throw new DomainValidationException("CountedCash es obligatorio para una sesión Closed.");
+        }
+
+        if (cashDifference is null)
+        {
+            throw new DomainValidationException("CashDifference es obligatorio para una sesión Closed.");
+        }
+
+        if (closedAtUtc is null)
+        {
+            throw new DomainValidationException("ClosedAtUtc es obligatorio para una sesión Closed.");
+        }
+
+        var validClosedByUserId = EnsureNotEmpty(closedByUserId.Value);
+        var validExpectedCash = EnsureNonNegative(expectedCash, nameof(expectedCash));
+        var validCountedCash = EnsureNonNegative(countedCash, nameof(countedCash));
+        var validClosedAtUtc = EnsureUtc(closedAtUtc.Value, nameof(closedAtUtc));
+
+        EnsureSameCurrency(validExpectedCash, nameof(expectedCash));
+        EnsureSameCurrency(validCountedCash, nameof(countedCash));
+        EnsureSameCurrency(cashDifference, nameof(cashDifference));
+
+        if (validClosedAtUtc < OpenedAtUtc)
+        {
+            throw new DomainValidationException("ClosedAtUtc no puede ser anterior a OpenedAtUtc.");
+        }
+
+        var expectedDifference = validCountedCash - validExpectedCash;
+
+        if (cashDifference != expectedDifference)
+        {
+            throw new DomainValidationException(
+                "CashDifference no coincide con CountedCash - ExpectedCash.");
+        }
+
+        ClosedByUserId = validClosedByUserId;
+        ExpectedCash = validExpectedCash;
+        CountedCash = validCountedCash;
+        CashDifference = cashDifference;
+        ClosedAtUtc = validClosedAtUtc;
     }
 
     public void Close(

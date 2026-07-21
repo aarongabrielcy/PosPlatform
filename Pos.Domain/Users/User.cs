@@ -26,6 +26,18 @@ public sealed class User
         string username,
         string displayName,
         DateTimeOffset createdAtUtc)
+        : this(id, organizationId, roleId, username, displayName, true, createdAtUtc)
+    {
+    }
+
+    private User(
+        UserId id,
+        OrganizationId organizationId,
+        RoleId roleId,
+        string username,
+        string displayName,
+        bool isActive,
+        DateTimeOffset createdAtUtc)
     {
         Id = EnsureNotEmpty(id);
         OrganizationId = EnsureNotEmpty(organizationId);
@@ -33,8 +45,19 @@ public sealed class User
         Username = NormalizeUsername(username);
         DisplayName = NormalizeDisplayName(displayName);
         CreatedAtUtc = EnsureUtc(createdAtUtc);
-        IsActive = true;
+        IsActive = isActive;
     }
+
+    // Reconstruye estado ya persistido, incluyendo IsActive, sin pasar por Activate/Deactivate.
+    public static User Rehydrate(
+        UserId id,
+        OrganizationId organizationId,
+        RoleId roleId,
+        string username,
+        string displayName,
+        bool isActive,
+        DateTimeOffset createdAtUtc) =>
+        new(id, organizationId, roleId, username, displayName, isActive, createdAtUtc);
 
     public void ChangeDisplayName(string displayName)
     {
