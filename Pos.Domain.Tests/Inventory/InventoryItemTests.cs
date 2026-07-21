@@ -147,6 +147,104 @@ public class InventoryItemTests
             () => new InventoryItem(InventoryItemId.New(), BranchId.New(), ProductId.New(), 10m, 2m, nonUtc));
     }
 
+    // ---------- Rehydrate ----------
+
+    [Fact]
+    public void RehydrateReconstructsAllValues()
+    {
+        var id = InventoryItemId.New();
+        var branchId = BranchId.New();
+        var productId = ProductId.New();
+
+        var item = InventoryItem.Rehydrate(id, branchId, productId, 12.5m, 3m, CreatedAtUtc, LaterUtc);
+
+        Assert.Equal(id, item.Id);
+        Assert.Equal(branchId, item.BranchId);
+        Assert.Equal(productId, item.ProductId);
+        Assert.Equal(12.5m, item.Quantity);
+        Assert.Equal(3m, item.ReorderPoint);
+        Assert.Equal(CreatedAtUtc, item.CreatedAtUtc);
+        Assert.Equal(LaterUtc, item.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void RehydrateKeepsUpdatedAtUtcPosteriorToCreatedAtUtc()
+    {
+        var item = InventoryItem.Rehydrate(
+            InventoryItemId.New(), BranchId.New(), ProductId.New(), 10m, 2m, CreatedAtUtc, LaterUtc);
+
+        Assert.Equal(LaterUtc, item.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void RehydrateAllowsUpdatedAtUtcEqualToCreatedAtUtc()
+    {
+        var item = InventoryItem.Rehydrate(
+            InventoryItemId.New(), BranchId.New(), ProductId.New(), 10m, 2m, CreatedAtUtc, CreatedAtUtc);
+
+        Assert.Equal(CreatedAtUtc, item.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void RehydrateRejectsUpdatedAtUtcBeforeCreatedAtUtc()
+    {
+        Assert.Throws<DomainValidationException>(() => InventoryItem.Rehydrate(
+            InventoryItemId.New(), BranchId.New(), ProductId.New(), 10m, 2m, LaterUtc, CreatedAtUtc));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNonUtcCreatedAtUtc()
+    {
+        var nonUtc = new DateTimeOffset(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(-5));
+
+        Assert.Throws<DomainValidationException>(() => InventoryItem.Rehydrate(
+            InventoryItemId.New(), BranchId.New(), ProductId.New(), 10m, 2m, nonUtc, LaterUtc));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNonUtcUpdatedAtUtc()
+    {
+        var nonUtc = new DateTimeOffset(2026, 1, 1, 9, 0, 0, TimeSpan.FromHours(-5));
+
+        Assert.Throws<DomainValidationException>(() => InventoryItem.Rehydrate(
+            InventoryItemId.New(), BranchId.New(), ProductId.New(), 10m, 2m, CreatedAtUtc, nonUtc));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultInventoryItemId()
+    {
+        Assert.Throws<DomainValidationException>(() => InventoryItem.Rehydrate(
+            default, BranchId.New(), ProductId.New(), 10m, 2m, CreatedAtUtc, LaterUtc));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultBranchId()
+    {
+        Assert.Throws<DomainValidationException>(() => InventoryItem.Rehydrate(
+            InventoryItemId.New(), default, ProductId.New(), 10m, 2m, CreatedAtUtc, LaterUtc));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultProductId()
+    {
+        Assert.Throws<DomainValidationException>(() => InventoryItem.Rehydrate(
+            InventoryItemId.New(), BranchId.New(), default, 10m, 2m, CreatedAtUtc, LaterUtc));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNegativeQuantity()
+    {
+        Assert.Throws<DomainValidationException>(() => InventoryItem.Rehydrate(
+            InventoryItemId.New(), BranchId.New(), ProductId.New(), -1m, 2m, CreatedAtUtc, LaterUtc));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNegativeReorderPoint()
+    {
+        Assert.Throws<DomainValidationException>(() => InventoryItem.Rehydrate(
+            InventoryItemId.New(), BranchId.New(), ProductId.New(), 10m, -1m, CreatedAtUtc, LaterUtc));
+    }
+
     // ---------- Increase ----------
 
     [Fact]

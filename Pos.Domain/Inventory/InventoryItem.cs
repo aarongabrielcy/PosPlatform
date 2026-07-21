@@ -26,15 +26,46 @@ public sealed class InventoryItem
         decimal initialQuantity,
         decimal reorderPoint,
         DateTimeOffset createdAtUtc)
+        : this(id, branchId, productId, initialQuantity, reorderPoint, createdAtUtc, createdAtUtc)
+    {
+    }
+
+    private InventoryItem(
+        InventoryItemId id,
+        BranchId branchId,
+        ProductId productId,
+        decimal quantity,
+        decimal reorderPoint,
+        DateTimeOffset createdAtUtc,
+        DateTimeOffset updatedAtUtc)
     {
         Id = EnsureNotEmpty(id);
         BranchId = EnsureNotEmpty(branchId);
         ProductId = EnsureNotEmpty(productId);
-        Quantity = EnsureNonNegative(initialQuantity, nameof(initialQuantity));
+        Quantity = EnsureNonNegative(quantity, nameof(quantity));
         ReorderPoint = EnsureNonNegative(reorderPoint, nameof(reorderPoint));
         CreatedAtUtc = EnsureUtc(createdAtUtc, nameof(createdAtUtc));
-        UpdatedAtUtc = CreatedAtUtc;
+
+        var validUpdatedAtUtc = EnsureUtc(updatedAtUtc, nameof(updatedAtUtc));
+
+        if (validUpdatedAtUtc < CreatedAtUtc)
+        {
+            throw new DomainValidationException("updatedAtUtc no puede ser anterior a createdAtUtc.");
+        }
+
+        UpdatedAtUtc = validUpdatedAtUtc;
     }
+
+    // Reconstruye estado ya persistido; a diferencia del constructor, permite UpdatedAtUtc posterior a CreatedAtUtc.
+    public static InventoryItem Rehydrate(
+        InventoryItemId id,
+        BranchId branchId,
+        ProductId productId,
+        decimal quantity,
+        decimal reorderPoint,
+        DateTimeOffset createdAtUtc,
+        DateTimeOffset updatedAtUtc) =>
+        new(id, branchId, productId, quantity, reorderPoint, createdAtUtc, updatedAtUtc);
 
     public void Increase(decimal quantity, DateTimeOffset occurredAtUtc)
     {
