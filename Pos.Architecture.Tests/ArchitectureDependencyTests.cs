@@ -42,6 +42,11 @@ public class ArchitectureDependencyTests
         "Microsoft.EntityFrameworkCore.Sqlite",
     ];
 
+    private static readonly string[] AllowedDesktopPackageReferences =
+    [
+        "Microsoft.Extensions.Hosting",
+    ];
+
     private static readonly Dictionary<string, string> ExpectedTargetFrameworks = new()
     {
         ["Pos.Domain"] = "net8.0",
@@ -172,7 +177,6 @@ public class ArchitectureDependencyTests
     [InlineData("Pos.Domain")]
     [InlineData("Pos.Application")]
     [InlineData("Pos.Hardware")]
-    [InlineData("Pos.Desktop")]
     public void ProductionProjectsShouldNotContainPackageReferences(string projectName)
     {
         var document = LoadProjectXml(projectName);
@@ -201,6 +205,23 @@ public class ArchitectureDependencyTests
         Assert.True(
             expected.SequenceEqual(packageNames),
             $"Proyecto: Pos.Infrastructure. PackageReference esperados: [{string.Join(", ", expected)}]. " +
+            $"PackageReference encontrados: [{string.Join(", ", packageNames)}].");
+    }
+
+    [Fact]
+    public void DesktopProjectShouldOnlyContainAllowedHostingPackageReferences()
+    {
+        var document = LoadProjectXml("Pos.Desktop");
+        var packageNames = document.Descendants("PackageReference")
+            .Select(e => e.Attribute("Include")?.Value ?? "(sin nombre)")
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
+
+        var expected = AllowedDesktopPackageReferences.OrderBy(n => n, StringComparer.Ordinal).ToArray();
+
+        Assert.True(
+            expected.SequenceEqual(packageNames),
+            $"Proyecto: Pos.Desktop. PackageReference esperados: [{string.Join(", ", expected)}]. " +
             $"PackageReference encontrados: [{string.Join(", ", packageNames)}].");
     }
 
