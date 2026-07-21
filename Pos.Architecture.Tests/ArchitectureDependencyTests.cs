@@ -16,6 +16,7 @@ public class ArchitectureDependencyTests
         "Pos.Domain.Tests",
         "Pos.Hardware",
         "Pos.Infrastructure",
+        "Pos.Infrastructure.Tests",
     ];
 
     private static readonly Dictionary<string, string[]> ExpectedProductionReferences = new()
@@ -32,7 +33,14 @@ public class ArchitectureDependencyTests
         ["Pos.Domain.Tests"] = ["Pos.Domain"],
         ["Pos.Application.Tests"] = ["Pos.Application", "Pos.Domain"],
         ["Pos.Architecture.Tests"] = [],
+        ["Pos.Infrastructure.Tests"] = ["Pos.Domain", "Pos.Infrastructure"],
     };
+
+    private static readonly string[] AllowedInfrastructurePackageReferences =
+    [
+        "Microsoft.EntityFrameworkCore.Design",
+        "Microsoft.EntityFrameworkCore.Sqlite",
+    ];
 
     private static readonly Dictionary<string, string> ExpectedTargetFrameworks = new()
     {
@@ -53,7 +61,7 @@ public class ArchitectureDependencyTests
     ];
 
     [Fact]
-    public void SolutionShouldContainExactlyTheEightExpectedProjects()
+    public void SolutionShouldContainExactlyTheExpectedProjects()
     {
         var actual = GetSolutionProjectNames();
         var expected = ExpectedProjectNames.OrderBy(n => n, StringComparer.Ordinal).ToArray();
@@ -124,6 +132,7 @@ public class ArchitectureDependencyTests
     [InlineData("Pos.Domain.Tests")]
     [InlineData("Pos.Application.Tests")]
     [InlineData("Pos.Architecture.Tests")]
+    [InlineData("Pos.Infrastructure.Tests")]
     public void TestProjectShouldHaveExactlyExpectedReferences(string projectName)
     {
         AssertReferencesMatch(projectName, ExpectedTestReferences[projectName]);
@@ -162,7 +171,6 @@ public class ArchitectureDependencyTests
     [Theory]
     [InlineData("Pos.Domain")]
     [InlineData("Pos.Application")]
-    [InlineData("Pos.Infrastructure")]
     [InlineData("Pos.Hardware")]
     [InlineData("Pos.Desktop")]
     public void ProductionProjectsShouldNotContainPackageReferences(string projectName)
@@ -177,6 +185,46 @@ public class ArchitectureDependencyTests
             packageReferences.Length == 0,
             $"Proyecto: {projectName}. No debe contener PackageReference. " +
             $"PackageReference encontrados: [{string.Join(", ", packageReferences)}].");
+    }
+
+    [Fact]
+    public void InfrastructureProjectShouldOnlyContainAllowedEfCorePackageReferences()
+    {
+        var document = LoadProjectXml("Pos.Infrastructure");
+        var packageNames = document.Descendants("PackageReference")
+            .Select(e => e.Attribute("Include")?.Value ?? "(sin nombre)")
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToArray();
+
+        var expected = AllowedInfrastructurePackageReferences.OrderBy(n => n, StringComparer.Ordinal).ToArray();
+
+        Assert.True(
+            expected.SequenceEqual(packageNames),
+            $"Proyecto: Pos.Infrastructure. PackageReference esperados: [{string.Join(", ", expected)}]. " +
+            $"PackageReference encontrados: [{string.Join(", ", packageNames)}].");
+    }
+
+    [Fact]
+    public void InfrastructureProjectEfCoreDesignPackageShouldBePrivateAssetsAll()
+    {
+        var document = LoadProjectXml("Pos.Infrastructure");
+        var designPackageReference = document.Descendants("PackageReference")
+            .FirstOrDefault(e => string.Equals(
+                e.Attribute("Include")?.Value,
+                "Microsoft.EntityFrameworkCore.Design",
+                StringComparison.Ordinal));
+
+        Assert.True(
+            designPackageReference is not null,
+            "Proyecto: Pos.Infrastructure. No se encontró el PackageReference Microsoft.EntityFrameworkCore.Design.");
+
+        var privateAssets = designPackageReference!.Element("PrivateAssets")?.Value.Trim()
+            ?? designPackageReference.Attribute("PrivateAssets")?.Value.Trim();
+
+        Assert.True(
+            string.Equals(privateAssets, "all", StringComparison.OrdinalIgnoreCase),
+            "Proyecto: Pos.Infrastructure. Microsoft.EntityFrameworkCore.Design debe tener PrivateAssets=\"all\". " +
+            $"Valor encontrado: {privateAssets ?? "(ninguno)"}.");
     }
 
     private static bool HasCycle(
