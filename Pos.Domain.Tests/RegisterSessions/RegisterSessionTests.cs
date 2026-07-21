@@ -340,4 +340,400 @@ public class RegisterSessionTests
         Assert.Null(session.CashDifference);
         Assert.Null(session.ClosedAtUtc);
     }
+
+    // ---------- Rehydrate ----------
+
+    private static RegisterSession RehydrateOpen(
+        RegisterSessionId? id = null,
+        RegisterId? registerId = null,
+        UserId? openedByUserId = null,
+        Money? openingFloat = null,
+        DateTimeOffset? openedAtUtc = null) =>
+        RegisterSession.Rehydrate(
+            id ?? RegisterSessionId.New(),
+            registerId ?? RegisterId.New(),
+            openedByUserId ?? UserId.New(),
+            openingFloat ?? new Money(100m, "USD"),
+            openedAtUtc ?? OpenedAtUtc,
+            RegisterSessionStatus.Open,
+            closedByUserId: null,
+            expectedCash: null,
+            countedCash: null,
+            cashDifference: null,
+            closedAtUtc: null);
+
+    private static RegisterSession RehydrateClosed(
+        Money? cashDifference = null,
+        DateTimeOffset? closedAtUtc = null) =>
+        RegisterSession.Rehydrate(
+            RegisterSessionId.New(),
+            RegisterId.New(),
+            UserId.New(),
+            new Money(100m, "USD"),
+            OpenedAtUtc,
+            RegisterSessionStatus.Closed,
+            UserId.New(),
+            new Money(100m, "USD"),
+            new Money(110m, "USD"),
+            cashDifference ?? new Money(10m, "USD"),
+            closedAtUtc ?? ClosedAtUtc);
+
+    [Fact]
+    public void RehydrateOpenRestoresIdentifiersAndOpeningFloat()
+    {
+        var id = RegisterSessionId.New();
+        var registerId = RegisterId.New();
+        var openedByUserId = UserId.New();
+        var openingFloat = new Money(250m, "USD");
+
+        var session = RehydrateOpen(id, registerId, openedByUserId, openingFloat, OpenedAtUtc);
+
+        Assert.Equal(id, session.Id);
+        Assert.Equal(registerId, session.RegisterId);
+        Assert.Equal(openedByUserId, session.OpenedByUserId);
+        Assert.Equal(openingFloat, session.OpeningFloat);
+        Assert.Equal(OpenedAtUtc, session.OpenedAtUtc);
+        Assert.Equal(RegisterSessionStatus.Open, session.Status);
+    }
+
+    [Fact]
+    public void RehydrateOpenLeavesClosureDataNull()
+    {
+        var session = RehydrateOpen();
+
+        Assert.Null(session.ClosedByUserId);
+        Assert.Null(session.ExpectedCash);
+        Assert.Null(session.CountedCash);
+        Assert.Null(session.CashDifference);
+        Assert.Null(session.ClosedAtUtc);
+    }
+
+    [Fact]
+    public void RehydrateOpenRejectsPresentClosureData()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => RegisterSession.Rehydrate(
+                RegisterSessionId.New(),
+                RegisterId.New(),
+                UserId.New(),
+                new Money(100m, "USD"),
+                OpenedAtUtc,
+                RegisterSessionStatus.Open,
+                UserId.New(),
+                null,
+                null,
+                null,
+                null));
+    }
+
+    [Fact]
+    public void RehydrateClosedAcceptsPositiveCashDifference()
+    {
+        var session = RegisterSession.Rehydrate(
+            RegisterSessionId.New(),
+            RegisterId.New(),
+            UserId.New(),
+            new Money(100m, "USD"),
+            OpenedAtUtc,
+            RegisterSessionStatus.Closed,
+            UserId.New(),
+            new Money(100m, "USD"),
+            new Money(110m, "USD"),
+            new Money(10m, "USD"),
+            ClosedAtUtc);
+
+        Assert.Equal(new Money(10m, "USD"), session.CashDifference);
+    }
+
+    [Fact]
+    public void RehydrateClosedAcceptsNegativeCashDifference()
+    {
+        var session = RegisterSession.Rehydrate(
+            RegisterSessionId.New(),
+            RegisterId.New(),
+            UserId.New(),
+            new Money(100m, "USD"),
+            OpenedAtUtc,
+            RegisterSessionStatus.Closed,
+            UserId.New(),
+            new Money(100m, "USD"),
+            new Money(90m, "USD"),
+            new Money(-10m, "USD"),
+            ClosedAtUtc);
+
+        Assert.Equal(new Money(-10m, "USD"), session.CashDifference);
+    }
+
+    [Fact]
+    public void RehydrateClosedAcceptsZeroCashDifference()
+    {
+        var session = RegisterSession.Rehydrate(
+            RegisterSessionId.New(),
+            RegisterId.New(),
+            UserId.New(),
+            new Money(100m, "USD"),
+            OpenedAtUtc,
+            RegisterSessionStatus.Closed,
+            UserId.New(),
+            new Money(100m, "USD"),
+            new Money(100m, "USD"),
+            new Money(0m, "USD"),
+            ClosedAtUtc);
+
+        Assert.Equal(new Money(0m, "USD"), session.CashDifference);
+    }
+
+    [Fact]
+    public void RehydrateClosedRejectsCashDifferenceThatDoesNotMatchExpectedAndCountedCash()
+    {
+        var persistedDifference = new Money(999m, "USD");
+
+        Assert.Throws<DomainValidationException>(
+            () => RehydrateClosed(cashDifference: persistedDifference));
+    }
+
+    [Fact]
+    public void RehydrateClosedRestoresClosureFields()
+    {
+        var closedByUserId = UserId.New();
+        var expectedCash = new Money(100m, "USD");
+        var countedCash = new Money(110m, "USD");
+        var cashDifference = new Money(10m, "USD");
+
+        var session = RegisterSession.Rehydrate(
+            RegisterSessionId.New(),
+            RegisterId.New(),
+            UserId.New(),
+            new Money(100m, "USD"),
+            OpenedAtUtc,
+            RegisterSessionStatus.Closed,
+            closedByUserId,
+            expectedCash,
+            countedCash,
+            cashDifference,
+            ClosedAtUtc);
+
+        Assert.Equal(closedByUserId, session.ClosedByUserId);
+        Assert.Equal(expectedCash, session.ExpectedCash);
+        Assert.Equal(countedCash, session.CountedCash);
+        Assert.Equal(cashDifference, session.CashDifference);
+        Assert.Equal(ClosedAtUtc, session.ClosedAtUtc);
+    }
+
+    [Fact]
+    public void RehydratedClosedSessionRejectsClose()
+    {
+        var session = RehydrateClosed();
+
+        Assert.Throws<DomainValidationException>(
+            () => session.Close(UserId.New(), new Money(100m, "USD"), new Money(100m, "USD"), ClosedAtUtc));
+    }
+
+    [Fact]
+    public void RehydrateClosedRejectsMissingClosedByUserId()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => RegisterSession.Rehydrate(
+                RegisterSessionId.New(),
+                RegisterId.New(),
+                UserId.New(),
+                new Money(100m, "USD"),
+                OpenedAtUtc,
+                RegisterSessionStatus.Closed,
+                null,
+                new Money(100m, "USD"),
+                new Money(110m, "USD"),
+                new Money(10m, "USD"),
+                ClosedAtUtc));
+    }
+
+    [Fact]
+    public void RehydrateClosedRejectsMissingExpectedCash()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => RegisterSession.Rehydrate(
+                RegisterSessionId.New(),
+                RegisterId.New(),
+                UserId.New(),
+                new Money(100m, "USD"),
+                OpenedAtUtc,
+                RegisterSessionStatus.Closed,
+                UserId.New(),
+                null,
+                new Money(110m, "USD"),
+                new Money(10m, "USD"),
+                ClosedAtUtc));
+    }
+
+    [Fact]
+    public void RehydrateClosedRejectsMissingCountedCash()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => RegisterSession.Rehydrate(
+                RegisterSessionId.New(),
+                RegisterId.New(),
+                UserId.New(),
+                new Money(100m, "USD"),
+                OpenedAtUtc,
+                RegisterSessionStatus.Closed,
+                UserId.New(),
+                new Money(100m, "USD"),
+                null,
+                new Money(10m, "USD"),
+                ClosedAtUtc));
+    }
+
+    [Fact]
+    public void RehydrateClosedRejectsMissingCashDifference()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => RegisterSession.Rehydrate(
+                RegisterSessionId.New(),
+                RegisterId.New(),
+                UserId.New(),
+                new Money(100m, "USD"),
+                OpenedAtUtc,
+                RegisterSessionStatus.Closed,
+                UserId.New(),
+                new Money(100m, "USD"),
+                new Money(110m, "USD"),
+                null,
+                ClosedAtUtc));
+    }
+
+    [Fact]
+    public void RehydrateClosedRejectsMissingClosedAtUtc()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => RegisterSession.Rehydrate(
+                RegisterSessionId.New(),
+                RegisterId.New(),
+                UserId.New(),
+                new Money(100m, "USD"),
+                OpenedAtUtc,
+                RegisterSessionStatus.Closed,
+                UserId.New(),
+                new Money(100m, "USD"),
+                new Money(110m, "USD"),
+                new Money(10m, "USD"),
+                null));
+    }
+
+    [Fact]
+    public void RehydrateClosedRejectsClosedAtUtcBeforeOpenedAtUtc()
+    {
+        var beforeOpening = OpenedAtUtc.AddHours(-1);
+
+        Assert.Throws<DomainValidationException>(
+            () => RegisterSession.Rehydrate(
+                RegisterSessionId.New(),
+                RegisterId.New(),
+                UserId.New(),
+                new Money(100m, "USD"),
+                OpenedAtUtc,
+                RegisterSessionStatus.Closed,
+                UserId.New(),
+                new Money(100m, "USD"),
+                new Money(110m, "USD"),
+                new Money(10m, "USD"),
+                beforeOpening));
+    }
+
+    [Fact]
+    public void RehydrateClosedRejectsMismatchedCurrencyInCashDifference()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => RegisterSession.Rehydrate(
+                RegisterSessionId.New(),
+                RegisterId.New(),
+                UserId.New(),
+                new Money(100m, "USD"),
+                OpenedAtUtc,
+                RegisterSessionStatus.Closed,
+                UserId.New(),
+                new Money(100m, "USD"),
+                new Money(110m, "USD"),
+                new Money(10m, "EUR"),
+                ClosedAtUtc));
+    }
+
+    [Fact]
+    public void RehydrateRejectsUndefinedStatus()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => RegisterSession.Rehydrate(
+                RegisterSessionId.New(),
+                RegisterId.New(),
+                UserId.New(),
+                new Money(100m, "USD"),
+                OpenedAtUtc,
+                (RegisterSessionStatus)99,
+                null,
+                null,
+                null,
+                null,
+                null));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultRegisterSessionId()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => RegisterSession.Rehydrate(
+                default,
+                RegisterId.New(),
+                UserId.New(),
+                new Money(100m, "USD"),
+                OpenedAtUtc,
+                RegisterSessionStatus.Open,
+                null,
+                null,
+                null,
+                null,
+                null));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultRegisterId()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => RegisterSession.Rehydrate(
+                RegisterSessionId.New(),
+                default,
+                UserId.New(),
+                new Money(100m, "USD"),
+                OpenedAtUtc,
+                RegisterSessionStatus.Open,
+                null,
+                null,
+                null,
+                null,
+                null));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultOpenedByUserId()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => RegisterSession.Rehydrate(
+                RegisterSessionId.New(),
+                RegisterId.New(),
+                default,
+                new Money(100m, "USD"),
+                OpenedAtUtc,
+                RegisterSessionStatus.Open,
+                null,
+                null,
+                null,
+                null,
+                null));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNonUtcOpenedAtUtc()
+    {
+        var nonUtc = new DateTimeOffset(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(-5));
+
+        Assert.Throws<DomainValidationException>(() => RehydrateOpen(openedAtUtc: nonUtc));
+    }
 }

@@ -25,14 +25,35 @@ public sealed class Role
         string name,
         DateTimeOffset createdAtUtc,
         IEnumerable<Permission>? permissions = null)
+        : this(id, organizationId, name, true, createdAtUtc, permissions)
+    {
+    }
+
+    private Role(
+        RoleId id,
+        OrganizationId organizationId,
+        string name,
+        bool isActive,
+        DateTimeOffset createdAtUtc,
+        IEnumerable<Permission>? permissions)
     {
         Id = EnsureNotEmpty(id);
         OrganizationId = EnsureNotEmpty(organizationId);
         Name = NormalizeName(name);
         CreatedAtUtc = EnsureUtc(createdAtUtc);
-        IsActive = true;
+        IsActive = isActive;
         _permissions = permissions is null ? [] : [.. permissions];
     }
+
+    // Reconstruye estado ya persistido, incluyendo IsActive y permisos, sin pasar por Activate/Deactivate/GrantPermission.
+    public static Role Rehydrate(
+        RoleId id,
+        OrganizationId organizationId,
+        string name,
+        bool isActive,
+        DateTimeOffset createdAtUtc,
+        IEnumerable<Permission>? permissions = null) =>
+        new(id, organizationId, name, isActive, createdAtUtc, permissions);
 
     public void Rename(string name)
     {

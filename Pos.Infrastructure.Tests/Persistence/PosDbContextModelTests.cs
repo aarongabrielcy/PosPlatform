@@ -945,4 +945,457 @@ public class PosDbContextModelTests
             indexPropertySets,
             set => set.SequenceEqual([nameof(ProductRecord.OrganizationId), nameof(ProductRecord.Barcode)]));
     }
+
+    // ---------- RoleRecord ----------
+
+    [Fact]
+    public void RoleRecordShouldMapToRolesTable()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RoleRecord))!;
+
+        Assert.Equal("roles", entityType.GetTableName());
+    }
+
+    [Fact]
+    public void RoleRecordShouldHaveIdAsPrimaryKey()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RoleRecord))!;
+        var primaryKey = entityType.FindPrimaryKey()!;
+
+        var keyPropertyName = Assert.Single(primaryKey.Properties).Name;
+        Assert.Equal(nameof(RoleRecord.Id), keyPropertyName);
+    }
+
+    [Fact]
+    public void RoleRecordShouldHaveExpectedColumnNames()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RoleRecord))!;
+
+        Assert.Equal("id", entityType.FindProperty(nameof(RoleRecord.Id))!.GetColumnName());
+        Assert.Equal(
+            "organization_id",
+            entityType.FindProperty(nameof(RoleRecord.OrganizationId))!.GetColumnName());
+        Assert.Equal("name", entityType.FindProperty(nameof(RoleRecord.Name))!.GetColumnName());
+        Assert.Equal("is_active", entityType.FindProperty(nameof(RoleRecord.IsActive))!.GetColumnName());
+        Assert.Equal(
+            "created_at_utc_ticks",
+            entityType.FindProperty(nameof(RoleRecord.CreatedAtUtc))!.GetColumnName());
+    }
+
+    [Fact]
+    public void RoleRecordNameShouldHaveMaxLength80()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RoleRecord))!;
+
+        Assert.Equal(80, entityType.FindProperty(nameof(RoleRecord.Name))!.GetMaxLength());
+    }
+
+    [Fact]
+    public void RoleRecordCreatedAtShouldBeConvertedToLong()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RoleRecord))!;
+        var createdAt = entityType.FindProperty(nameof(RoleRecord.CreatedAtUtc))!;
+
+        Assert.Equal(typeof(long), createdAt.GetValueConverter()!.ProviderClrType);
+    }
+
+    [Fact]
+    public void RoleRecordShouldHaveRestrictForeignKeyToOrganizations()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RoleRecord))!;
+        var foreignKey = Assert.Single(entityType.GetForeignKeys());
+
+        Assert.Equal(typeof(OrganizationRecord), foreignKey.PrincipalEntityType.ClrType);
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(RoleRecord.OrganizationId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void RoleRecordShouldHaveExpectedIndexes()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RoleRecord))!;
+        var indexPropertySets = entityType.GetIndexes()
+            .Select(index => index.Properties.Select(p => p.Name).ToArray())
+            .ToArray();
+
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(RoleRecord.OrganizationId)]));
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(RoleRecord.IsActive)]));
+    }
+
+    [Fact]
+    public void RoleRecordShouldNotHaveUniqueIndexOnOrganizationIdAndName()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RoleRecord))!;
+
+        var uniqueIndex = entityType.GetIndexes().SingleOrDefault(index =>
+            index.IsUnique &&
+            index.Properties.Select(p => p.Name).SequenceEqual(
+            [
+                nameof(RoleRecord.OrganizationId),
+                nameof(RoleRecord.Name),
+            ]));
+
+        Assert.Null(uniqueIndex);
+    }
+
+    // ---------- RolePermissionRecord ----------
+
+    [Fact]
+    public void RolePermissionRecordShouldMapToRolePermissionsTable()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RolePermissionRecord))!;
+
+        Assert.Equal("role_permissions", entityType.GetTableName());
+    }
+
+    [Fact]
+    public void RolePermissionRecordShouldHaveCompositePrimaryKey()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RolePermissionRecord))!;
+        var primaryKey = entityType.FindPrimaryKey()!;
+
+        var keyPropertyNames = primaryKey.Properties.Select(p => p.Name).ToArray();
+        Assert.Equal(
+            [nameof(RolePermissionRecord.RoleId), nameof(RolePermissionRecord.Permission)],
+            keyPropertyNames);
+    }
+
+    [Fact]
+    public void RolePermissionRecordShouldHaveExpectedColumnNames()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RolePermissionRecord))!;
+
+        Assert.Equal("role_id", entityType.FindProperty(nameof(RolePermissionRecord.RoleId))!.GetColumnName());
+        Assert.Equal(
+            "permission",
+            entityType.FindProperty(nameof(RolePermissionRecord.Permission))!.GetColumnName());
+    }
+
+    [Fact]
+    public void RolePermissionRecordPermissionShouldHaveMaxLength80()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RolePermissionRecord))!;
+
+        Assert.Equal(80, entityType.FindProperty(nameof(RolePermissionRecord.Permission))!.GetMaxLength());
+    }
+
+    [Fact]
+    public void RolePermissionRecordShouldHaveCascadeForeignKeyToRoles()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RolePermissionRecord))!;
+        var foreignKey = Assert.Single(entityType.GetForeignKeys());
+
+        Assert.Equal(typeof(RoleRecord), foreignKey.PrincipalEntityType.ClrType);
+        Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(RolePermissionRecord.RoleId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    // ---------- UserRecord ----------
+
+    [Fact]
+    public void UserRecordShouldMapToUsersTable()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
+
+        Assert.Equal("users", entityType.GetTableName());
+    }
+
+    [Fact]
+    public void UserRecordShouldHaveIdAsPrimaryKey()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
+        var primaryKey = entityType.FindPrimaryKey()!;
+
+        var keyPropertyName = Assert.Single(primaryKey.Properties).Name;
+        Assert.Equal(nameof(UserRecord.Id), keyPropertyName);
+    }
+
+    [Fact]
+    public void UserRecordShouldHaveExpectedColumnNames()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
+
+        Assert.Equal("id", entityType.FindProperty(nameof(UserRecord.Id))!.GetColumnName());
+        Assert.Equal(
+            "organization_id",
+            entityType.FindProperty(nameof(UserRecord.OrganizationId))!.GetColumnName());
+        Assert.Equal("role_id", entityType.FindProperty(nameof(UserRecord.RoleId))!.GetColumnName());
+        Assert.Equal("username", entityType.FindProperty(nameof(UserRecord.Username))!.GetColumnName());
+        Assert.Equal(
+            "display_name",
+            entityType.FindProperty(nameof(UserRecord.DisplayName))!.GetColumnName());
+        Assert.Equal("is_active", entityType.FindProperty(nameof(UserRecord.IsActive))!.GetColumnName());
+        Assert.Equal(
+            "created_at_utc_ticks",
+            entityType.FindProperty(nameof(UserRecord.CreatedAtUtc))!.GetColumnName());
+    }
+
+    [Fact]
+    public void UserRecordShouldHaveExpectedLengths()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
+
+        Assert.Equal(40, entityType.FindProperty(nameof(UserRecord.Username))!.GetMaxLength());
+        Assert.Equal(120, entityType.FindProperty(nameof(UserRecord.DisplayName))!.GetMaxLength());
+    }
+
+    [Fact]
+    public void UserRecordCreatedAtShouldBeConvertedToLong()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
+        var createdAt = entityType.FindProperty(nameof(UserRecord.CreatedAtUtc))!;
+
+        Assert.Equal(typeof(long), createdAt.GetValueConverter()!.ProviderClrType);
+    }
+
+    [Fact]
+    public void UserRecordShouldHaveRestrictForeignKeyToOrganizations()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(OrganizationRecord));
+
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(UserRecord.OrganizationId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void UserRecordShouldHaveRestrictForeignKeyToRoles()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(RoleRecord));
+
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(UserRecord.RoleId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void UserRecordShouldHaveExpectedIndexes()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
+        var indexPropertySets = entityType.GetIndexes()
+            .Select(index => index.Properties.Select(p => p.Name).ToArray())
+            .ToArray();
+
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(UserRecord.OrganizationId)]));
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(UserRecord.RoleId)]));
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(UserRecord.IsActive)]));
+        Assert.Contains(
+            indexPropertySets,
+            set => set.SequenceEqual([nameof(UserRecord.OrganizationId), nameof(UserRecord.Username)]));
+    }
+
+    [Fact]
+    public void UserRecordShouldNotHaveUniqueIndexOnOrganizationIdAndUsername()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
+
+        var uniqueIndex = entityType.GetIndexes().SingleOrDefault(index =>
+            index.IsUnique &&
+            index.Properties.Select(p => p.Name).SequenceEqual(
+            [
+                nameof(UserRecord.OrganizationId),
+                nameof(UserRecord.Username),
+            ]));
+
+        Assert.Null(uniqueIndex);
+    }
+
+    // ---------- RegisterSessionRecord ----------
+
+    [Fact]
+    public void RegisterSessionRecordShouldMapToRegisterSessionsTable()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+
+        Assert.Equal("register_sessions", entityType.GetTableName());
+    }
+
+    [Fact]
+    public void RegisterSessionRecordShouldHaveIdAsPrimaryKey()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+        var primaryKey = entityType.FindPrimaryKey()!;
+
+        var keyPropertyName = Assert.Single(primaryKey.Properties).Name;
+        Assert.Equal(nameof(RegisterSessionRecord.Id), keyPropertyName);
+    }
+
+    [Fact]
+    public void RegisterSessionRecordShouldHaveExpectedColumnNames()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+
+        Assert.Equal("id", entityType.FindProperty(nameof(RegisterSessionRecord.Id))!.GetColumnName());
+        Assert.Equal(
+            "register_id",
+            entityType.FindProperty(nameof(RegisterSessionRecord.RegisterId))!.GetColumnName());
+        Assert.Equal(
+            "opened_by_user_id",
+            entityType.FindProperty(nameof(RegisterSessionRecord.OpenedByUserId))!.GetColumnName());
+        Assert.Equal(
+            "closed_by_user_id",
+            entityType.FindProperty(nameof(RegisterSessionRecord.ClosedByUserId))!.GetColumnName());
+        Assert.Equal(
+            "opening_float_amount",
+            entityType.FindProperty(nameof(RegisterSessionRecord.OpeningFloatAmount))!.GetColumnName());
+        Assert.Equal(
+            "opening_float_currency",
+            entityType.FindProperty(nameof(RegisterSessionRecord.OpeningFloatCurrency))!.GetColumnName());
+        Assert.Equal(
+            "expected_cash_amount",
+            entityType.FindProperty(nameof(RegisterSessionRecord.ExpectedCashAmount))!.GetColumnName());
+        Assert.Equal(
+            "counted_cash_amount",
+            entityType.FindProperty(nameof(RegisterSessionRecord.CountedCashAmount))!.GetColumnName());
+        Assert.Equal(
+            "cash_difference_amount",
+            entityType.FindProperty(nameof(RegisterSessionRecord.CashDifferenceAmount))!.GetColumnName());
+        Assert.Equal("status", entityType.FindProperty(nameof(RegisterSessionRecord.Status))!.GetColumnName());
+        Assert.Equal(
+            "opened_at_utc_ticks",
+            entityType.FindProperty(nameof(RegisterSessionRecord.OpenedAtUtc))!.GetColumnName());
+        Assert.Equal(
+            "closed_at_utc_ticks",
+            entityType.FindProperty(nameof(RegisterSessionRecord.ClosedAtUtc))!.GetColumnName());
+    }
+
+    [Fact]
+    public void RegisterSessionRecordStatusShouldBeConvertedToStringWithMaxLength32()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+        var status = entityType.FindProperty(nameof(RegisterSessionRecord.Status))!;
+
+        Assert.Equal(typeof(string), status.GetValueConverter()!.ProviderClrType);
+        Assert.Equal(32, status.GetMaxLength());
+    }
+
+    [Fact]
+    public void RegisterSessionRecordDatesShouldBeConvertedToLong()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+
+        var openedAt = entityType.FindProperty(nameof(RegisterSessionRecord.OpenedAtUtc))!;
+        var closedAt = entityType.FindProperty(nameof(RegisterSessionRecord.ClosedAtUtc))!;
+
+        Assert.Equal(typeof(long), openedAt.GetValueConverter()!.ProviderClrType);
+        Assert.Equal(typeof(long), closedAt.GetValueConverter()!.ProviderClrType);
+    }
+
+    [Fact]
+    public void RegisterSessionRecordCloseFieldsShouldBeNullable()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+
+        Assert.True(entityType.FindProperty(nameof(RegisterSessionRecord.ClosedByUserId))!.IsNullable);
+        Assert.True(entityType.FindProperty(nameof(RegisterSessionRecord.ExpectedCashAmount))!.IsNullable);
+        Assert.True(entityType.FindProperty(nameof(RegisterSessionRecord.CountedCashAmount))!.IsNullable);
+        Assert.True(entityType.FindProperty(nameof(RegisterSessionRecord.CashDifferenceAmount))!.IsNullable);
+        Assert.True(entityType.FindProperty(nameof(RegisterSessionRecord.ClosedAtUtc))!.IsNullable);
+        Assert.False(entityType.FindProperty(nameof(RegisterSessionRecord.OpeningFloatAmount))!.IsNullable);
+        Assert.False(entityType.FindProperty(nameof(RegisterSessionRecord.OpenedAtUtc))!.IsNullable);
+    }
+
+    [Fact]
+    public void RegisterSessionRecordAmountsShouldHavePrecision18And2()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+
+        var openingFloat = entityType.FindProperty(nameof(RegisterSessionRecord.OpeningFloatAmount))!;
+        Assert.Equal(18, openingFloat.GetPrecision());
+        Assert.Equal(2, openingFloat.GetScale());
+
+        var cashDifference = entityType.FindProperty(nameof(RegisterSessionRecord.CashDifferenceAmount))!;
+        Assert.Equal(18, cashDifference.GetPrecision());
+        Assert.Equal(2, cashDifference.GetScale());
+    }
+
+    [Fact]
+    public void RegisterSessionRecordCurrenciesShouldHaveMaxLength3()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+
+        Assert.Equal(3, entityType.FindProperty(nameof(RegisterSessionRecord.OpeningFloatCurrency))!.GetMaxLength());
+        Assert.Equal(3, entityType.FindProperty(nameof(RegisterSessionRecord.ExpectedCashCurrency))!.GetMaxLength());
+        Assert.Equal(3, entityType.FindProperty(nameof(RegisterSessionRecord.CountedCashCurrency))!.GetMaxLength());
+        Assert.Equal(
+            3, entityType.FindProperty(nameof(RegisterSessionRecord.CashDifferenceCurrency))!.GetMaxLength());
+    }
+
+    [Fact]
+    public void RegisterSessionRecordShouldHaveRestrictForeignKeyToRegisters()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(RegisterRecord));
+
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(RegisterSessionRecord.RegisterId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void RegisterSessionRecordShouldHaveTwoRestrictForeignKeysToUsers()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+        var foreignKeysToUsers = entityType.GetForeignKeys()
+            .Where(fk => fk.PrincipalEntityType.ClrType == typeof(UserRecord))
+            .ToArray();
+
+        Assert.Equal(2, foreignKeysToUsers.Length);
+        Assert.All(foreignKeysToUsers, fk => Assert.Equal(DeleteBehavior.Restrict, fk.DeleteBehavior));
+
+        Assert.Contains(
+            foreignKeysToUsers,
+            fk => fk.Properties.Select(p => p.Name).SequenceEqual([nameof(RegisterSessionRecord.OpenedByUserId)]));
+        Assert.Contains(
+            foreignKeysToUsers,
+            fk => fk.Properties.Select(p => p.Name).SequenceEqual([nameof(RegisterSessionRecord.ClosedByUserId)]));
+    }
+
+    [Fact]
+    public void RegisterSessionRecordClosedByUserIdForeignKeyShouldBeOptional()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk =>
+                fk.PrincipalEntityType.ClrType == typeof(UserRecord) &&
+                fk.Properties.Select(p => p.Name).SequenceEqual([nameof(RegisterSessionRecord.ClosedByUserId)]));
+
+        Assert.False(foreignKey.IsRequired);
+    }
+
+    [Fact]
+    public void RegisterSessionRecordShouldHaveExpectedIndexes()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+        var indexPropertySets = entityType.GetIndexes()
+            .Select(index => index.Properties.Select(p => p.Name).ToArray())
+            .ToArray();
+
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(RegisterSessionRecord.RegisterId)]));
+        Assert.Contains(
+            indexPropertySets, set => set.SequenceEqual([nameof(RegisterSessionRecord.OpenedByUserId)]));
+        Assert.Contains(
+            indexPropertySets, set => set.SequenceEqual([nameof(RegisterSessionRecord.ClosedByUserId)]));
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(RegisterSessionRecord.Status)]));
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(RegisterSessionRecord.OpenedAtUtc)]));
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(RegisterSessionRecord.ClosedAtUtc)]));
+    }
+
+    [Fact]
+    public void RegisterSessionRecordShouldNotHaveUniqueIndexOnRegisterIdAndStatus()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(RegisterSessionRecord))!;
+
+        var uniqueIndex = entityType.GetIndexes().SingleOrDefault(index =>
+            index.IsUnique &&
+            index.Properties.Select(p => p.Name).SequenceEqual(
+            [
+                nameof(RegisterSessionRecord.RegisterId),
+                nameof(RegisterSessionRecord.Status),
+            ]));
+
+        Assert.Null(uniqueIndex);
+    }
 }

@@ -125,4 +125,83 @@ public class UserTests
         user.Activate();
         Assert.True(user.IsActive);
     }
+
+    // ---------- Rehydrate ----------
+
+    [Fact]
+    public void RehydrateRestoresIdentifiersAndFields()
+    {
+        var id = UserId.New();
+        var organizationId = OrganizationId.New();
+        var roleId = RoleId.New();
+
+        var user = User.Rehydrate(id, organizationId, roleId, "jperez", "Juan Pérez", true, UtcNow);
+
+        Assert.Equal(id, user.Id);
+        Assert.Equal(organizationId, user.OrganizationId);
+        Assert.Equal(roleId, user.RoleId);
+        Assert.Equal("JPEREZ", user.Username);
+        Assert.Equal("Juan Pérez", user.DisplayName);
+        Assert.Equal(UtcNow, user.CreatedAtUtc);
+    }
+
+    [Fact]
+    public void RehydrateRestoresActiveState()
+    {
+        var user = User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", true, UtcNow);
+
+        Assert.True(user.IsActive);
+    }
+
+    [Fact]
+    public void RehydrateRestoresInactiveState()
+    {
+        var user = User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", false, UtcNow);
+
+        Assert.False(user.IsActive);
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultId()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => User.Rehydrate(default, OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", true, UtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultOrganizationId()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => User.Rehydrate(UserId.New(), default, RoleId.New(), "jperez", "Juan Pérez", true, UtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsDefaultRoleId()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => User.Rehydrate(UserId.New(), OrganizationId.New(), default, "jperez", "Juan Pérez", true, UtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsInvalidUsername()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "a", "Juan Pérez", true, UtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsInvalidDisplayName()
+    {
+        Assert.Throws<DomainValidationException>(
+            () => User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "A", true, UtcNow));
+    }
+
+    [Fact]
+    public void RehydrateRejectsNonUtcDate()
+    {
+        var nonUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.FromHours(-5));
+
+        Assert.Throws<DomainValidationException>(
+            () => User.Rehydrate(UserId.New(), OrganizationId.New(), RoleId.New(), "jperez", "Juan Pérez", true, nonUtc));
+    }
 }
