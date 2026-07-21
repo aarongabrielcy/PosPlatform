@@ -181,7 +181,7 @@ public sealed class Sale
         RecalculatePaymentAmounts();
     }
 
-    public void Complete(DateTimeOffset completedAtUtc)
+    public void EnsureCanComplete(DateTimeOffset completedAtUtc)
     {
         EnsureDraft();
 
@@ -211,9 +211,14 @@ public sealed class Sale
         {
             throw new DomainValidationException("completedAtUtc no puede ser anterior a CreatedAtUtc.");
         }
+    }
+
+    public void Complete(DateTimeOffset completedAtUtc)
+    {
+        EnsureCanComplete(completedAtUtc);
 
         Status = SaleStatus.Completed;
-        CompletedAtUtc = validCompletedAtUtc;
+        CompletedAtUtc = EnsureUtc(completedAtUtc, nameof(completedAtUtc));
     }
 
     public bool ContainsProduct(ProductId productId)

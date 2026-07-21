@@ -1485,4 +1485,115 @@ public class SaleTests
         Assert.Equal(SaleStatus.Draft, sale.Status);
         Assert.Null(sale.CompletedAtUtc);
     }
+
+    // ---------- EnsureCanComplete ----------
+
+    [Fact]
+    public void EnsureCanCompleteDoesNotChangeStatusOfAValidSale()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+
+        sale.EnsureCanComplete(CreatedAtUtc);
+
+        Assert.Equal(SaleStatus.Draft, sale.Status);
+    }
+
+    [Fact]
+    public void EnsureCanCompleteDoesNotAssignCompletedAtUtc()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+
+        sale.EnsureCanComplete(CreatedAtUtc);
+
+        Assert.Null(sale.CompletedAtUtc);
+    }
+
+    [Fact]
+    public void EnsureCanCompleteAllowsDateEqualToCreatedAtUtc()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+
+        var exception = Record.Exception(() => sale.EnsureCanComplete(CreatedAtUtc));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void EnsureCanCompleteRejectsCompletedSale()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+        sale.Complete(CreatedAtUtc);
+
+        Assert.Throws<DomainValidationException>(() => sale.EnsureCanComplete(CreatedAtUtc));
+    }
+
+    [Fact]
+    public void EnsureCanCompleteRejectsSaleWithoutLines()
+    {
+        var sale = CreateSale(currency: "MXN");
+
+        Assert.Throws<DomainValidationException>(() => sale.EnsureCanComplete(CreatedAtUtc));
+    }
+
+    [Fact]
+    public void EnsureCanCompleteRejectsZeroTotal()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, unitPrice: new Money(0m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(() => sale.EnsureCanComplete(CreatedAtUtc));
+    }
+
+    [Fact]
+    public void EnsureCanCompleteRejectsInsufficientPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(50m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(() => sale.EnsureCanComplete(CreatedAtUtc));
+    }
+
+    [Fact]
+    public void EnsureCanCompleteRejectsPositiveBalanceDue()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(50m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(() => sale.EnsureCanComplete(CreatedAtUtc));
+
+        Assert.Equal(SaleStatus.Draft, sale.Status);
+        Assert.Null(sale.CompletedAtUtc);
+    }
+
+    [Fact]
+    public void EnsureCanCompleteRejectsNonUtcDate()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+        var nonUtc = new DateTimeOffset(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(-5));
+
+        Assert.Throws<DomainValidationException>(() => sale.EnsureCanComplete(nonUtc));
+    }
+
+    [Fact]
+    public void EnsureCanCompleteRejectsDateBeforeCreatedAtUtc()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+        var beforeCreation = CreatedAtUtc.AddMinutes(-1);
+
+        Assert.Throws<DomainValidationException>(() => sale.EnsureCanComplete(beforeCreation));
+    }
 }
