@@ -76,6 +76,45 @@ public sealed class InventoryItem
         }
     }
 
+    public void ApplyMovement(InventoryMovement movement)
+    {
+        if (movement is null)
+        {
+            throw new DomainValidationException("movement no puede ser nulo.");
+        }
+
+        if (movement.InventoryItemId != Id)
+        {
+            throw new DomainValidationException("movement.InventoryItemId debe coincidir con Id.");
+        }
+
+        if (movement.BranchId != BranchId)
+        {
+            throw new DomainValidationException("movement.BranchId debe coincidir con BranchId.");
+        }
+
+        if (movement.ProductId != ProductId)
+        {
+            throw new DomainValidationException("movement.ProductId debe coincidir con ProductId.");
+        }
+
+        if (movement.QuantityBefore != Quantity)
+        {
+            throw new DomainValidationException("movement.QuantityBefore debe coincidir con Quantity.");
+        }
+
+        var validOccurredAtUtc = EnsureUtc(movement.OccurredAtUtc, nameof(movement.OccurredAtUtc));
+        EnsureNotBeforeUpdatedAt(validOccurredAtUtc, nameof(movement.OccurredAtUtc));
+
+        if (movement.QuantityAfter < 0m)
+        {
+            throw new DomainValidationException("movement.QuantityAfter no puede ser negativa.");
+        }
+
+        Quantity = movement.QuantityAfter;
+        UpdatedAtUtc = validOccurredAtUtc;
+    }
+
     public void ChangeReorderPoint(decimal reorderPoint, DateTimeOffset changedAtUtc)
     {
         var validReorderPoint = EnsureNonNegative(reorderPoint, nameof(reorderPoint));

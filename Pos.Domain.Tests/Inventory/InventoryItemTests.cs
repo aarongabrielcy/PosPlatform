@@ -467,6 +467,227 @@ public class InventoryItemTests
         Assert.False(item.IsBelowReorderPoint());
     }
 
+    // ---------- ApplyMovement ----------
+
+    private static InventoryMovement CreateManualIncreaseMovement(
+        InventoryItem item,
+        decimal quantity = 5m,
+        DateTimeOffset? occurredAtUtc = null,
+        InventoryItemId? inventoryItemId = null,
+        BranchId? branchId = null,
+        ProductId? productId = null,
+        decimal? quantityBefore = null) =>
+        InventoryMovement.CreateManualIncrease(
+            InventoryMovementId.New(),
+            inventoryItemId ?? item.Id,
+            branchId ?? item.BranchId,
+            productId ?? item.ProductId,
+            UserId.New(),
+            quantity,
+            quantityBefore ?? item.Quantity,
+            occurredAtUtc ?? LaterUtc);
+
+    private static InventoryMovement CreateManualDecreaseMovement(
+        InventoryItem item,
+        decimal quantity = 4m,
+        DateTimeOffset? occurredAtUtc = null,
+        decimal? quantityBefore = null) =>
+        InventoryMovement.CreateManualDecrease(
+            InventoryMovementId.New(),
+            item.Id,
+            item.BranchId,
+            item.ProductId,
+            UserId.New(),
+            quantity,
+            quantityBefore ?? item.Quantity,
+            occurredAtUtc ?? LaterUtc);
+
+    private static InventoryMovement CreateSaleDecreaseMovement(
+        InventoryItem item,
+        decimal quantity = 3m,
+        DateTimeOffset? occurredAtUtc = null,
+        decimal? quantityBefore = null) =>
+        InventoryMovement.CreateSaleDecrease(
+            InventoryMovementId.New(),
+            item.Id,
+            item.BranchId,
+            item.ProductId,
+            UserId.New(),
+            SaleId.New(),
+            SaleLineId.New(),
+            quantity,
+            quantityBefore ?? item.Quantity,
+            occurredAtUtc ?? LaterUtc);
+
+    [Fact]
+    public void ApplyMovementAppliesManualIncrease()
+    {
+        var item = CreateItem(initialQuantity: 10m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 5m);
+
+        item.ApplyMovement(movement);
+
+        Assert.Equal(15m, item.Quantity);
+    }
+
+    [Fact]
+    public void ApplyMovementAppliesManualDecrease()
+    {
+        var item = CreateItem(initialQuantity: 10m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateManualDecreaseMovement(item, quantity: 4m);
+
+        item.ApplyMovement(movement);
+
+        Assert.Equal(6m, item.Quantity);
+    }
+
+    [Fact]
+    public void ApplyMovementAppliesSaleDecrease()
+    {
+        var item = CreateItem(initialQuantity: 10m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateSaleDecreaseMovement(item, quantity: 3m);
+
+        item.ApplyMovement(movement);
+
+        Assert.Equal(7m, item.Quantity);
+    }
+
+    [Fact]
+    public void ApplyMovementUpdatesUpdatedAtUtc()
+    {
+        var item = CreateItem(initialQuantity: 10m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 5m, occurredAtUtc: LaterUtc);
+
+        item.ApplyMovement(movement);
+
+        Assert.Equal(LaterUtc, item.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void ApplyMovementDoesNotModifyReorderPoint()
+    {
+        var item = CreateItem(initialQuantity: 10m, reorderPoint: 2m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 5m);
+
+        item.ApplyMovement(movement);
+
+        Assert.Equal(2m, item.ReorderPoint);
+    }
+
+    [Fact]
+    public void ApplyMovementAllowsOccurredAtUtcEqualToUpdatedAtUtc()
+    {
+        var item = CreateItem(initialQuantity: 10m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 5m, occurredAtUtc: CreatedAtUtc);
+
+        item.ApplyMovement(movement);
+
+        Assert.Equal(CreatedAtUtc, item.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void ApplyMovementAllowsDecimalQuantities()
+    {
+        var item = CreateItem(initialQuantity: 10.5m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 1.25m);
+
+        item.ApplyMovement(movement);
+
+        Assert.Equal(11.75m, item.Quantity);
+    }
+
+    [Fact]
+    public void ApplyMovementRejectsNullMovement()
+    {
+        var item = CreateItem(initialQuantity: 10m, createdAtUtc: CreatedAtUtc);
+
+        Assert.Throws<DomainValidationException>(() => item.ApplyMovement(null!));
+    }
+
+    [Fact]
+    public void ApplyMovementRejectsMismatchedInventoryItemId()
+    {
+        var item = CreateItem(initialQuantity: 10m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 5m, inventoryItemId: InventoryItemId.New());
+
+        Assert.Throws<DomainValidationException>(() => item.ApplyMovement(movement));
+    }
+
+    [Fact]
+    public void ApplyMovementRejectsMismatchedBranchId()
+    {
+        var item = CreateItem(initialQuantity: 10m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 5m, branchId: BranchId.New());
+
+        Assert.Throws<DomainValidationException>(() => item.ApplyMovement(movement));
+    }
+
+    [Fact]
+    public void ApplyMovementRejectsMismatchedProductId()
+    {
+        var item = CreateItem(initialQuantity: 10m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 5m, productId: ProductId.New());
+
+        Assert.Throws<DomainValidationException>(() => item.ApplyMovement(movement));
+    }
+
+    [Fact]
+    public void ApplyMovementRejectsQuantityBeforeMismatch()
+    {
+        var item = CreateItem(initialQuantity: 10m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 5m, quantityBefore: 9m);
+
+        Assert.Throws<DomainValidationException>(() => item.ApplyMovement(movement));
+    }
+
+    [Fact]
+    public void ApplyMovementRejectsDateBeforeUpdatedAtUtc()
+    {
+        var item = CreateItem(initialQuantity: 10m, createdAtUtc: LaterUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 5m, occurredAtUtc: CreatedAtUtc);
+
+        Assert.Throws<DomainValidationException>(() => item.ApplyMovement(movement));
+    }
+
+    [Fact]
+    public void FailedApplyMovementDueToMismatchedInventoryItemIdDoesNotModifyState()
+    {
+        var item = CreateItem(initialQuantity: 10m, reorderPoint: 2m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 5m, inventoryItemId: InventoryItemId.New());
+
+        Assert.Throws<DomainValidationException>(() => item.ApplyMovement(movement));
+
+        Assert.Equal(10m, item.Quantity);
+        Assert.Equal(2m, item.ReorderPoint);
+        Assert.Equal(CreatedAtUtc, item.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void FailedApplyMovementDueToQuantityBeforeMismatchDoesNotModifyState()
+    {
+        var item = CreateItem(initialQuantity: 10m, reorderPoint: 2m, createdAtUtc: CreatedAtUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 5m, quantityBefore: 9m);
+
+        Assert.Throws<DomainValidationException>(() => item.ApplyMovement(movement));
+
+        Assert.Equal(10m, item.Quantity);
+        Assert.Equal(2m, item.ReorderPoint);
+        Assert.Equal(CreatedAtUtc, item.UpdatedAtUtc);
+    }
+
+    [Fact]
+    public void FailedApplyMovementDueToDateBeforeUpdatedAtUtcDoesNotModifyState()
+    {
+        var item = CreateItem(initialQuantity: 10m, reorderPoint: 2m, createdAtUtc: LaterUtc);
+        var movement = CreateManualIncreaseMovement(item, quantity: 5m, occurredAtUtc: CreatedAtUtc);
+
+        Assert.Throws<DomainValidationException>(() => item.ApplyMovement(movement));
+
+        Assert.Equal(10m, item.Quantity);
+        Assert.Equal(2m, item.ReorderPoint);
+        Assert.Equal(LaterUtc, item.UpdatedAtUtc);
+    }
+
     // ---------- Atomicidad ----------
 
     [Fact]
