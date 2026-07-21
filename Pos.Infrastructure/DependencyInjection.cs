@@ -5,6 +5,7 @@ using Pos.Application.Common.Persistence;
 using Pos.Application.Inventory;
 using Pos.Application.Sales;
 using Pos.Infrastructure.Persistence;
+using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Persistence.Repositories;
 using Pos.Infrastructure.Storage;
 
@@ -27,6 +28,9 @@ public static class DependencyInjection
         services.AddScoped<IInventoryItemRepository, EfInventoryItemRepository>();
         services.AddScoped<IInventoryMovementRepository, EfInventoryMovementRepository>();
         services.AddScoped<ISaleRepository, EfSaleRepository>();
+
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<ILocalDatabaseInitializer, LocalDatabaseInitializer>();
 
         return services;
     }

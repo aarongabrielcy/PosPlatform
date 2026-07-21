@@ -39,6 +39,14 @@ public class ApplicationPathProviderTests
     }
 
     [Fact]
+    public void BackupDirectoryIsInsideDataDirectory()
+    {
+        var provider = new ApplicationPathProvider();
+
+        Assert.Equal(Path.Combine(provider.DataDirectory, "Backups"), provider.BackupDirectory);
+    }
+
+    [Fact]
     public void DataDirectoryIsAPureFunctionOfTheInjectedRootNotOfProcessState()
     {
         var rootA = Path.Combine(Path.GetTempPath(), "PosPlatformPathProviderTests_" + Guid.NewGuid());
@@ -61,6 +69,7 @@ public class ApplicationPathProviderTests
 
         Assert.False(Directory.Exists(provider.DataDirectory));
         Assert.False(File.Exists(provider.DatabasePath));
+        Assert.False(Directory.Exists(provider.BackupDirectory));
     }
 
     [Fact]
@@ -74,6 +83,28 @@ public class ApplicationPathProviderTests
             provider.EnsureDataDirectoryExists();
 
             Assert.True(Directory.Exists(provider.DataDirectory));
+            Assert.False(Directory.Exists(provider.BackupDirectory));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void EnsureBackupDirectoryExistsCreatesTheDirectoryWithoutRequiringDataDirectoryFirst()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PosPlatformPathProviderTests_" + Guid.NewGuid());
+        try
+        {
+            var provider = new ApplicationPathProvider(root);
+
+            provider.EnsureBackupDirectoryExists();
+
+            Assert.True(Directory.Exists(provider.BackupDirectory));
         }
         finally
         {

@@ -6,5 +6,9 @@ public interface IApplicationPathProvider
 
     string DatabasePath { get; }
 
+    string BackupDirectory { get; }
+
     void EnsureDataDirectoryExists();
+
+    void EnsureBackupDirectoryExists();
 }
