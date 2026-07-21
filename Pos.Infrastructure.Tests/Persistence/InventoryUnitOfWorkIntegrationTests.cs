@@ -35,6 +35,10 @@ public class InventoryUnitOfWorkIntegrationTests
         var productId = ProductId.New();
         var performedByUserId = UserId.New();
 
+        // InventoryItem tiene FK Restrict hacia Branch y Product.
+        await SqliteSeedHelper.SeedOrganizationBranchAndProductAsync(
+            context, CreatedAtUtc, branchId: branchId.Value, productId: productId.Value);
+
         context.Add(new InventoryItemRecord
         {
             Id = itemId.Value,

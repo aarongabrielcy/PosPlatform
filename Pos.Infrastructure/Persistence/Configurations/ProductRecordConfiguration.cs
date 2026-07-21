@@ -69,10 +69,11 @@ internal sealed class ProductRecordConfiguration : IEntityTypeConfiguration<Prod
             .HasConversion<DateTimeOffsetToTicksConverter>()
             .IsRequired();
 
-        builder.HasIndex(record => record.OrganizationId);
         builder.HasIndex(record => record.IsActive);
         builder.HasIndex(record => record.Name);
 
+        // No se agrega un índice adicional solo por OrganizationId: los índices compuestos
+        // (OrganizationId, Sku) y (OrganizationId, Barcode) ya cubren ese prefijo.
         builder.HasIndex(record => new { record.OrganizationId, record.Sku })
             .IsUnique();
 

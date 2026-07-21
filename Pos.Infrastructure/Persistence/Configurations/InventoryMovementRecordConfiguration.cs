@@ -76,5 +76,18 @@ internal sealed class InventoryMovementRecordConfiguration : IEntityTypeConfigur
             .WithMany()
             .HasForeignKey(record => record.InventoryItemId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // SaleId/SaleLineId son referencias históricas opcionales (solo aplican a
+        // InventoryMovementType.SaleDecrease). Restrict evita que se eliminen Sale/SaleLine
+        // mientras exista un movimiento que los referencie; nunca Cascade hacia historial.
+        builder.HasOne<SaleRecord>()
+            .WithMany()
+            .HasForeignKey(record => record.SaleId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<SaleLineRecord>()
+            .WithMany()
+            .HasForeignKey(record => record.SaleLineId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

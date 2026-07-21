@@ -52,5 +52,13 @@ internal sealed class SaleLineRecordConfiguration : IEntityTypeConfiguration<Sal
         builder.HasIndex(record => record.ProductId);
         builder.HasIndex(record => new { record.SaleId, record.ProductId })
             .IsUnique();
+
+        // ProductId es una referencia lógica real (además del snapshot de Sku/Name/Price).
+        // Restrict evita eliminar un Product mientras exista una línea de venta histórica
+        // que lo referencie.
+        builder.HasOne<ProductRecord>()
+            .WithMany()
+            .HasForeignKey(record => record.ProductId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

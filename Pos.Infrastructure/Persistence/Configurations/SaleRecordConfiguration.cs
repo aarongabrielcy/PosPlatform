@@ -57,8 +57,32 @@ internal sealed class SaleRecordConfiguration : IEntityTypeConfiguration<SaleRec
         builder.HasIndex(record => record.OrganizationId);
         builder.HasIndex(record => record.BranchId);
         builder.HasIndex(record => record.RegisterSessionId);
+        builder.HasIndex(record => record.CreatedByUserId);
         builder.HasIndex(record => record.CreatedAtUtc);
         builder.HasIndex(record => record.Status);
+
+        // Sale es historial: Restrict impide eliminar el catálogo referenciado
+        // (Organization/Branch/RegisterSession/User) mientras existan ventas, sin
+        // permitir nunca que su eliminación borre historial de ventas.
+        builder.HasOne<OrganizationRecord>()
+            .WithMany()
+            .HasForeignKey(record => record.OrganizationId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<BranchRecord>()
+            .WithMany()
+            .HasForeignKey(record => record.BranchId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<RegisterSessionRecord>()
+            .WithMany()
+            .HasForeignKey(record => record.RegisterSessionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<UserRecord>()
+            .WithMany()
+            .HasForeignKey(record => record.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(record => record.Lines)
             .WithOne(line => line.Sale)

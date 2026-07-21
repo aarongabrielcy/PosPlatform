@@ -43,12 +43,13 @@ internal sealed class UserRecordConfiguration : IEntityTypeConfiguration<UserRec
             .HasConversion<DateTimeOffsetToTicksConverter>()
             .IsRequired();
 
-        builder.HasIndex(record => record.OrganizationId);
         builder.HasIndex(record => record.RoleId);
         builder.HasIndex(record => record.IsActive);
 
         // Unicidad de Username por tenant no está expresada explícitamente en Domain.
         // Se deja como índice no único hasta que la regla de negocio lo confirme.
+        // No se agrega un índice adicional solo por OrganizationId: este índice compuesto
+        // ya cubre ese prefijo.
         builder.HasIndex(record => new { record.OrganizationId, record.Username });
 
         builder.HasOne<OrganizationRecord>()

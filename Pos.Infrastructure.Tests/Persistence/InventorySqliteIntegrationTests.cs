@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Pos.Domain.Inventory;
+using Pos.Domain.Sales;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Records;
 
@@ -31,6 +32,9 @@ public class InventorySqliteIntegrationTests
         var performedByUserId = Guid.NewGuid();
         var createdAtUtc = new DateTimeOffset(2026, 1, 1, 8, 0, 0, TimeSpan.Zero);
         var occurredAtUtc = new DateTimeOffset(2026, 1, 1, 9, 30, 0, TimeSpan.Zero);
+
+        await SqliteSeedHelper.SeedOrganizationBranchAndProductAsync(
+            context, createdAtUtc, branchId: branchId, productId: productId);
 
         var inventoryItem = new InventoryItemRecord
         {
@@ -105,6 +109,9 @@ public class InventorySqliteIntegrationTests
         var productId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
+        await SqliteSeedHelper.SeedOrganizationBranchAndProductAsync(
+            context, now, branchId: branchId, productId: productId);
+
         var inventoryItem = new InventoryItemRecord
         {
             Id = inventoryItemId,
@@ -153,6 +160,9 @@ public class InventorySqliteIntegrationTests
         var productId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
+        await SqliteSeedHelper.SeedOrganizationBranchAndProductAsync(
+            context, now, branchId: branchId, productId: productId);
+
         var firstItem = new InventoryItemRecord
         {
             Id = Guid.NewGuid(),
@@ -180,6 +190,442 @@ public class InventorySqliteIntegrationTests
         };
 
         context.Add(duplicateItem);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InsertingInventoryItemWithNonExistentBranchShouldFailDueToForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+
+        context.Add(new InventoryItemRecord
+        {
+            Id = Guid.NewGuid(),
+            BranchId = Guid.NewGuid(),
+            ProductId = graph.ProductId,
+            Quantity = 1m,
+            ReorderPoint = 0m,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now,
+        });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InsertingInventoryItemWithNonExistentProductShouldFailDueToForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+
+        context.Add(new InventoryItemRecord
+        {
+            Id = Guid.NewGuid(),
+            BranchId = graph.BranchId,
+            ProductId = Guid.NewGuid(),
+            Quantity = 1m,
+            ReorderPoint = 0m,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now,
+        });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeletingBranchWithInventoryItemShouldFailDueToRestrictForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+        await SqliteSeedHelper.SeedInventoryItemAsync(context, graph.BranchId, graph.ProductId, createdAtUtc: now, updatedAtUtc: now);
+
+        var branchToDelete = await context.Set<BranchRecord>().SingleAsync(r => r.Id == graph.BranchId);
+        context.Remove(branchToDelete);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeletingProductWithInventoryItemShouldFailDueToRestrictForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+        await SqliteSeedHelper.SeedInventoryItemAsync(context, graph.BranchId, graph.ProductId, createdAtUtc: now, updatedAtUtc: now);
+
+        var productToDelete = await context.Set<ProductRecord>().SingleAsync(r => r.Id == graph.ProductId);
+        context.Remove(productToDelete);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InsertingSaleWithNonExistentOrganizationShouldFailDueToForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+
+        context.Add(new SaleRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = Guid.NewGuid(),
+            BranchId = graph.BranchId,
+            RegisterSessionId = graph.RegisterSessionId,
+            CreatedByUserId = graph.UserId,
+            Currency = "MXN",
+            Status = SaleStatus.Draft,
+            CreatedAtUtc = now,
+        });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InsertingSaleWithNonExistentBranchShouldFailDueToForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+
+        context.Add(new SaleRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = graph.OrganizationId,
+            BranchId = Guid.NewGuid(),
+            RegisterSessionId = graph.RegisterSessionId,
+            CreatedByUserId = graph.UserId,
+            Currency = "MXN",
+            Status = SaleStatus.Draft,
+            CreatedAtUtc = now,
+        });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InsertingSaleWithNonExistentRegisterSessionShouldFailDueToForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+
+        context.Add(new SaleRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = graph.OrganizationId,
+            BranchId = graph.BranchId,
+            RegisterSessionId = Guid.NewGuid(),
+            CreatedByUserId = graph.UserId,
+            Currency = "MXN",
+            Status = SaleStatus.Draft,
+            CreatedAtUtc = now,
+        });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InsertingSaleWithNonExistentUserShouldFailDueToForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+
+        context.Add(new SaleRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = graph.OrganizationId,
+            BranchId = graph.BranchId,
+            RegisterSessionId = graph.RegisterSessionId,
+            CreatedByUserId = Guid.NewGuid(),
+            Currency = "MXN",
+            Status = SaleStatus.Draft,
+            CreatedAtUtc = now,
+        });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InsertingSaleLineWithNonExistentProductShouldFailDueToForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+
+        var saleRecord = new SaleRecord
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = graph.OrganizationId,
+            BranchId = graph.BranchId,
+            RegisterSessionId = graph.RegisterSessionId,
+            CreatedByUserId = graph.UserId,
+            Currency = "MXN",
+            Status = SaleStatus.Draft,
+            CreatedAtUtc = now,
+        };
+
+        saleRecord.Lines.Add(new SaleLineRecord
+        {
+            Id = Guid.NewGuid(),
+            SaleId = saleRecord.Id,
+            ProductId = Guid.NewGuid(),
+            ProductSku = "SKU-001",
+            ProductName = "Producto de prueba",
+            Quantity = 1m,
+            UnitPriceAmount = 10m,
+            Currency = "MXN",
+            Sale = saleRecord,
+        });
+
+        context.Add(saleRecord);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeletingProductUsedBySaleLineShouldFailDueToRestrictForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+        await SqliteSeedHelper.SeedSaleAsync(
+            context, graph.OrganizationId, graph.BranchId, graph.RegisterSessionId, graph.UserId, graph.ProductId, createdAtUtc: now);
+
+        var productToDelete = await context.Set<ProductRecord>().SingleAsync(r => r.Id == graph.ProductId);
+        context.Remove(productToDelete);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeletingOrganizationWithSaleShouldFailDueToRestrictForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+        await SqliteSeedHelper.SeedSaleAsync(
+            context, graph.OrganizationId, graph.BranchId, graph.RegisterSessionId, graph.UserId, graph.ProductId, createdAtUtc: now);
+
+        var organizationToDelete = await context.Set<OrganizationRecord>().SingleAsync(r => r.Id == graph.OrganizationId);
+        context.Remove(organizationToDelete);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeletingBranchWithSaleShouldFailDueToRestrictForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+        await SqliteSeedHelper.SeedSaleAsync(
+            context, graph.OrganizationId, graph.BranchId, graph.RegisterSessionId, graph.UserId, graph.ProductId, createdAtUtc: now);
+
+        var branchToDelete = await context.Set<BranchRecord>().SingleAsync(r => r.Id == graph.BranchId);
+        context.Remove(branchToDelete);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeletingRegisterSessionWithSaleShouldFailDueToRestrictForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+        await SqliteSeedHelper.SeedSaleAsync(
+            context, graph.OrganizationId, graph.BranchId, graph.RegisterSessionId, graph.UserId, graph.ProductId, createdAtUtc: now);
+
+        var sessionToDelete = await context.Set<RegisterSessionRecord>().SingleAsync(r => r.Id == graph.RegisterSessionId);
+        context.Remove(sessionToDelete);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeletingUserWhoCreatedSaleShouldFailDueToRestrictForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+        await SqliteSeedHelper.SeedSaleAsync(
+            context, graph.OrganizationId, graph.BranchId, graph.RegisterSessionId, graph.UserId, graph.ProductId, createdAtUtc: now);
+
+        var userToDelete = await context.Set<UserRecord>().SingleAsync(r => r.Id == graph.UserId);
+        context.Remove(userToDelete);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeletingSaleLineWithInventoryMovementReferencingItShouldFailDueToRestrictForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+        var lineId = Guid.NewGuid();
+        var sale = await SqliteSeedHelper.SeedSaleAsync(
+            context,
+            graph.OrganizationId,
+            graph.BranchId,
+            graph.RegisterSessionId,
+            graph.UserId,
+            graph.ProductId,
+            saleLineId: lineId,
+            createdAtUtc: now);
+        await SqliteSeedHelper.SeedInventoryItemAsync(context, graph.BranchId, graph.ProductId, createdAtUtc: now, updatedAtUtc: now);
+
+        context.Add(new InventoryMovementRecord
+        {
+            Id = Guid.NewGuid(),
+            InventoryItemId = (await context.Set<InventoryItemRecord>().SingleAsync()).Id,
+            BranchId = graph.BranchId,
+            ProductId = graph.ProductId,
+            PerformedByUserId = graph.UserId,
+            Type = InventoryMovementType.SaleDecrease,
+            Quantity = 1m,
+            QuantityBefore = 10m,
+            QuantityAfter = 9m,
+            SaleId = sale.Id,
+            SaleLineId = lineId,
+            OccurredAtUtc = now,
+        });
+
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var lineToDelete = await context.Set<SaleLineRecord>().SingleAsync(r => r.Id == lineId);
+        context.Remove(lineToDelete);
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DeletingSaleWithInventoryMovementReferencingItShouldFailDueToRestrictForeignKey()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, now);
+        var lineId = Guid.NewGuid();
+        var sale = await SqliteSeedHelper.SeedSaleAsync(
+            context,
+            graph.OrganizationId,
+            graph.BranchId,
+            graph.RegisterSessionId,
+            graph.UserId,
+            graph.ProductId,
+            saleLineId: lineId,
+            createdAtUtc: now);
+        await SqliteSeedHelper.SeedInventoryItemAsync(context, graph.BranchId, graph.ProductId, createdAtUtc: now, updatedAtUtc: now);
+
+        context.Add(new InventoryMovementRecord
+        {
+            Id = Guid.NewGuid(),
+            InventoryItemId = (await context.Set<InventoryItemRecord>().SingleAsync()).Id,
+            BranchId = graph.BranchId,
+            ProductId = graph.ProductId,
+            PerformedByUserId = graph.UserId,
+            Type = InventoryMovementType.SaleDecrease,
+            Quantity = 1m,
+            QuantityBefore = 10m,
+            QuantityAfter = 9m,
+            SaleId = sale.Id,
+            SaleLineId = lineId,
+            OccurredAtUtc = now,
+        });
+
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var saleToDelete = await context.Set<SaleRecord>().SingleAsync(r => r.Id == sale.Id);
+        context.Remove(saleToDelete);
 
         await Assert.ThrowsAsync<DbUpdateException>(() => context.CommitAsync(CancellationToken.None));
     }

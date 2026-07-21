@@ -5,6 +5,7 @@ using Pos.Domain.Common.Identifiers;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Records;
 using Pos.Infrastructure.Persistence.Repositories;
+using Pos.Infrastructure.Tests.Persistence;
 
 namespace Pos.Infrastructure.Tests.Persistence.Repositories;
 
@@ -21,6 +22,8 @@ public class EfInventoryItemRepositoryTests
         return new PosDbContext(optionsBuilder.Options);
     }
 
+    // InventoryItem tiene FK Restrict hacia Branch y Product: se siembra primero
+    // Organization -> Branch -> Product con los mismos identificadores antes del InventoryItem.
     private static async Task<InventoryItemRecord> SeedItemAsync(
         PosDbContext context,
         Guid id,
@@ -29,22 +32,11 @@ public class EfInventoryItemRepositoryTests
         decimal quantity = 10m,
         decimal reorderPoint = 2m)
     {
-        var record = new InventoryItemRecord
-        {
-            Id = id,
-            BranchId = branchId,
-            ProductId = productId,
-            Quantity = quantity,
-            ReorderPoint = reorderPoint,
-            CreatedAtUtc = CreatedAtUtc,
-            UpdatedAtUtc = CreatedAtUtc,
-        };
+        await SqliteSeedHelper.SeedOrganizationBranchAndProductAsync(
+            context, CreatedAtUtc, branchId: branchId, productId: productId);
 
-        context.Add(record);
-        await context.CommitAsync(CancellationToken.None);
-        context.ChangeTracker.Clear();
-
-        return record;
+        return await SqliteSeedHelper.SeedInventoryItemAsync(
+            context, branchId, productId, id, quantity, reorderPoint, CreatedAtUtc, CreatedAtUtc);
     }
 
     [Fact]
@@ -120,19 +112,10 @@ public class EfInventoryItemRepositoryTests
 
         var branchId = BranchId.New();
         var productId = ProductId.New();
-        var record = new InventoryItemRecord
-        {
-            Id = Guid.NewGuid(),
-            BranchId = branchId.Value,
-            ProductId = productId.Value,
-            Quantity = 10m,
-            ReorderPoint = 2m,
-            CreatedAtUtc = CreatedAtUtc,
-            UpdatedAtUtc = UpdatedAtUtc,
-        };
-        context.Add(record);
-        await context.CommitAsync(CancellationToken.None);
-        context.ChangeTracker.Clear();
+        await SqliteSeedHelper.SeedOrganizationBranchAndProductAsync(
+            context, CreatedAtUtc, branchId: branchId.Value, productId: productId.Value);
+        await SqliteSeedHelper.SeedInventoryItemAsync(
+            context, branchId.Value, productId.Value, Guid.NewGuid(), 10m, 2m, CreatedAtUtc, UpdatedAtUtc);
 
         var repository = new EfInventoryItemRepository(context);
         var result = await repository.GetByBranchAndProductAsync(branchId, productId, CancellationToken.None);

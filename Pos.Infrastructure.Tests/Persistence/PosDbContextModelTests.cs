@@ -107,6 +107,49 @@ public class PosDbContextModelTests
     }
 
     [Fact]
+    public void InventoryItemRecordShouldHaveRestrictForeignKeyToBranches()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(InventoryItemRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(BranchRecord));
+
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(InventoryItemRecord.BranchId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void InventoryItemRecordShouldHaveRestrictForeignKeyToProducts()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(InventoryItemRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(ProductRecord));
+
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(InventoryItemRecord.ProductId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void InventoryItemRecordShouldHaveExactlyTwoForeignKeys()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(InventoryItemRecord))!;
+
+        Assert.Equal(2, entityType.GetForeignKeys().Count());
+    }
+
+    [Fact]
+    public void InventoryItemRecordShouldNotHaveRedundantStandaloneIndexOnBranchId()
+    {
+        // El índice único (BranchId, ProductId) ya cubre el prefijo BranchId; no debe existir
+        // un índice adicional solo por BranchId.
+        var entityType = BuildModel().FindEntityType(typeof(InventoryItemRecord))!;
+
+        var redundantIndex = entityType.GetIndexes().SingleOrDefault(index =>
+            index.Properties.Select(p => p.Name).SequenceEqual([nameof(InventoryItemRecord.BranchId)]));
+
+        Assert.Null(redundantIndex);
+    }
+
+    [Fact]
     public void InventoryMovementRecordShouldMapToInventoryMovementsTable()
     {
         var entityType = BuildModel().FindEntityType(typeof(InventoryMovementRecord))!;
@@ -137,13 +180,62 @@ public class PosDbContextModelTests
     public void InventoryMovementRecordShouldHaveRestrictForeignKeyToInventoryItems()
     {
         var entityType = BuildModel().FindEntityType(typeof(InventoryMovementRecord))!;
-        var foreignKey = Assert.Single(entityType.GetForeignKeys());
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(InventoryItemRecord));
 
-        Assert.Equal(typeof(InventoryItemRecord), foreignKey.PrincipalEntityType.ClrType);
         Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
         Assert.Equal(
             nameof(InventoryMovementRecord.InventoryItemId),
             Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void InventoryMovementRecordShouldHaveRestrictForeignKeyToSales()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(InventoryMovementRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(SaleRecord));
+
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.False(foreignKey.IsRequired);
+        Assert.Equal(
+            nameof(InventoryMovementRecord.SaleId),
+            Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void InventoryMovementRecordShouldHaveRestrictForeignKeyToSaleLines()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(InventoryMovementRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(SaleLineRecord));
+
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.False(foreignKey.IsRequired);
+        Assert.Equal(
+            nameof(InventoryMovementRecord.SaleLineId),
+            Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void InventoryMovementRecordShouldHaveExactlyThreeForeignKeys()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(InventoryMovementRecord))!;
+
+        Assert.Equal(3, entityType.GetForeignKeys().Count());
+    }
+
+    [Fact]
+    public void InventoryMovementRecordShouldNotHaveDirectForeignKeysToBranchesOrProducts()
+    {
+        // BranchId/ProductId en InventoryMovement son snapshots históricos denormalizados,
+        // respaldados por la relación obligatoria InventoryItemId -> InventoryItem.BranchId/ProductId.
+        // Se documenta explícitamente la ausencia de FK física directa hacia Branch/Product.
+        var entityType = BuildModel().FindEntityType(typeof(InventoryMovementRecord))!;
+        var principalTypes = entityType.GetForeignKeys().Select(fk => fk.PrincipalEntityType.ClrType).ToArray();
+
+        Assert.DoesNotContain(typeof(BranchRecord), principalTypes);
+        Assert.DoesNotContain(typeof(ProductRecord), principalTypes);
     }
 
     [Fact]
@@ -279,17 +371,70 @@ public class PosDbContextModelTests
         Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(SaleRecord.OrganizationId)]));
         Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(SaleRecord.BranchId)]));
         Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(SaleRecord.RegisterSessionId)]));
+        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(SaleRecord.CreatedByUserId)]));
         Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(SaleRecord.CreatedAtUtc)]));
         Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(SaleRecord.Status)]));
+    }
+
+    [Fact]
+    public void SaleRecordShouldHaveRestrictForeignKeyToOrganizations()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(SaleRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(OrganizationRecord));
+
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(SaleRecord.OrganizationId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void SaleRecordShouldHaveRestrictForeignKeyToBranches()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(SaleRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(BranchRecord));
+
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(SaleRecord.BranchId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void SaleRecordShouldHaveRestrictForeignKeyToRegisterSessions()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(SaleRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(RegisterSessionRecord));
+
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(SaleRecord.RegisterSessionId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void SaleRecordShouldHaveRestrictForeignKeyToUsers()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(SaleRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(UserRecord));
+
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(SaleRecord.CreatedByUserId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void SaleRecordShouldHaveExactlyFourForeignKeys()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(SaleRecord))!;
+
+        Assert.Equal(4, entityType.GetForeignKeys().Count());
     }
 
     [Fact]
     public void SaleRecordShouldHaveCascadeRelationshipToLines()
     {
         var entityType = BuildModel().FindEntityType(typeof(SaleLineRecord))!;
-        var foreignKey = Assert.Single(entityType.GetForeignKeys());
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(SaleRecord));
 
-        Assert.Equal(typeof(SaleRecord), foreignKey.PrincipalEntityType.ClrType);
         Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
         Assert.Equal(nameof(SaleLineRecord.SaleId), Assert.Single(foreignKey.Properties).Name);
     }
@@ -358,6 +503,25 @@ public class PosDbContextModelTests
         var unitPriceAmount = entityType.FindProperty(nameof(SaleLineRecord.UnitPriceAmount))!;
         Assert.Equal(18, unitPriceAmount.GetPrecision());
         Assert.Equal(2, unitPriceAmount.GetScale());
+    }
+
+    [Fact]
+    public void SaleLineRecordShouldHaveRestrictForeignKeyToProducts()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(SaleLineRecord))!;
+        var foreignKey = entityType.GetForeignKeys()
+            .Single(fk => fk.PrincipalEntityType.ClrType == typeof(ProductRecord));
+
+        Assert.Equal(DeleteBehavior.Restrict, foreignKey.DeleteBehavior);
+        Assert.Equal(nameof(SaleLineRecord.ProductId), Assert.Single(foreignKey.Properties).Name);
+    }
+
+    [Fact]
+    public void SaleLineRecordShouldHaveExactlyTwoForeignKeys()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(SaleLineRecord))!;
+
+        Assert.Equal(2, entityType.GetForeignKeys().Count());
     }
 
     [Fact]
@@ -938,12 +1102,24 @@ public class PosDbContextModelTests
             .Select(index => index.Properties.Select(p => p.Name).ToArray())
             .ToArray();
 
-        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(ProductRecord.OrganizationId)]));
         Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(ProductRecord.IsActive)]));
         Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(ProductRecord.Name)]));
         Assert.Contains(
             indexPropertySets,
             set => set.SequenceEqual([nameof(ProductRecord.OrganizationId), nameof(ProductRecord.Barcode)]));
+    }
+
+    [Fact]
+    public void ProductRecordShouldNotHaveRedundantStandaloneIndexOnOrganizationId()
+    {
+        // Los índices compuestos (OrganizationId, Sku) y (OrganizationId, Barcode) ya cubren
+        // el prefijo OrganizationId; un índice adicional solo por OrganizationId sería redundante.
+        var entityType = BuildModel().FindEntityType(typeof(ProductRecord))!;
+
+        var redundantIndex = entityType.GetIndexes().SingleOrDefault(index =>
+            index.Properties.Select(p => p.Name).SequenceEqual([nameof(ProductRecord.OrganizationId)]));
+
+        Assert.Null(redundantIndex);
     }
 
     // ---------- RoleRecord ----------
@@ -1090,6 +1266,19 @@ public class PosDbContextModelTests
         Assert.Equal(nameof(RolePermissionRecord.RoleId), Assert.Single(foreignKey.Properties).Name);
     }
 
+    [Fact]
+    public void RolePermissionRecordShouldNotHaveRedundantStandaloneIndexOnRoleId()
+    {
+        // La clave primaria compuesta (RoleId, Permission) ya cubre el prefijo RoleId;
+        // un índice adicional solo por RoleId sería redundante.
+        var entityType = BuildModel().FindEntityType(typeof(RolePermissionRecord))!;
+
+        var redundantIndex = entityType.GetIndexes().SingleOrDefault(index =>
+            index.Properties.Select(p => p.Name).SequenceEqual([nameof(RolePermissionRecord.RoleId)]));
+
+        Assert.Null(redundantIndex);
+    }
+
     // ---------- UserRecord ----------
 
     [Fact]
@@ -1178,12 +1367,24 @@ public class PosDbContextModelTests
             .Select(index => index.Properties.Select(p => p.Name).ToArray())
             .ToArray();
 
-        Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(UserRecord.OrganizationId)]));
         Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(UserRecord.RoleId)]));
         Assert.Contains(indexPropertySets, set => set.SequenceEqual([nameof(UserRecord.IsActive)]));
         Assert.Contains(
             indexPropertySets,
             set => set.SequenceEqual([nameof(UserRecord.OrganizationId), nameof(UserRecord.Username)]));
+    }
+
+    [Fact]
+    public void UserRecordShouldNotHaveRedundantStandaloneIndexOnOrganizationId()
+    {
+        // El índice compuesto (OrganizationId, Username) ya cubre el prefijo OrganizationId;
+        // un índice adicional solo por OrganizationId sería redundante.
+        var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
+
+        var redundantIndex = entityType.GetIndexes().SingleOrDefault(index =>
+            index.Properties.Select(p => p.Name).SequenceEqual([nameof(UserRecord.OrganizationId)]));
+
+        Assert.Null(redundantIndex);
     }
 
     [Fact]
@@ -1397,5 +1598,77 @@ public class PosDbContextModelTests
             ]));
 
         Assert.Null(uniqueIndex);
+    }
+
+    // ---------- Pruebas globales del modelo ----------
+
+    private static readonly (Type Dependent, Type Principal)[] ExpectedCascadeRelationships =
+    [
+        (typeof(RolePermissionRecord), typeof(RoleRecord)),
+        (typeof(SaleLineRecord), typeof(SaleRecord)),
+        (typeof(PaymentRecord), typeof(SaleRecord)),
+    ];
+
+    [Fact]
+    public void OnlyExpectedRelationshipsShouldUseCascadeDelete()
+    {
+        var model = BuildModel();
+
+        var cascadeForeignKeys = model.GetEntityTypes()
+            .SelectMany(entityType => entityType.GetForeignKeys())
+            .Where(fk => fk.DeleteBehavior == DeleteBehavior.Cascade)
+            .Select(fk => (Dependent: fk.DeclaringEntityType.ClrType, Principal: fk.PrincipalEntityType.ClrType))
+            .ToArray();
+
+        Assert.Equal(ExpectedCascadeRelationships.Length, cascadeForeignKeys.Length);
+
+        foreach (var expected in ExpectedCascadeRelationships)
+        {
+            Assert.Contains(cascadeForeignKeys, actual => actual == expected);
+        }
+    }
+
+    [Fact]
+    public void AllDateTimeOffsetPropertiesShouldUseLongProviderConversion()
+    {
+        var model = BuildModel();
+
+        var dateTimeOffsetProperties = model.GetEntityTypes()
+            .SelectMany(entityType => entityType.GetProperties())
+            .Where(property => property.ClrType == typeof(DateTimeOffset) || property.ClrType == typeof(DateTimeOffset?))
+            .ToArray();
+
+        Assert.NotEmpty(dateTimeOffsetProperties);
+
+        foreach (var property in dateTimeOffsetProperties)
+        {
+            var converter = property.GetValueConverter();
+
+            Assert.True(
+                converter is not null && converter.ProviderClrType == typeof(long),
+                $"{property.DeclaringType.ClrType.Name}.{property.Name} debe usar un converter con ProviderClrType long.");
+        }
+    }
+
+    [Fact]
+    public void AllDecimalPropertiesShouldRemainDecimal()
+    {
+        var model = BuildModel();
+
+        var decimalProperties = model.GetEntityTypes()
+            .SelectMany(entityType => entityType.GetProperties())
+            .Where(property => property.ClrType == typeof(decimal) || property.ClrType == typeof(decimal?))
+            .ToArray();
+
+        Assert.NotEmpty(decimalProperties);
+
+        foreach (var property in decimalProperties)
+        {
+            var converter = property.GetValueConverter();
+
+            Assert.True(
+                converter is null || converter.ProviderClrType == typeof(decimal),
+                $"{property.DeclaringType.ClrType.Name}.{property.Name} no debe convertirse a un tipo distinto de decimal.");
+        }
     }
 }

@@ -48,5 +48,17 @@ internal sealed class InventoryItemRecordConfiguration : IEntityTypeConfiguratio
             .IsUnique();
 
         builder.HasIndex(record => record.ProductId);
+
+        // El índice único (BranchId, ProductId) ya cubre el prefijo BranchId; no se agrega
+        // un índice simple redundante para esa FK.
+        builder.HasOne<BranchRecord>()
+            .WithMany()
+            .HasForeignKey(record => record.BranchId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<ProductRecord>()
+            .WithMany()
+            .HasForeignKey(record => record.ProductId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

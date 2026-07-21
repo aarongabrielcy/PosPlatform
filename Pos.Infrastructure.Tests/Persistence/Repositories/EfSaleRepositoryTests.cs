@@ -9,6 +9,7 @@ using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Exceptions;
 using Pos.Infrastructure.Persistence.Records;
 using Pos.Infrastructure.Persistence.Repositories;
+using Pos.Infrastructure.Tests.Persistence;
 
 namespace Pos.Infrastructure.Tests.Persistence.Repositories;
 
@@ -25,6 +26,8 @@ public class EfSaleRepositoryTests
         return new PosDbContext(optionsBuilder.Options);
     }
 
+    // Sale/SaleLine tienen FK Restrict hacia Organization/Branch/RegisterSession/User/Product:
+    // se siembra primero el grafo completo de catálogo con SqliteSeedHelper.
     private static async Task<SaleRecord> SeedDraftSaleAsync(
         PosDbContext context,
         Guid? saleId = null,
@@ -32,50 +35,20 @@ public class EfSaleRepositoryTests
         decimal unitPriceAmount = 10m,
         decimal paymentAmount = 20m)
     {
-        var id = saleId ?? Guid.NewGuid();
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, CreatedAtUtc);
 
-        var record = new SaleRecord
-        {
-            Id = id,
-            OrganizationId = Guid.NewGuid(),
-            BranchId = Guid.NewGuid(),
-            RegisterSessionId = Guid.NewGuid(),
-            CreatedByUserId = Guid.NewGuid(),
-            Currency = "MXN",
-            Status = SaleStatus.Draft,
-            CreatedAtUtc = CreatedAtUtc,
-            CompletedAtUtc = null,
-        };
-
-        record.Lines.Add(new SaleLineRecord
-        {
-            Id = Guid.NewGuid(),
-            SaleId = id,
-            ProductId = Guid.NewGuid(),
-            ProductSku = "SKU-001",
-            ProductName = "Producto de prueba",
-            Quantity = quantity,
-            UnitPriceAmount = unitPriceAmount,
-            Currency = "MXN",
-            Sale = record,
-        });
-
-        record.Payments.Add(new PaymentRecord
-        {
-            Id = Guid.NewGuid(),
-            SaleId = id,
-            Method = PaymentMethod.Cash,
-            Amount = paymentAmount,
-            Currency = "MXN",
-            PaidAtUtc = CreatedAtUtc,
-            Sale = record,
-        });
-
-        context.Add(record);
-        await context.CommitAsync(CancellationToken.None);
-        context.ChangeTracker.Clear();
-
-        return record;
+        return await SqliteSeedHelper.SeedSaleAsync(
+            context,
+            graph.OrganizationId,
+            graph.BranchId,
+            graph.RegisterSessionId,
+            graph.UserId,
+            graph.ProductId,
+            saleId: saleId,
+            quantity: quantity,
+            unitPriceAmount: unitPriceAmount,
+            paymentAmount: paymentAmount,
+            createdAtUtc: CreatedAtUtc);
     }
 
     // ---------- GetByIdAsync ----------
@@ -210,13 +183,40 @@ public class EfSaleRepositoryTests
         await using var context = CreateContext(connection);
         await context.Database.EnsureCreatedAsync();
 
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, CreatedAtUtc);
         var saleId = Guid.NewGuid();
-        await SeedDraftSaleAsync(context, saleId);
+        await SqliteSeedHelper.SeedSaleAsync(
+            context,
+            graph.OrganizationId,
+            graph.BranchId,
+            graph.RegisterSessionId,
+            graph.UserId,
+            graph.ProductId,
+            saleId: saleId,
+            createdAtUtc: CreatedAtUtc);
+
+        // SaleLine.ProductId tiene FK Restrict hacia Product: la nueva línea necesita un
+        // Product real distinto del ya usado en la línea sembrada (índice único SaleId+ProductId).
+        var newProductId = Guid.NewGuid();
+        context.Add(new ProductRecord
+        {
+            Id = newProductId,
+            OrganizationId = graph.OrganizationId,
+            Sku = "SKU-777",
+            Name = "Producto nuevo",
+            SalePriceAmount = 5m,
+            SalePriceCurrency = "MXN",
+            TracksInventory = true,
+            IsActive = true,
+            CreatedAtUtc = CreatedAtUtc,
+        });
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
 
         var repository = new EfSaleRepository(context);
         var sale = await repository.GetByIdAsync(new SaleId(saleId), CancellationToken.None);
         sale!.AddLine(
-            SaleLineId.New(), ProductId.New(), new Sku("SKU-777"), "Producto nuevo", 1m, new Money(5m, "MXN"));
+            SaleLineId.New(), new ProductId(newProductId), new Sku("SKU-777"), "Producto nuevo", 1m, new Money(5m, "MXN"));
 
         await repository.UpdateAsync(sale, CancellationToken.None);
         await context.CommitAsync(CancellationToken.None);
