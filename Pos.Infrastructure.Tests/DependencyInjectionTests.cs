@@ -1,13 +1,22 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Pos.Application.Branches;
 using Pos.Application.Common.Persistence;
+using Pos.Application.Common.Time;
 using Pos.Application.Inventory;
+using Pos.Application.Organizations;
+using Pos.Application.Products;
+using Pos.Application.RegisterSessions;
+using Pos.Application.Registers;
 using Pos.Application.Sales;
+using Pos.Application.Security;
+using Pos.Application.Users;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Persistence.Repositories;
 using Pos.Infrastructure.Storage;
+using Pos.Infrastructure.Time;
 
 namespace Pos.Infrastructure.Tests;
 
@@ -112,6 +121,67 @@ public class DependencyInjectionTests
             Assert.IsType<EfInventoryItemRepository>(scope.ServiceProvider.GetRequiredService<IInventoryItemRepository>());
             Assert.IsType<EfInventoryMovementRepository>(scope.ServiceProvider.GetRequiredService<IInventoryMovementRepository>());
             Assert.IsType<EfSaleRepository>(scope.ServiceProvider.GetRequiredService<ISaleRepository>());
+            Assert.IsType<EfOrganizationRepository>(scope.ServiceProvider.GetRequiredService<IOrganizationRepository>());
+            Assert.IsType<EfBranchRepository>(scope.ServiceProvider.GetRequiredService<IBranchRepository>());
+            Assert.IsType<EfRegisterRepository>(scope.ServiceProvider.GetRequiredService<IRegisterRepository>());
+            Assert.IsType<EfProductRepository>(scope.ServiceProvider.GetRequiredService<IProductRepository>());
+            Assert.IsType<EfRoleRepository>(scope.ServiceProvider.GetRequiredService<IRoleRepository>());
+            Assert.IsType<EfUserRepository>(scope.ServiceProvider.GetRequiredService<IUserRepository>());
+            Assert.IsType<EfRegisterSessionRepository>(scope.ServiceProvider.GetRequiredService<IRegisterSessionRepository>());
+        }
+    }
+
+    [Fact]
+    public void NewRepositoriesAreScopedAndReuseTheSameInstanceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+
+            var first = scope.ServiceProvider.GetRequiredService<IOrganizationRepository>();
+            var second = scope.ServiceProvider.GetRequiredService<IOrganizationRepository>();
+
+            Assert.Same(first, second);
+        }
+    }
+
+    [Fact]
+    public void NewRepositoriesProduceDifferentInstancesAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var repositoryA = scopeA.ServiceProvider.GetRequiredService<IOrganizationRepository>();
+            var repositoryB = scopeB.ServiceProvider.GetRequiredService<IOrganizationRepository>();
+
+            Assert.NotSame(repositoryA, repositoryB);
+        }
+    }
+
+    [Fact]
+    public void IClockResolvesSystemClockAsSingleton()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            var rootClock = provider.GetRequiredService<IClock>();
+
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var clockA = scopeA.ServiceProvider.GetRequiredService<IClock>();
+            var clockB = scopeB.ServiceProvider.GetRequiredService<IClock>();
+
+            Assert.IsType<SystemClock>(rootClock);
+            Assert.Same(rootClock, clockA);
+            Assert.Same(rootClock, clockB);
         }
     }
 
