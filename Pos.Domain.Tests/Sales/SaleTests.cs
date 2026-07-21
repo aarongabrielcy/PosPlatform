@@ -619,4 +619,870 @@ public class SaleTests
         Assert.Equal(subtotalBefore, sale.Subtotal);
         Assert.Equal(totalBefore, sale.Total);
     }
+
+    // ---------- Estado inicial ampliado ----------
+
+    [Fact]
+    public void NewSaleStartsAsDraft()
+    {
+        var sale = CreateSale();
+
+        Assert.Equal(SaleStatus.Draft, sale.Status);
+    }
+
+    [Fact]
+    public void NewSaleStartsWithoutPayments()
+    {
+        var sale = CreateSale();
+
+        Assert.Empty(sale.Payments);
+    }
+
+    [Fact]
+    public void NewSaleStartsWithZeroPaidAmount()
+    {
+        var sale = CreateSale(currency: "MXN");
+
+        Assert.Equal(new Money(0m, "MXN"), sale.PaidAmount);
+    }
+
+    [Fact]
+    public void NewSaleStartsWithBalanceDueEqualToTotal()
+    {
+        var sale = CreateSale(currency: "MXN");
+
+        Assert.Equal(sale.Total, sale.BalanceDue);
+    }
+
+    [Fact]
+    public void NewSaleStartsWithZeroChangeDue()
+    {
+        var sale = CreateSale(currency: "MXN");
+
+        Assert.Equal(new Money(0m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void NewSaleStartsWithNullCompletedAtUtc()
+    {
+        var sale = CreateSale();
+
+        Assert.Null(sale.CompletedAtUtc);
+    }
+
+    // ---------- AddPayment ----------
+
+    private static void AddPayment(
+        Sale sale,
+        PaymentId? paymentId = null,
+        PaymentMethod method = PaymentMethod.Cash,
+        Money? amount = null,
+        DateTimeOffset? paidAtUtc = null) =>
+        sale.AddPayment(
+            paymentId ?? PaymentId.New(),
+            method,
+            amount ?? new Money(10m, "MXN"),
+            paidAtUtc ?? CreatedAtUtc);
+
+    [Fact]
+    public void AddPaymentAddsValidCashPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var paymentId = PaymentId.New();
+
+        AddPayment(sale, paymentId: paymentId, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+
+        Assert.Single(sale.Payments);
+        Assert.Contains(sale.Payments, p => p.Id == paymentId);
+    }
+
+    [Fact]
+    public void AddPaymentAddsValidCardPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        AddPayment(sale, method: PaymentMethod.Card, amount: new Money(100m, "MXN"));
+
+        Assert.Single(sale.Payments);
+        Assert.Equal(PaymentMethod.Card, sale.Payments.Single().Method);
+    }
+
+    [Fact]
+    public void AddPaymentAddsValidBankTransferPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        AddPayment(sale, method: PaymentMethod.BankTransfer, amount: new Money(100m, "MXN"));
+
+        Assert.Single(sale.Payments);
+        Assert.Equal(PaymentMethod.BankTransfer, sale.Payments.Single().Method);
+    }
+
+    [Fact]
+    public void AddPaymentAllowsMultiplePayments()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        AddPayment(sale, method: PaymentMethod.Card, amount: new Money(60m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(40m, "MXN"));
+
+        Assert.Equal(2, sale.Payments.Count);
+    }
+
+    [Fact]
+    public void AddPaymentRecalculatesPaidAmount()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        AddPayment(sale, method: PaymentMethod.Card, amount: new Money(60m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(40m, "MXN"));
+
+        Assert.Equal(new Money(100m, "MXN"), sale.PaidAmount);
+    }
+
+    [Fact]
+    public void AddPaymentRecalculatesBalanceDue()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(60m, "MXN"));
+
+        Assert.Equal(new Money(40m, "MXN"), sale.BalanceDue);
+    }
+
+    [Fact]
+    public void AddPaymentRecalculatesChangeDue()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(120m, "MXN"));
+
+        Assert.Equal(new Money(20m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void AddPaymentAllowsCashOverpayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(120m, "MXN"));
+
+        Assert.Equal(new Money(120m, "MXN"), sale.PaidAmount);
+        Assert.Equal(new Money(0m, "MXN"), sale.BalanceDue);
+        Assert.Equal(new Money(20m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void AddPaymentAllowsMixedPaymentWhereCashCausesOverpayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        AddPayment(sale, method: PaymentMethod.Card, amount: new Money(60m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(50m, "MXN"));
+
+        Assert.Equal(new Money(110m, "MXN"), sale.PaidAmount);
+        Assert.Equal(new Money(0m, "MXN"), sale.BalanceDue);
+        Assert.Equal(new Money(10m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void AddPaymentRejectsCardOverpayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(
+            () => AddPayment(sale, method: PaymentMethod.Card, amount: new Money(120m, "MXN")));
+    }
+
+    [Fact]
+    public void AddPaymentRejectsBankTransferOverpayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(
+            () => AddPayment(sale, method: PaymentMethod.BankTransfer, amount: new Money(120m, "MXN")));
+    }
+
+    [Fact]
+    public void AddPaymentRejectsCardOverpaymentAfterExistingCashOverpayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(120m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(
+            () => AddPayment(sale, method: PaymentMethod.Card, amount: new Money(10m, "MXN")));
+    }
+
+    [Fact]
+    public void AddPaymentRejectsDifferentCurrency()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(
+            () => AddPayment(sale, amount: new Money(10m, "USD")));
+    }
+
+    [Fact]
+    public void AddPaymentRejectsDuplicatePaymentId()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var paymentId = PaymentId.New();
+        AddPayment(sale, paymentId: paymentId, amount: new Money(10m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(
+            () => AddPayment(sale, paymentId: paymentId, amount: new Money(10m, "MXN")));
+    }
+
+    [Fact]
+    public void AddPaymentRejectsInvalidData()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(
+            () => AddPayment(sale, amount: new Money(0m, "MXN")));
+    }
+
+    [Fact]
+    public void AddPaymentRejectsUndefinedEnumValue()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(
+            () => sale.AddPayment(PaymentId.New(), (PaymentMethod)999, new Money(10m, "MXN"), CreatedAtUtc));
+    }
+
+    // ---------- RemovePayment ----------
+
+    [Fact]
+    public void RemovePaymentRemovesAnExistingPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var paymentId = PaymentId.New();
+        AddPayment(sale, paymentId: paymentId, amount: new Money(50m, "MXN"));
+
+        sale.RemovePayment(paymentId);
+
+        Assert.Empty(sale.Payments);
+    }
+
+    [Fact]
+    public void RemovePaymentRecalculatesTotals()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var paymentId = PaymentId.New();
+        AddPayment(sale, paymentId: paymentId, amount: new Money(50m, "MXN"));
+
+        sale.RemovePayment(paymentId);
+
+        Assert.Equal(new Money(0m, "MXN"), sale.PaidAmount);
+        Assert.Equal(new Money(100m, "MXN"), sale.BalanceDue);
+        Assert.Equal(new Money(0m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void RemovingLastPaymentReturnsPaidAmountToZero()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var paymentId = PaymentId.New();
+        AddPayment(sale, paymentId: paymentId, amount: new Money(100m, "MXN"));
+
+        sale.RemovePayment(paymentId);
+
+        Assert.Equal(new Money(0m, "MXN"), sale.PaidAmount);
+        Assert.Equal(sale.Total, sale.BalanceDue);
+    }
+
+    [Fact]
+    public void RemovePaymentRejectsDefaultPaymentId()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale);
+
+        Assert.Throws<DomainValidationException>(() => sale.RemovePayment(default));
+    }
+
+    [Fact]
+    public void RemovePaymentRejectsNonExistentPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale);
+
+        Assert.Throws<DomainValidationException>(() => sale.RemovePayment(PaymentId.New()));
+    }
+
+    // ---------- Complete ----------
+
+    [Fact]
+    public void CompleteCompletesSaleWithExactPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+
+        sale.Complete(CreatedAtUtc);
+
+        Assert.Equal(SaleStatus.Completed, sale.Status);
+    }
+
+    [Fact]
+    public void CompleteCompletesSaleWithCashOverpayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(120m, "MXN"));
+
+        sale.Complete(CreatedAtUtc);
+
+        Assert.Equal(SaleStatus.Completed, sale.Status);
+        Assert.Equal(new Money(20m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void CompleteStoresCompletedAtUtc()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+        var completedAtUtc = CreatedAtUtc.AddMinutes(5);
+
+        sale.Complete(completedAtUtc);
+
+        Assert.Equal(completedAtUtc, sale.CompletedAtUtc);
+    }
+
+    [Fact]
+    public void CompleteAllowsCompletedAtUtcEqualToCreatedAtUtc()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+
+        sale.Complete(CreatedAtUtc);
+
+        Assert.Equal(CreatedAtUtc, sale.CompletedAtUtc);
+    }
+
+    [Fact]
+    public void CompleteRejectsSaleWithoutLines()
+    {
+        var sale = CreateSale(currency: "MXN");
+
+        Assert.Throws<DomainValidationException>(() => sale.Complete(CreatedAtUtc));
+    }
+
+    [Fact]
+    public void CompleteRejectsZeroTotal()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, unitPrice: new Money(0m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(() => sale.Complete(CreatedAtUtc));
+    }
+
+    [Fact]
+    public void CompleteRejectsInsufficientPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(50m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(() => sale.Complete(CreatedAtUtc));
+    }
+
+    [Fact]
+    public void CompleteRejectsNonUtcDate()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+        var nonUtc = new DateTimeOffset(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(-5));
+
+        Assert.Throws<DomainValidationException>(() => sale.Complete(nonUtc));
+    }
+
+    [Fact]
+    public void CompleteRejectsDateBeforeCreatedAtUtc()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+        var beforeCreation = CreatedAtUtc.AddMinutes(-1);
+
+        Assert.Throws<DomainValidationException>(() => sale.Complete(beforeCreation));
+    }
+
+    [Fact]
+    public void CompleteRejectsCompletingTwice()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+        sale.Complete(CreatedAtUtc);
+
+        Assert.Throws<DomainValidationException>(() => sale.Complete(CreatedAtUtc));
+    }
+
+    // ---------- Bloqueo posterior a Completed ----------
+
+    [Fact]
+    public void CompletedSaleRejectsAddLine()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+        sale.Complete(CreatedAtUtc);
+        var lineCountBefore = sale.Lines.Count;
+        var totalBefore = sale.Total;
+
+        Assert.Throws<DomainValidationException>(() => AddLine(sale, productId: ProductId.New()));
+
+        Assert.Equal(lineCountBefore, sale.Lines.Count);
+        Assert.Equal(totalBefore, sale.Total);
+    }
+
+    [Fact]
+    public void CompletedSaleRejectsChangeLineQuantity()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+        sale.Complete(CreatedAtUtc);
+
+        Assert.Throws<DomainValidationException>(() => sale.ChangeLineQuantity(saleLineId, 5m));
+
+        Assert.Equal(10m, sale.GetLine(saleLineId).Quantity);
+    }
+
+    [Fact]
+    public void CompletedSaleRejectsRemoveLine()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+        sale.Complete(CreatedAtUtc);
+
+        Assert.Throws<DomainValidationException>(() => sale.RemoveLine(saleLineId));
+
+        Assert.Single(sale.Lines);
+    }
+
+    [Fact]
+    public void CompletedSaleRejectsAddPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+        sale.Complete(CreatedAtUtc);
+        var paymentCountBefore = sale.Payments.Count;
+
+        Assert.Throws<DomainValidationException>(
+            () => AddPayment(sale, method: PaymentMethod.Card, amount: new Money(10m, "MXN")));
+
+        Assert.Equal(paymentCountBefore, sale.Payments.Count);
+    }
+
+    [Fact]
+    public void CompletedSaleRejectsRemovePayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var paymentId = PaymentId.New();
+        AddPayment(sale, paymentId: paymentId, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+        sale.Complete(CreatedAtUtc);
+
+        Assert.Throws<DomainValidationException>(() => sale.RemovePayment(paymentId));
+
+        Assert.Single(sale.Payments);
+    }
+
+    // ---------- Encapsulación de Payments ----------
+
+    [Fact]
+    public void PaymentsCannotBeModifiedExternally()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var paymentId = PaymentId.New();
+        AddPayment(sale, paymentId: paymentId, amount: new Money(50m, "MXN"));
+
+        var externalList = (List<Payment>)sale.Payments;
+        externalList.Clear();
+        externalList.Add(new Payment(
+            PaymentId.New(), PaymentMethod.Cash, new Money(999m, "MXN"), CreatedAtUtc));
+
+        Assert.Single(sale.Payments);
+        Assert.Equal(paymentId, sale.Payments.Single().Id);
+    }
+
+    // ---------- Atomicidad de pagos y finalización ----------
+
+    [Fact]
+    public void AddPaymentWithDifferentCurrencyDoesNotChangePaymentsOrTotals()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var paymentCountBefore = sale.Payments.Count;
+        var paidBefore = sale.PaidAmount;
+        var balanceBefore = sale.BalanceDue;
+        var changeBefore = sale.ChangeDue;
+
+        Assert.Throws<DomainValidationException>(() => AddPayment(sale, amount: new Money(10m, "USD")));
+
+        Assert.Equal(paymentCountBefore, sale.Payments.Count);
+        Assert.Equal(paidBefore, sale.PaidAmount);
+        Assert.Equal(balanceBefore, sale.BalanceDue);
+        Assert.Equal(changeBefore, sale.ChangeDue);
+        Assert.Equal(SaleStatus.Draft, sale.Status);
+        Assert.Null(sale.CompletedAtUtc);
+    }
+
+    [Fact]
+    public void AddPaymentWithDuplicateIdDoesNotChangePaymentsOrTotals()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var paymentId = PaymentId.New();
+        AddPayment(sale, paymentId: paymentId, amount: new Money(50m, "MXN"));
+        var paymentCountBefore = sale.Payments.Count;
+        var paidBefore = sale.PaidAmount;
+        var balanceBefore = sale.BalanceDue;
+        var changeBefore = sale.ChangeDue;
+
+        Assert.Throws<DomainValidationException>(
+            () => AddPayment(sale, paymentId: paymentId, amount: new Money(10m, "MXN")));
+
+        Assert.Equal(paymentCountBefore, sale.Payments.Count);
+        Assert.Equal(paidBefore, sale.PaidAmount);
+        Assert.Equal(balanceBefore, sale.BalanceDue);
+        Assert.Equal(changeBefore, sale.ChangeDue);
+        Assert.Equal(SaleStatus.Draft, sale.Status);
+        Assert.Null(sale.CompletedAtUtc);
+    }
+
+    [Fact]
+    public void AddPaymentCardOverpaymentDoesNotChangePaymentsOrTotals()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var paymentCountBefore = sale.Payments.Count;
+        var paidBefore = sale.PaidAmount;
+        var balanceBefore = sale.BalanceDue;
+        var changeBefore = sale.ChangeDue;
+
+        Assert.Throws<DomainValidationException>(
+            () => AddPayment(sale, method: PaymentMethod.Card, amount: new Money(120m, "MXN")));
+
+        Assert.Equal(paymentCountBefore, sale.Payments.Count);
+        Assert.Equal(paidBefore, sale.PaidAmount);
+        Assert.Equal(balanceBefore, sale.BalanceDue);
+        Assert.Equal(changeBefore, sale.ChangeDue);
+        Assert.Equal(SaleStatus.Draft, sale.Status);
+        Assert.Null(sale.CompletedAtUtc);
+    }
+
+    [Fact]
+    public void AddPaymentBankTransferOverpaymentDoesNotChangePaymentsOrTotals()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        var paymentCountBefore = sale.Payments.Count;
+        var paidBefore = sale.PaidAmount;
+        var balanceBefore = sale.BalanceDue;
+        var changeBefore = sale.ChangeDue;
+
+        Assert.Throws<DomainValidationException>(
+            () => AddPayment(sale, method: PaymentMethod.BankTransfer, amount: new Money(120m, "MXN")));
+
+        Assert.Equal(paymentCountBefore, sale.Payments.Count);
+        Assert.Equal(paidBefore, sale.PaidAmount);
+        Assert.Equal(balanceBefore, sale.BalanceDue);
+        Assert.Equal(changeBefore, sale.ChangeDue);
+        Assert.Equal(SaleStatus.Draft, sale.Status);
+        Assert.Null(sale.CompletedAtUtc);
+    }
+
+    [Fact]
+    public void RemoveNonExistentPaymentDoesNotChangePaymentsOrTotals()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, amount: new Money(50m, "MXN"));
+        var paymentCountBefore = sale.Payments.Count;
+        var paidBefore = sale.PaidAmount;
+        var balanceBefore = sale.BalanceDue;
+        var changeBefore = sale.ChangeDue;
+
+        Assert.Throws<DomainValidationException>(() => sale.RemovePayment(PaymentId.New()));
+
+        Assert.Equal(paymentCountBefore, sale.Payments.Count);
+        Assert.Equal(paidBefore, sale.PaidAmount);
+        Assert.Equal(balanceBefore, sale.BalanceDue);
+        Assert.Equal(changeBefore, sale.ChangeDue);
+        Assert.Equal(SaleStatus.Draft, sale.Status);
+        Assert.Null(sale.CompletedAtUtc);
+    }
+
+    [Fact]
+    public void CompleteWithInsufficientPaymentDoesNotChangeStatus()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, amount: new Money(50m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(() => sale.Complete(CreatedAtUtc));
+
+        Assert.Equal(SaleStatus.Draft, sale.Status);
+        Assert.Null(sale.CompletedAtUtc);
+    }
+
+    [Fact]
+    public void LineOperationAfterCompletedDoesNotChangeLinesOrTotals()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, amount: new Money(100m, "MXN"));
+        sale.Complete(CreatedAtUtc);
+        var totalBefore = sale.Total;
+        var lineCountBefore = sale.Lines.Count;
+
+        Assert.Throws<DomainValidationException>(() => sale.ChangeLineQuantity(saleLineId, 20m));
+
+        Assert.Equal(lineCountBefore, sale.Lines.Count);
+        Assert.Equal(totalBefore, sale.Total);
+        Assert.Equal(SaleStatus.Completed, sale.Status);
+    }
+
+    // ---------- Interacción entre líneas y pagos ----------
+
+    [Fact]
+    public void IncreasingLineAfterExactCashPaymentRecalculatesBalanceDue()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+
+        sale.ChangeLineQuantity(saleLineId, 15m);
+
+        Assert.Equal(new Money(150m, "MXN"), sale.Total);
+        Assert.Equal(new Money(100m, "MXN"), sale.PaidAmount);
+        Assert.Equal(new Money(50m, "MXN"), sale.BalanceDue);
+        Assert.Equal(new Money(0m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void IncreasingLineAfterCashOverpaymentRecalculatesChangeDue()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(120m, "MXN"));
+        Assert.Equal(new Money(20m, "MXN"), sale.ChangeDue);
+
+        sale.ChangeLineQuantity(saleLineId, 15m);
+
+        Assert.Equal(new Money(150m, "MXN"), sale.Total);
+        Assert.Equal(new Money(120m, "MXN"), sale.PaidAmount);
+        Assert.Equal(new Money(30m, "MXN"), sale.BalanceDue);
+        Assert.Equal(new Money(0m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void ReducingLineAfterCashOverpaymentRecalculatesChangeDue()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(120m, "MXN"));
+
+        sale.ChangeLineQuantity(saleLineId, 5m);
+
+        Assert.Equal(new Money(50m, "MXN"), sale.Total);
+        Assert.Equal(new Money(120m, "MXN"), sale.PaidAmount);
+        Assert.Equal(new Money(0m, "MXN"), sale.BalanceDue);
+        Assert.Equal(new Money(70m, "MXN"), sale.ChangeDue);
+    }
+
+    // ---------- Protección de pagos no efectivos ante cambios de línea ----------
+
+    [Fact]
+    public void ChangeLineQuantityRejectsReductionBelowExactCardPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Card, amount: new Money(100m, "MXN"));
+        var subtotalBefore = sale.Subtotal;
+        var totalBefore = sale.Total;
+        var paidBefore = sale.PaidAmount;
+        var balanceBefore = sale.BalanceDue;
+        var changeBefore = sale.ChangeDue;
+
+        Assert.Throws<DomainValidationException>(() => sale.ChangeLineQuantity(saleLineId, 5m));
+
+        Assert.Equal(10m, sale.GetLine(saleLineId).Quantity);
+        Assert.Equal(subtotalBefore, sale.Subtotal);
+        Assert.Equal(totalBefore, sale.Total);
+        Assert.Equal(paidBefore, sale.PaidAmount);
+        Assert.Equal(balanceBefore, sale.BalanceDue);
+        Assert.Equal(changeBefore, sale.ChangeDue);
+    }
+
+    [Fact]
+    public void ChangeLineQuantityRejectsReductionBelowExactBankTransferPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.BankTransfer, amount: new Money(100m, "MXN"));
+        var subtotalBefore = sale.Subtotal;
+        var totalBefore = sale.Total;
+        var paidBefore = sale.PaidAmount;
+        var balanceBefore = sale.BalanceDue;
+        var changeBefore = sale.ChangeDue;
+
+        Assert.Throws<DomainValidationException>(() => sale.ChangeLineQuantity(saleLineId, 5m));
+
+        Assert.Equal(10m, sale.GetLine(saleLineId).Quantity);
+        Assert.Equal(subtotalBefore, sale.Subtotal);
+        Assert.Equal(totalBefore, sale.Total);
+        Assert.Equal(paidBefore, sale.PaidAmount);
+        Assert.Equal(balanceBefore, sale.BalanceDue);
+        Assert.Equal(changeBefore, sale.ChangeDue);
+    }
+
+    [Fact]
+    public void RemoveLineRejectsWhenItWouldLeaveTotalBelowExactCardPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Card, amount: new Money(100m, "MXN"));
+        var lineCountBefore = sale.Lines.Count;
+        var totalBefore = sale.Total;
+        var paidBefore = sale.PaidAmount;
+        var balanceBefore = sale.BalanceDue;
+        var changeBefore = sale.ChangeDue;
+
+        Assert.Throws<DomainValidationException>(() => sale.RemoveLine(saleLineId));
+
+        Assert.Equal(lineCountBefore, sale.Lines.Count);
+        Assert.Equal(totalBefore, sale.Total);
+        Assert.Equal(paidBefore, sale.PaidAmount);
+        Assert.Equal(balanceBefore, sale.BalanceDue);
+        Assert.Equal(changeBefore, sale.ChangeDue);
+    }
+
+    [Fact]
+    public void ChangeLineQuantityAllowsValidMixOfCardAndCash()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Card, amount: new Money(60m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(60m, "MXN"));
+
+        sale.ChangeLineQuantity(saleLineId, 8m);
+
+        Assert.Equal(new Money(80m, "MXN"), sale.Total);
+        Assert.Equal(new Money(120m, "MXN"), sale.PaidAmount);
+        Assert.Equal(new Money(0m, "MXN"), sale.BalanceDue);
+        Assert.Equal(new Money(40m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void ChangeLineQuantityRejectsInvalidMixWhenCardExceedsProjectedTotal()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Card, amount: new Money(90m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(30m, "MXN"));
+        var lineCountBefore = sale.Lines.Count;
+        var quantityBefore = sale.GetLine(saleLineId).Quantity;
+        var subtotalBefore = sale.Subtotal;
+        var totalBefore = sale.Total;
+        var paidBefore = sale.PaidAmount;
+        var balanceBefore = sale.BalanceDue;
+        var changeBefore = sale.ChangeDue;
+
+        Assert.Throws<DomainValidationException>(() => sale.ChangeLineQuantity(saleLineId, 8m));
+
+        Assert.Equal(lineCountBefore, sale.Lines.Count);
+        Assert.Equal(quantityBefore, sale.GetLine(saleLineId).Quantity);
+        Assert.Equal(subtotalBefore, sale.Subtotal);
+        Assert.Equal(totalBefore, sale.Total);
+        Assert.Equal(paidBefore, sale.PaidAmount);
+        Assert.Equal(balanceBefore, sale.BalanceDue);
+        Assert.Equal(changeBefore, sale.ChangeDue);
+    }
+
+    [Fact]
+    public void ChangeLineQuantityAllowsReductionBelowExactCashPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(100m, "MXN"));
+
+        sale.ChangeLineQuantity(saleLineId, 5m);
+
+        Assert.Equal(new Money(50m, "MXN"), sale.Total);
+        Assert.Equal(new Money(100m, "MXN"), sale.PaidAmount);
+        Assert.Equal(new Money(0m, "MXN"), sale.BalanceDue);
+        Assert.Equal(new Money(50m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void ChangeLineQuantityAllowsIncreaseAfterExactCardPayment()
+    {
+        var sale = CreateSale(currency: "MXN");
+        var saleLineId = SaleLineId.New();
+        AddLine(sale, saleLineId: saleLineId, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Card, amount: new Money(100m, "MXN"));
+
+        sale.ChangeLineQuantity(saleLineId, 15m);
+
+        Assert.Equal(new Money(150m, "MXN"), sale.Total);
+        Assert.Equal(new Money(100m, "MXN"), sale.PaidAmount);
+        Assert.Equal(new Money(50m, "MXN"), sale.BalanceDue);
+        Assert.Equal(new Money(0m, "MXN"), sale.ChangeDue);
+    }
+
+    [Fact]
+    public void CompleteRejectsSaleWithPositiveBalanceDueAndDoesNotChangeStatus()
+    {
+        var sale = CreateSale(currency: "MXN");
+        AddLine(sale, quantity: 10m, unitPrice: new Money(10m, "MXN"));
+        AddPayment(sale, method: PaymentMethod.Cash, amount: new Money(50m, "MXN"));
+
+        Assert.Throws<DomainValidationException>(() => sale.Complete(CreatedAtUtc));
+
+        Assert.Equal(SaleStatus.Draft, sale.Status);
+        Assert.Null(sale.CompletedAtUtc);
+    }
 }
