@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Pos.Infrastructure;
+using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Storage;
 
 namespace Pos.Desktop
@@ -18,7 +19,10 @@ namespace Pos.Desktop
         [LoggerMessage(Level = LogLevel.Critical, Message = "Fallo al iniciar la aplicación.")]
         private static partial void LogStartupFailure(ILogger logger, Exception exception);
 
-        protected override void OnStartup(StartupEventArgs e)
+        [LoggerMessage(Level = LogLevel.Critical, Message = "Fallo al inicializar la base de datos local.")]
+        private static partial void LogDatabaseInitializationFailure(ILogger logger, Exception exception);
+
+        protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
@@ -45,10 +49,31 @@ namespace Pos.Desktop
                 pathProvider.EnsureDataDirectoryExists();
 
                 _mainWindowScope = _host.Services.CreateScope();
+
+                var initializer = _mainWindowScope.ServiceProvider.GetRequiredService<ILocalDatabaseInitializer>();
+                await initializer.InitializeAsync();
+
                 var mainWindow = _mainWindowScope.ServiceProvider.GetRequiredService<MainWindow>();
 
                 MainWindow = mainWindow;
                 mainWindow.Show();
+            }
+            catch (LocalDatabaseInitializationException ex)
+            {
+                var logger = _mainWindowScope?.ServiceProvider.GetService<ILogger<App>>()
+                    ?? _host?.Services.GetService<ILogger<App>>();
+                if (logger is not null)
+                {
+                    LogDatabaseInitializationFailure(logger, ex);
+                }
+
+                MessageBox.Show(
+                    "No fue posible preparar la base de datos local. Consulte al soporte técnico.",
+                    "PosPlatform",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+
+                Shutdown(-2);
             }
             catch (Exception ex)
             {
