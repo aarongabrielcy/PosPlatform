@@ -7,6 +7,7 @@ using Pos.Domain.Sales;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Records;
 using Pos.Infrastructure.Persistence.Repositories;
+using Pos.Infrastructure.Tests.Persistence;
 
 namespace Pos.Infrastructure.Tests.Integration;
 
@@ -31,9 +32,12 @@ public class CompleteSaleIntegrationTests
         await using var context = CreateContext(connection);
         await context.Database.EnsureCreatedAsync();
 
+        // Sale/SaleLine/InventoryItem tienen FK Restrict hacia su catálogo: se siembra un grafo
+        // consistente (misma Organization/Branch/Product) antes de crear la venta y el stock.
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, CreatedAtUtc);
         var saleId = Guid.NewGuid();
-        var branchId = Guid.NewGuid();
-        var productId = Guid.NewGuid();
+        var branchId = graph.BranchId;
+        var productId = graph.ProductId;
         var lineId = Guid.NewGuid();
         var paymentId = Guid.NewGuid();
         var inventoryItemId = Guid.NewGuid();
@@ -41,10 +45,10 @@ public class CompleteSaleIntegrationTests
         var saleRecord = new SaleRecord
         {
             Id = saleId,
-            OrganizationId = Guid.NewGuid(),
+            OrganizationId = graph.OrganizationId,
             BranchId = branchId,
-            RegisterSessionId = Guid.NewGuid(),
-            CreatedByUserId = Guid.NewGuid(),
+            RegisterSessionId = graph.RegisterSessionId,
+            CreatedByUserId = graph.UserId,
             Currency = "MXN",
             Status = SaleStatus.Draft,
             CreatedAtUtc = CreatedAtUtc,

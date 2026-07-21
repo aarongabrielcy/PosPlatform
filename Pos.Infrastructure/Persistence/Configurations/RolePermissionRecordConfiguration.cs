@@ -20,7 +20,5 @@ internal sealed class RolePermissionRecordConfiguration : IEntityTypeConfigurati
             .HasColumnName("permission")
             .HasMaxLength(80)
             .IsRequired();
-
-        builder.HasIndex(record => record.RoleId);
     }
 }
