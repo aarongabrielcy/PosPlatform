@@ -20,6 +20,7 @@ internal static class UserMapper
                 new RoleId(record.RoleId),
                 record.Username,
                 record.DisplayName,
+                new PasswordHash(record.PasswordHash),
                 record.IsActive,
                 record.CreatedAtUtc);
         }
@@ -41,6 +42,7 @@ internal static class UserMapper
             RoleId = user.RoleId.Value,
             Username = user.Username,
             DisplayName = user.DisplayName,
+            PasswordHash = user.PasswordHash.Value,
             IsActive = user.IsActive,
             CreatedAtUtc = user.CreatedAtUtc,
         };
@@ -74,6 +76,7 @@ internal static class UserMapper
         record.RoleId = user.RoleId.Value;
         record.Username = user.Username;
         record.DisplayName = user.DisplayName;
+        record.PasswordHash = user.PasswordHash.Value;
         record.IsActive = user.IsActive;
     }
 }

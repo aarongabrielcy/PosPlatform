@@ -14,6 +14,10 @@ public class EfRegisterSessionRepositoryTests
     private static readonly DateTimeOffset CreatedAtUtc = new(2026, 1, 1, 8, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset ClosedAtUtc = new(2026, 1, 1, 18, 0, 0, TimeSpan.Zero);
 
+    // Hash sintético únicamente para satisfacer la invariante Domain; no es un hash PBKDF2 real
+    // y no debe usarse para autenticación.
+    private const string SyntheticPasswordHash = "v1$pbkdf2-sha256$210000$c2FsdC1zeW50aGV0aWM=$aGFzaC1zeW50aGV0aWM=";
+
     private static PosDbContext CreateContext(SqliteConnection connection)
     {
         var optionsBuilder = new DbContextOptionsBuilder<PosDbContext>();
@@ -37,7 +41,7 @@ public class EfRegisterSessionRepositoryTests
         context.Add(new BranchRecord { Id = branchId, OrganizationId = organizationId, Name = "Sucursal Centro", Code = "SUC-1", IsActive = true, CreatedAtUtc = CreatedAtUtc });
         context.Add(new RegisterRecord { Id = register, BranchId = branchId, Name = "Caja 1", Code = "CAJA-1", IsActive = true, CreatedAtUtc = CreatedAtUtc });
         context.Add(new RoleRecord { Id = roleId, OrganizationId = organizationId, Name = "Cajero", IsActive = true, CreatedAtUtc = CreatedAtUtc });
-        context.Add(new UserRecord { Id = userId, OrganizationId = organizationId, RoleId = roleId, Username = "JPEREZ", DisplayName = "Juan Pérez", IsActive = true, CreatedAtUtc = CreatedAtUtc });
+        context.Add(new UserRecord { Id = userId, OrganizationId = organizationId, RoleId = roleId, Username = "JPEREZ", DisplayName = "Juan Pérez", PasswordHash = SyntheticPasswordHash, IsActive = true, CreatedAtUtc = CreatedAtUtc });
         await context.CommitAsync(CancellationToken.None);
         context.ChangeTracker.Clear();
 

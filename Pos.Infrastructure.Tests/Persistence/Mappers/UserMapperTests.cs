@@ -8,6 +8,8 @@ public class UserMapperTests
 {
     private static readonly DateTimeOffset CreatedAtUtc = new(2026, 1, 1, 8, 0, 0, TimeSpan.Zero);
 
+    private const string SyntheticPasswordHash = "v1$pbkdf2-sha256$210000$c2FsdC1zeW50aGV0aWM=$aGFzaC1zeW50aGV0aWM=";
+
     private static UserRecord CreateValidRecord() => new()
     {
         Id = Guid.NewGuid(),
@@ -15,6 +17,7 @@ public class UserMapperTests
         RoleId = Guid.NewGuid(),
         Username = "JPEREZ",
         DisplayName = "Juan Pérez",
+        PasswordHash = SyntheticPasswordHash,
         IsActive = true,
         CreatedAtUtc = CreatedAtUtc,
     };
@@ -42,6 +45,25 @@ public class UserMapperTests
 
         Assert.Equal(record.Username, user.Username);
         Assert.Equal(record.DisplayName, user.DisplayName);
+    }
+
+    [Fact]
+    public void ToDomainRehydratesPasswordHash()
+    {
+        var record = CreateValidRecord();
+
+        var user = UserMapper.ToDomain(record);
+
+        Assert.Equal(record.PasswordHash, user.PasswordHash.Value);
+    }
+
+    [Fact]
+    public void ToDomainWrapsEmptyPasswordHashInPersistenceDataException()
+    {
+        var record = CreateValidRecord();
+        record.PasswordHash = string.Empty;
+
+        Assert.Throws<PersistenceDataException>(() => UserMapper.ToDomain(record));
     }
 
     [Theory]
@@ -133,8 +155,20 @@ public class UserMapperTests
         Assert.Equal(user.RoleId.Value, record.RoleId);
         Assert.Equal(user.Username, record.Username);
         Assert.Equal(user.DisplayName, record.DisplayName);
+        Assert.Equal(user.PasswordHash.Value, record.PasswordHash);
         Assert.Equal(user.IsActive, record.IsActive);
         Assert.Equal(user.CreatedAtUtc, record.CreatedAtUtc);
+    }
+
+    [Fact]
+    public void ToRecordRoundTripsThroughToDomainPreservingPasswordHashExactly()
+    {
+        var original = CreateValidRecord();
+
+        var user = UserMapper.ToDomain(original);
+        var roundTripped = UserMapper.ToRecord(user);
+
+        Assert.Equal(original.PasswordHash, roundTripped.PasswordHash);
     }
 
     [Fact]
@@ -155,6 +189,20 @@ public class UserMapperTests
         UserMapper.UpdateRecord(user, record);
 
         Assert.Equal("Maria Lopez", record.DisplayName);
+    }
+
+    [Fact]
+    public void UpdateRecordUpdatesPasswordHash()
+    {
+        var record = CreateValidRecord();
+        var user = UserMapper.ToDomain(record);
+        var newHash = new Pos.Domain.Users.PasswordHash(
+            "v1$pbkdf2-sha256$210000$bmV3LXNhbHQ=$bmV3LWhhc2g=");
+        user.ChangePasswordHash(newHash);
+
+        UserMapper.UpdateRecord(user, record);
+
+        Assert.Equal(newHash.Value, record.PasswordHash);
     }
 
     [Fact]

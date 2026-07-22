@@ -12,6 +12,10 @@ internal static class SqliteSeedHelper
 {
     public static readonly DateTimeOffset DefaultTimestamp = new(2026, 1, 1, 8, 0, 0, TimeSpan.Zero);
 
+    // Hash sintético únicamente para satisfacer la invariante Domain en pruebas de persistencia;
+    // no es un hash PBKDF2 real y no debe usarse para autenticación.
+    private const string SyntheticPasswordHash = "v1$pbkdf2-sha256$210000$c2FsdC1zeW50aGV0aWM=$aGFzaC1zeW50aGV0aWM=";
+
     public sealed record CatalogGraph(
         Guid OrganizationId,
         Guid BranchId,
@@ -85,6 +89,7 @@ internal static class SqliteSeedHelper
             RoleId = role,
             Username = "JPEREZ",
             DisplayName = "Juan Pérez",
+            PasswordHash = SyntheticPasswordHash,
             IsActive = true,
             CreatedAtUtc = now,
         });

@@ -1313,6 +1313,9 @@ public class PosDbContextModelTests
         Assert.Equal(
             "display_name",
             entityType.FindProperty(nameof(UserRecord.DisplayName))!.GetColumnName());
+        Assert.Equal(
+            "password_hash",
+            entityType.FindProperty(nameof(UserRecord.PasswordHash))!.GetColumnName());
         Assert.Equal("is_active", entityType.FindProperty(nameof(UserRecord.IsActive))!.GetColumnName());
         Assert.Equal(
             "created_at_utc_ticks",
@@ -1326,6 +1329,26 @@ public class PosDbContextModelTests
 
         Assert.Equal(40, entityType.FindProperty(nameof(UserRecord.Username))!.GetMaxLength());
         Assert.Equal(120, entityType.FindProperty(nameof(UserRecord.DisplayName))!.GetMaxLength());
+        Assert.Equal(512, entityType.FindProperty(nameof(UserRecord.PasswordHash))!.GetMaxLength());
+    }
+
+    [Fact]
+    public void UserRecordPasswordHashShouldBeRequired()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
+
+        Assert.False(entityType.FindProperty(nameof(UserRecord.PasswordHash))!.IsNullable);
+    }
+
+    [Fact]
+    public void UserRecordPasswordHashShouldNotAppearInAnyIndex()
+    {
+        var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
+
+        var indexOnPasswordHash = entityType.GetIndexes().SingleOrDefault(index =>
+            index.Properties.Select(p => p.Name).Contains(nameof(UserRecord.PasswordHash)));
+
+        Assert.Null(indexOnPasswordHash);
     }
 
     [Fact]

@@ -12,6 +12,10 @@ public class AccessRegisterSessionSqliteIntegrationTests
     private static readonly DateTimeOffset OpenedAtUtc = new(2026, 1, 1, 9, 0, 0, TimeSpan.Zero);
     private static readonly DateTimeOffset ClosedAtUtc = new(2026, 1, 1, 20, 0, 0, TimeSpan.Zero);
 
+    // Hash sintético únicamente para satisfacer la invariante Domain; no es un hash PBKDF2 real
+    // y no debe usarse para autenticación.
+    private const string SyntheticPasswordHash = "v1$pbkdf2-sha256$210000$c2FsdC1zeW50aGV0aWM=$aGFzaC1zeW50aGV0aWM=";
+
     private static PosDbContext CreateContext(SqliteConnection connection)
     {
         var optionsBuilder = new DbContextOptionsBuilder<PosDbContext>();
@@ -220,6 +224,7 @@ public class AccessRegisterSessionSqliteIntegrationTests
             RoleId = roleId,
             Username = "JPEREZ",
             DisplayName = "Juan Pérez",
+            PasswordHash = SyntheticPasswordHash,
             IsActive = true,
             CreatedAtUtc = CreatedAtUtc,
         });
@@ -260,6 +265,7 @@ public class AccessRegisterSessionSqliteIntegrationTests
             RoleId = roleId,
             Username = "JPEREZ",
             DisplayName = "Juan Pérez",
+            PasswordHash = SyntheticPasswordHash,
             IsActive = true,
             CreatedAtUtc = CreatedAtUtc,
         });
@@ -298,6 +304,7 @@ public class AccessRegisterSessionSqliteIntegrationTests
             RoleId = roleId,
             Username = "JPEREZ",
             DisplayName = "Juan Pérez",
+            PasswordHash = SyntheticPasswordHash,
             IsActive = true,
             CreatedAtUtc = CreatedAtUtc,
         });
@@ -340,6 +347,7 @@ public class AccessRegisterSessionSqliteIntegrationTests
             RoleId = roleId,
             Username = "JPEREZ",
             DisplayName = "Juan Pérez",
+            PasswordHash = SyntheticPasswordHash,
             IsActive = true,
             CreatedAtUtc = CreatedAtUtc,
         });
@@ -400,6 +408,7 @@ public class AccessRegisterSessionSqliteIntegrationTests
             RoleId = roleId,
             Username = "JPEREZ",
             DisplayName = "Juan Pérez",
+            PasswordHash = SyntheticPasswordHash,
             IsActive = true,
             CreatedAtUtc = CreatedAtUtc,
         });
@@ -410,6 +419,7 @@ public class AccessRegisterSessionSqliteIntegrationTests
             RoleId = roleId,
             Username = "MLOPEZ",
             DisplayName = "Maria Lopez",
+            PasswordHash = SyntheticPasswordHash,
             IsActive = true,
             CreatedAtUtc = CreatedAtUtc,
         });
@@ -474,6 +484,7 @@ public class AccessRegisterSessionSqliteIntegrationTests
             RoleId = roleId,
             Username = "JPEREZ",
             DisplayName = "Juan Pérez",
+            PasswordHash = SyntheticPasswordHash,
             IsActive = true,
             CreatedAtUtc = CreatedAtUtc,
         });
@@ -523,6 +534,7 @@ public class AccessRegisterSessionSqliteIntegrationTests
             RoleId = roleId,
             Username = "JPEREZ",
             DisplayName = "Juan Pérez",
+            PasswordHash = SyntheticPasswordHash,
             IsActive = true,
             CreatedAtUtc = CreatedAtUtc,
         });
@@ -573,6 +585,7 @@ public class AccessRegisterSessionSqliteIntegrationTests
             RoleId = roleId,
             Username = "JPEREZ",
             DisplayName = "Juan Pérez",
+            PasswordHash = SyntheticPasswordHash,
             IsActive = true,
             CreatedAtUtc = CreatedAtUtc,
         });
@@ -583,6 +596,7 @@ public class AccessRegisterSessionSqliteIntegrationTests
             RoleId = roleId,
             Username = "MLOPEZ",
             DisplayName = "Maria Lopez",
+            PasswordHash = SyntheticPasswordHash,
             IsActive = true,
             CreatedAtUtc = CreatedAtUtc,
         });
@@ -676,6 +690,7 @@ public class AccessRegisterSessionSqliteIntegrationTests
             RoleId = roleId,
             Username = "JPEREZ",
             DisplayName = "Juan Pérez",
+            PasswordHash = SyntheticPasswordHash,
             IsActive = true,
             CreatedAtUtc = CreatedAtUtc,
         });
