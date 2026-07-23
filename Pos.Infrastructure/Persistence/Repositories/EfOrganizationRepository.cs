@@ -35,6 +35,17 @@ public sealed class EfOrganizationRepository : IOrganizationRepository
         return record is null ? null : OrganizationMapper.ToDomain(record);
     }
 
+    public async Task<IReadOnlyList<Organization>> GetAllAsync(CancellationToken cancellationToken)
+    {
+        var records = await _context.Organizations
+            .AsNoTracking()
+            .OrderBy(r => r.Name)
+            .ThenBy(r => r.Id)
+            .ToListAsync(cancellationToken);
+
+        return records.Select(OrganizationMapper.ToDomain).ToList();
+    }
+
     public async Task AddAsync(Organization organization, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(organization);

@@ -143,6 +143,65 @@ public class EfOrganizationRepositoryTests
         Assert.Equal(highestId, result!.Id.Value);
     }
 
+    // ---------- GetAllAsync ----------
+
+    [Fact]
+    public async Task GetAllAsyncReturnsEmptyWhenDatabaseIsEmpty()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var repository = new EfOrganizationRepository(context);
+
+        var result = await repository.GetAllAsync(CancellationToken.None);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetAllAsyncReturnsEveryOrganizationOrderedByNameThenId()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var lowestId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var highestId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+
+        context.Add(new OrganizationRecord { Id = highestId, Name = "Alpha", IsActive = true, CreatedAtUtc = CreatedAtUtc });
+        context.Add(new OrganizationRecord { Id = lowestId, Name = "Beta", IsActive = true, CreatedAtUtc = CreatedAtUtc });
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var repository = new EfOrganizationRepository(context);
+        var result = await repository.GetAllAsync(CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal(highestId, result[0].Id.Value);
+        Assert.Equal(lowestId, result[1].Id.Value);
+    }
+
+    [Fact]
+    public async Task GetAllAsyncDoesNotTrackTheReturnedRecords()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        context.Add(new OrganizationRecord { Id = Guid.NewGuid(), Name = "Acme", IsActive = true, CreatedAtUtc = CreatedAtUtc });
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var repository = new EfOrganizationRepository(context);
+        await repository.GetAllAsync(CancellationToken.None);
+
+        Assert.Empty(context.ChangeTracker.Entries<OrganizationRecord>());
+    }
+
     // ---------- AddAsync ----------
 
     [Fact]

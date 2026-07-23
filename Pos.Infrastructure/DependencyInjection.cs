@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Pos.Application.Bootstrap;
 using Pos.Application.Branches;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
@@ -45,6 +46,8 @@ public static class DependencyInjection
         services.AddScoped<IRoleRepository, EfRoleRepository>();
         services.AddScoped<IUserRepository, EfUserRepository>();
         services.AddScoped<IRegisterSessionRepository, EfRegisterSessionRepository>();
+
+        services.AddScoped<IInitialBusinessBootstrapService, InitialBusinessBootstrapService>();
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IClock, SystemClock>();
