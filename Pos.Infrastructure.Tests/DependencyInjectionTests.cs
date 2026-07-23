@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Pos.Application.Bootstrap;
 using Pos.Application.Branches;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
@@ -304,6 +305,67 @@ public class DependencyInjectionTests
         using (provider)
         {
             provider.GetRequiredService<IPasswordHasher>();
+
+            Assert.False(Directory.Exists(pathProvider.DataDirectory));
+            Assert.False(File.Exists(pathProvider.DatabasePath));
+        }
+    }
+
+    [Fact]
+    public void IInitialBusinessBootstrapServiceResolvesWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<InitialBusinessBootstrapService>(
+                scope.ServiceProvider.GetRequiredService<IInitialBusinessBootstrapService>());
+        }
+    }
+
+    [Fact]
+    public void IInitialBusinessBootstrapServiceIsScopedAndReusesTheSameInstanceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+
+            var first = scope.ServiceProvider.GetRequiredService<IInitialBusinessBootstrapService>();
+            var second = scope.ServiceProvider.GetRequiredService<IInitialBusinessBootstrapService>();
+
+            Assert.Same(first, second);
+        }
+    }
+
+    [Fact]
+    public void IInitialBusinessBootstrapServiceProducesDifferentInstancesAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var serviceA = scopeA.ServiceProvider.GetRequiredService<IInitialBusinessBootstrapService>();
+            var serviceB = scopeB.ServiceProvider.GetRequiredService<IInitialBusinessBootstrapService>();
+
+            Assert.NotSame(serviceA, serviceB);
+        }
+    }
+
+    [Fact]
+    public void ResolvingIInitialBusinessBootstrapServiceDoesNotCreateAnySqliteFile()
+    {
+        var (provider, pathProvider) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IInitialBusinessBootstrapService>();
 
             Assert.False(Directory.Exists(pathProvider.DataDirectory));
             Assert.False(File.Exists(pathProvider.DatabasePath));

@@ -9,5 +9,7 @@ public interface IOrganizationRepository
 
     Task<Organization?> GetFirstAsync(CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<Organization>> GetAllAsync(CancellationToken cancellationToken);
+
     Task AddAsync(Organization organization, CancellationToken cancellationToken);
 }
