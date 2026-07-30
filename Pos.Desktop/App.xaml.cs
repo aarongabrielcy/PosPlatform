@@ -2,6 +2,8 @@ using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Pos.Application.Installation;
+using Pos.Desktop.Setup;
 using Pos.Infrastructure;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Storage;
@@ -13,6 +15,8 @@ namespace Pos.Desktop
     /// </summary>
     public partial class App : System.Windows.Application
     {
+        private const int InvalidInstallationStateExitCode = -3;
+
         private IHost? _host;
         private IServiceScope? _mainWindowScope;
 
@@ -22,9 +26,18 @@ namespace Pos.Desktop
         [LoggerMessage(Level = LogLevel.Critical, Message = "Fallo al inicializar la base de datos local.")]
         private static partial void LogDatabaseInitializationFailure(ILogger logger, Exception exception);
 
+        [LoggerMessage(Level = LogLevel.Critical, Message = "La instalación local presenta un estado inconsistente ({InstallationState}).")]
+        private static partial void LogInvalidInstallationState(ILogger logger, InstallationState installationState);
+
         protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // Evita que WPF cierre la aplicación por ShutdownMode.OnLastWindowClose (el valor
+            // por defecto) cuando InitialSetupWindow —la única ventana abierta durante el
+            // arranque— se cierra antes de que MainWindow llegue a mostrarse. El flujo pasa a
+            // OnMainWindowClose recién en ShowMainWindow(), una vez que MainWindow existe.
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
             try
             {
@@ -38,6 +51,8 @@ namespace Pos.Desktop
                     {
                         services.AddPosInfrastructure();
                         services.AddTransient<MainWindow>();
+                        services.AddTransient<InitialSetupViewModel>();
+                        services.AddTransient<InitialSetupWindow>();
                     })
                     .Build();
 
@@ -53,10 +68,38 @@ namespace Pos.Desktop
                 var initializer = _mainWindowScope.ServiceProvider.GetRequiredService<ILocalDatabaseInitializer>();
                 await initializer.InitializeAsync();
 
-                var mainWindow = _mainWindowScope.ServiceProvider.GetRequiredService<MainWindow>();
+                var installationStateService = _mainWindowScope.ServiceProvider.GetRequiredService<IInstallationStateService>();
+                var installationState = await installationStateService.GetInstallationStateAsync(CancellationToken.None);
+                var initialDecision = StartupFlowCoordinator.DecideForInstallationState(installationState);
 
-                MainWindow = mainWindow;
-                mainWindow.Show();
+                if (initialDecision == StartupFlowDecision.ShutdownInvalidState)
+                {
+                    var logger = _mainWindowScope.ServiceProvider.GetRequiredService<ILogger<App>>();
+                    LogInvalidInstallationState(logger, installationState);
+
+                    MessageBox.Show(
+                        "La instalación local presenta un estado inconsistente. Consulte al soporte técnico.",
+                        "PosPlatform",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+
+                    Shutdown(InvalidInstallationStateExitCode);
+                    return;
+                }
+
+                if (initialDecision == StartupFlowDecision.ShowSetupDialog)
+                {
+                    var setupWindow = _mainWindowScope.ServiceProvider.GetRequiredService<InitialSetupWindow>();
+                    var setupCompleted = setupWindow.ShowDialog();
+
+                    if (StartupFlowCoordinator.DecideForSetupDialogResult(setupCompleted) == StartupFlowDecision.ShutdownCancelled)
+                    {
+                        Shutdown(0);
+                        return;
+                    }
+                }
+
+                ShowMainWindow();
             }
             catch (LocalDatabaseInitializationException ex)
             {
@@ -91,6 +134,23 @@ namespace Pos.Desktop
 
                 Shutdown(-1);
             }
+        }
+
+        // Único punto donde se resuelve y muestra MainWindow, para el flujo de setup completado
+        // y para InstallationState.Initialized. Debe ejecutarse mientras _mainWindowScope sigue
+        // vivo y antes de que cualquier código dependa de Application.MainWindow.
+        private void ShowMainWindow()
+        {
+            if (_mainWindowScope is null)
+            {
+                throw new InvalidOperationException("El scope principal no está disponible para mostrar MainWindow.");
+            }
+
+            var mainWindow = _mainWindowScope.ServiceProvider.GetRequiredService<MainWindow>();
+
+            MainWindow = mainWindow;
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
+            mainWindow.Show();
         }
 
         protected override void OnExit(ExitEventArgs e)

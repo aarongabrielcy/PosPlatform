@@ -1,6 +1,7 @@
 using Pos.Application.Branches;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
+using Pos.Application.Installation;
 using Pos.Application.Organizations;
 using Pos.Application.Registers;
 using Pos.Application.Security;
@@ -37,6 +38,7 @@ public sealed class InitialBusinessBootstrapService : IInitialBusinessBootstrapS
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly InstallationStructureInspector _structureInspector;
 
     public InitialBusinessBootstrapService(
         IOrganizationRepository organizationRepository,
@@ -56,6 +58,8 @@ public sealed class InitialBusinessBootstrapService : IInitialBusinessBootstrapS
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _passwordHasher = passwordHasher ?? throw new ArgumentNullException(nameof(passwordHasher));
+        _structureInspector = new InstallationStructureInspector(
+            _branchRepository, _registerRepository, _roleRepository, _userRepository);
     }
 
     public async Task<InitialBusinessBootstrapResult> BootstrapAsync(
@@ -92,57 +96,21 @@ public sealed class InitialBusinessBootstrapService : IInitialBusinessBootstrapS
         Organization organization,
         CancellationToken cancellationToken)
     {
-        var branches = await _branchRepository.GetByOrganizationAsync(organization.Id, cancellationToken);
+        var status = await _structureInspector.EvaluateAsync(organization.Id, cancellationToken);
 
-        if (branches.Count == 0)
+        return status switch
         {
-            throw new InitialBusinessBootstrapStateException(
-                $"Organization '{organization.Id}' no tiene ninguna Branch asociada.");
-        }
-
-        var hasBranchWithRegister = false;
-
-        foreach (var branch in branches)
-        {
-            var registers = await _registerRepository.GetByBranchAsync(branch.Id, cancellationToken);
-
-            if (registers.Count > 0)
-            {
-                hasBranchWithRegister = true;
-                break;
-            }
-        }
-
-        if (!hasBranchWithRegister)
-        {
-            throw new InitialBusinessBootstrapStateException(
-                $"Organization '{organization.Id}' no tiene ninguna Branch con al menos un Register.");
-        }
-
-        var roles = await _roleRepository.GetByOrganizationAsync(organization.Id, cancellationToken);
-        var administrativePermissions = GetAdministrativePermissions();
-
-        var administrativeRoleIds = roles
-            .Where(role => SatisfiesAdministrativePermissions(role, administrativePermissions))
-            .Select(role => role.Id)
-            .ToHashSet();
-
-        if (administrativeRoleIds.Count == 0)
-        {
-            throw new InitialBusinessBootstrapStateException(
-                $"Organization '{organization.Id}' no tiene ningún Role administrativo.");
-        }
-
-        var users = await _userRepository.GetByOrganizationAsync(organization.Id, cancellationToken);
-        var hasAdministratorUser = users.Any(user => administrativeRoleIds.Contains(user.RoleId));
-
-        if (!hasAdministratorUser)
-        {
-            throw new InitialBusinessBootstrapStateException(
-                $"Organization '{organization.Id}' tiene Role administrativo pero ningún User asignado.");
-        }
-
-        return InitialBusinessBootstrapResult.AlreadyInitialized();
+            OrganizationStructureStatus.Complete => InitialBusinessBootstrapResult.AlreadyInitialized(),
+            OrganizationStructureStatus.MissingBranch => throw new InitialBusinessBootstrapStateException(
+                $"Organization '{organization.Id}' no tiene ninguna Branch asociada."),
+            OrganizationStructureStatus.MissingRegisterInAnyBranch => throw new InitialBusinessBootstrapStateException(
+                $"Organization '{organization.Id}' no tiene ninguna Branch con al menos un Register."),
+            OrganizationStructureStatus.MissingAdministrativeRole => throw new InitialBusinessBootstrapStateException(
+                $"Organization '{organization.Id}' no tiene ningún Role administrativo."),
+            OrganizationStructureStatus.MissingAdministratorUser => throw new InitialBusinessBootstrapStateException(
+                $"Organization '{organization.Id}' tiene Role administrativo pero ningún User asignado."),
+            _ => throw new InvalidOperationException($"Estado estructural desconocido: {status}."),
+        };
     }
 
     private async Task<InitialBusinessBootstrapResult> CreateInstallationAsync(
@@ -151,29 +119,47 @@ public sealed class InitialBusinessBootstrapService : IInitialBusinessBootstrapS
     {
         var now = _clock.UtcNow;
 
-        var organizationId = OrganizationId.New();
-        var organization = new Organization(organizationId, request.OrganizationName, now);
+        OrganizationId organizationId;
+        Organization organization;
+        BranchId branchId;
+        Branch branch;
+        RegisterId registerId;
+        Register register;
+        RoleId roleId;
+        Role role;
+        UserId userId;
+        User user;
 
-        var branchId = BranchId.New();
-        var branch = new Branch(branchId, organizationId, request.BranchName, InitialBranchCode, now);
+        try
+        {
+            organizationId = OrganizationId.New();
+            organization = new Organization(organizationId, request.OrganizationName, now);
 
-        var registerId = RegisterId.New();
-        var register = new Register(registerId, branchId, request.RegisterName, InitialRegisterCode, now);
+            branchId = BranchId.New();
+            branch = new Branch(branchId, organizationId, request.BranchName, InitialBranchCode, now);
 
-        var roleId = RoleId.New();
-        var role = new Role(roleId, organizationId, AdministratorRoleName, now, GetAdministrativePermissions());
+            registerId = RegisterId.New();
+            register = new Register(registerId, branchId, request.RegisterName, InitialRegisterCode, now);
 
-        var passwordHash = new PasswordHash(_passwordHasher.Hash(request.AdministratorPassword));
+            roleId = RoleId.New();
+            role = new Role(roleId, organizationId, AdministratorRoleName, now, AdministrativePermissionSet.All());
 
-        var userId = UserId.New();
-        var user = new User(
-            userId,
-            organizationId,
-            roleId,
-            request.AdministratorUsername,
-            request.AdministratorDisplayName,
-            passwordHash,
-            now);
+            var passwordHash = new PasswordHash(_passwordHasher.Hash(request.AdministratorPassword));
+
+            userId = UserId.New();
+            user = new User(
+                userId,
+                organizationId,
+                roleId,
+                request.AdministratorUsername,
+                request.AdministratorDisplayName,
+                passwordHash,
+                now);
+        }
+        catch (DomainValidationException ex)
+        {
+            throw new InitialBusinessBootstrapValidationException(ex.Message, ex);
+        }
 
         await _organizationRepository.AddAsync(organization, cancellationToken);
         await _branchRepository.AddAsync(branch, cancellationToken);
@@ -185,17 +171,6 @@ public sealed class InitialBusinessBootstrapService : IInitialBusinessBootstrapS
 
         return InitialBusinessBootstrapResult.Created(organizationId, branchId, registerId, roleId, userId);
     }
-
-    private static bool SatisfiesAdministrativePermissions(
-        Role role, IReadOnlyCollection<Permission> administrativePermissions)
-    {
-        var rolePermissions = new HashSet<Permission>(role.Permissions);
-
-        return administrativePermissions.All(rolePermissions.Contains);
-    }
-
-    private static Permission[] GetAdministrativePermissions() =>
-        Enum.GetValues<Permission>().OrderBy(permission => permission).ToArray();
 
     private static void EnsureValidRequest(InitialBusinessBootstrapRequest request)
     {

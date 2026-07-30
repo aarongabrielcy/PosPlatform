@@ -347,13 +347,50 @@ public class InitialBusinessBootstrapServiceTests
         var service = BuildService(orgRepo, branchRepo, registerRepo, roleRepo, userRepo, unitOfWork, hasher);
 
         // Pasa la validación básica de Application (no es whitespace) pero viola la regla de
-        // Domain: Organization.Name exige entre 2 y 120 caracteres.
+        // Domain: Organization.Name exige entre 2 y 120 caracteres. El servicio traduce el
+        // rechazo de Domain a InitialBusinessBootstrapValidationException para que los
+        // consumidores (incluida la UI) no necesiten depender de Pos.Domain.
         var request = ValidRequest() with { OrganizationName = "A" };
 
-        await Assert.ThrowsAsync<DomainValidationException>(
+        var thrown = await Assert.ThrowsAsync<InitialBusinessBootstrapValidationException>(
             () => service.BootstrapAsync(request, CancellationToken.None));
 
+        Assert.IsType<DomainValidationException>(thrown.InnerException);
+        Assert.DoesNotContain("SuperSecret123", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("hash", thrown.Message, StringComparison.OrdinalIgnoreCase);
+
         AssertNothingWasWritten(orgRepo, branchRepo, registerRepo, roleRepo, userRepo, unitOfWork, hasher);
+    }
+
+    [Fact]
+    public async Task DomainRejectionOfAdministratorUsernameAfterHashingStillAddsNothing()
+    {
+        var orgRepo = new FakeOrganizationRepository();
+        var branchRepo = new FakeBranchRepository();
+        var registerRepo = new FakeRegisterRepository();
+        var roleRepo = new FakeRoleRepository();
+        var userRepo = new FakeUserRepository();
+        var unitOfWork = new FakeUnitOfWork();
+        var hasher = new FakePasswordHasher();
+        var service = BuildService(orgRepo, branchRepo, registerRepo, roleRepo, userRepo, unitOfWork, hasher);
+
+        // Falla en la construcción de User, después de calcular el hash: Domain exige un
+        // Username de entre 3 y 40 caracteres.
+        var request = ValidRequest() with { AdministratorUsername = "ab" };
+
+        var thrown = await Assert.ThrowsAsync<InitialBusinessBootstrapValidationException>(
+            () => service.BootstrapAsync(request, CancellationToken.None));
+
+        Assert.IsType<DomainValidationException>(thrown.InnerException);
+        Assert.DoesNotContain("SuperSecret123", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("hash", thrown.Message, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(0, orgRepo.AddCallCount);
+        Assert.Equal(0, branchRepo.AddCallCount);
+        Assert.Equal(0, registerRepo.AddCallCount);
+        Assert.Equal(0, roleRepo.AddCallCount);
+        Assert.Equal(0, userRepo.AddCallCount);
+        Assert.Equal(0, unitOfWork.CommitCallCount);
     }
 
     // ---------- G. Fallo SaveChanges ----------

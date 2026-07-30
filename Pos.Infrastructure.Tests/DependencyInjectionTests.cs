@@ -5,6 +5,7 @@ using Pos.Application.Bootstrap;
 using Pos.Application.Branches;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
+using Pos.Application.Installation;
 using Pos.Application.Inventory;
 using Pos.Application.Organizations;
 using Pos.Application.Products;
@@ -366,6 +367,67 @@ public class DependencyInjectionTests
         {
             using var scope = provider.CreateScope();
             scope.ServiceProvider.GetRequiredService<IInitialBusinessBootstrapService>();
+
+            Assert.False(Directory.Exists(pathProvider.DataDirectory));
+            Assert.False(File.Exists(pathProvider.DatabasePath));
+        }
+    }
+
+    [Fact]
+    public void IInstallationStateServiceResolvesWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<InstallationStateService>(
+                scope.ServiceProvider.GetRequiredService<IInstallationStateService>());
+        }
+    }
+
+    [Fact]
+    public void IInstallationStateServiceIsScopedAndReusesTheSameInstanceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+
+            var first = scope.ServiceProvider.GetRequiredService<IInstallationStateService>();
+            var second = scope.ServiceProvider.GetRequiredService<IInstallationStateService>();
+
+            Assert.Same(first, second);
+        }
+    }
+
+    [Fact]
+    public void IInstallationStateServiceProducesDifferentInstancesAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var serviceA = scopeA.ServiceProvider.GetRequiredService<IInstallationStateService>();
+            var serviceB = scopeB.ServiceProvider.GetRequiredService<IInstallationStateService>();
+
+            Assert.NotSame(serviceA, serviceB);
+        }
+    }
+
+    [Fact]
+    public void ResolvingIInstallationStateServiceDoesNotCreateAnySqliteFile()
+    {
+        var (provider, pathProvider) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IInstallationStateService>();
 
             Assert.False(Directory.Exists(pathProvider.DataDirectory));
             Assert.False(File.Exists(pathProvider.DatabasePath));

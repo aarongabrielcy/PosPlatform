@@ -12,6 +12,7 @@ public class ArchitectureDependencyTests
         "Pos.Application.Tests",
         "Pos.Architecture.Tests",
         "Pos.Desktop",
+        "Pos.Desktop.Tests",
         "Pos.Domain",
         "Pos.Domain.Tests",
         "Pos.Hardware",
@@ -34,6 +35,7 @@ public class ArchitectureDependencyTests
         ["Pos.Application.Tests"] = ["Pos.Application", "Pos.Domain"],
         ["Pos.Architecture.Tests"] = [],
         ["Pos.Infrastructure.Tests"] = ["Pos.Domain", "Pos.Infrastructure"],
+        ["Pos.Desktop.Tests"] = ["Pos.Application", "Pos.Desktop", "Pos.Domain"],
     };
 
     private static readonly string[] AllowedInfrastructurePackageReferences =
@@ -138,6 +140,7 @@ public class ArchitectureDependencyTests
     [InlineData("Pos.Application.Tests")]
     [InlineData("Pos.Architecture.Tests")]
     [InlineData("Pos.Infrastructure.Tests")]
+    [InlineData("Pos.Desktop.Tests")]
     public void TestProjectShouldHaveExactlyExpectedReferences(string projectName)
     {
         AssertReferencesMatch(projectName, ExpectedTestReferences[projectName]);
