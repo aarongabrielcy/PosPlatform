@@ -3,7 +3,10 @@ using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Pos.Application.Authentication;
 using Pos.Application.Installation;
+using Pos.Desktop.Login;
+using Pos.Desktop.Main;
 using Pos.Desktop.Setup;
 using Pos.Infrastructure;
 using Pos.Infrastructure.Storage;
@@ -46,8 +49,11 @@ public class DependencyInjectionTests
         services.AddSingleton<IApplicationPathProvider>(pathProvider);
 
         services.AddTransient<MainWindow>();
+        services.AddTransient<MainWindowViewModel>();
         services.AddTransient<InitialSetupViewModel>();
         services.AddTransient<InitialSetupWindow>();
+        services.AddTransient<LoginViewModel>();
+        services.AddTransient<LoginWindow>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions
         {
@@ -146,6 +152,66 @@ public class DependencyInjectionTests
         });
 
     [Fact]
+    public void LoginViewModelResolvesWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<LoginViewModel>());
+        });
+
+    [Fact]
+    public void LoginWindowResolvesWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<LoginWindow>());
+        });
+
+    [Fact]
+    public void MainWindowViewModelResolvesWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<MainWindowViewModel>());
+        });
+
+    [Fact]
+    public void LoginWindowAndMainWindowProduceNewInstancesEachResolution() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            var firstLoginWindow = scope.ServiceProvider.GetRequiredService<LoginWindow>();
+            var secondLoginWindow = scope.ServiceProvider.GetRequiredService<LoginWindow>();
+            Assert.NotSame(firstLoginWindow, secondLoginWindow);
+        });
+
+    [Fact]
+    public void MainWindowAndLoginWindowShareTheSameSingletonCurrentUserSessionAcrossScopes() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+
+            var rootSession = provider.GetRequiredService<ICurrentUserSession>();
+
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var sessionA = scopeA.ServiceProvider.GetRequiredService<ICurrentUserSession>();
+            var sessionB = scopeB.ServiceProvider.GetRequiredService<ICurrentUserSession>();
+
+            Assert.Same(rootSession, sessionA);
+            Assert.Same(rootSession, sessionB);
+        });
+
+    [Fact]
     public void ResolvingDesktopWindowsDoesNotCreateAnySqliteFile() =>
         RunOnStaThread(() =>
         {
@@ -155,6 +221,7 @@ public class DependencyInjectionTests
 
             scope.ServiceProvider.GetRequiredService<MainWindow>();
             scope.ServiceProvider.GetRequiredService<InitialSetupWindow>();
+            scope.ServiceProvider.GetRequiredService<LoginWindow>();
 
             Assert.False(Directory.Exists(pathProvider.DataDirectory));
             Assert.False(File.Exists(pathProvider.DatabasePath));

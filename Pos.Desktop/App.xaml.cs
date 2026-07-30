@@ -2,7 +2,10 @@ using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Pos.Application.Authentication;
 using Pos.Application.Installation;
+using Pos.Desktop.Login;
+using Pos.Desktop.Main;
 using Pos.Desktop.Setup;
 using Pos.Infrastructure;
 using Pos.Infrastructure.Persistence.Initialization;
@@ -34,9 +37,10 @@ namespace Pos.Desktop
             base.OnStartup(e);
 
             // Evita que WPF cierre la aplicación por ShutdownMode.OnLastWindowClose (el valor
-            // por defecto) cuando InitialSetupWindow —la única ventana abierta durante el
-            // arranque— se cierra antes de que MainWindow llegue a mostrarse. El flujo pasa a
-            // OnMainWindowClose recién en ShowMainWindow(), una vez que MainWindow existe.
+            // por defecto) cuando InitialSetupWindow o LoginWindow —únicas ventanas abiertas
+            // durante el arranque— se cierran antes de que MainWindow llegue a mostrarse. El
+            // flujo pasa a OnMainWindowClose recién en ShowMainWindow(), una vez que MainWindow
+            // existe.
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
             try
@@ -51,8 +55,11 @@ namespace Pos.Desktop
                     {
                         services.AddPosInfrastructure();
                         services.AddTransient<MainWindow>();
+                        services.AddTransient<MainWindowViewModel>();
                         services.AddTransient<InitialSetupViewModel>();
                         services.AddTransient<InitialSetupWindow>();
+                        services.AddTransient<LoginViewModel>();
+                        services.AddTransient<LoginWindow>();
                     })
                     .Build();
 
@@ -99,7 +106,7 @@ namespace Pos.Desktop
                     }
                 }
 
-                ShowMainWindow();
+                RunLoginFlow();
             }
             catch (LocalDatabaseInitializationException ex)
             {
@@ -136,9 +143,34 @@ namespace Pos.Desktop
             }
         }
 
-        // Único punto donde se resuelve y muestra MainWindow, para el flujo de setup completado
-        // y para InstallationState.Initialized. Debe ejecutarse mientras _mainWindowScope sigue
-        // vivo y antes de que cualquier código dependa de Application.MainWindow.
+        // Muestra LoginWindow y decide el siguiente paso según su resultado. Se invoca al
+        // arrancar (tras setup/Initialized) y de nuevo tras cada logout, siempre reutilizando
+        // _mainWindowScope: nunca se crea un segundo Host ni un segundo scope principal.
+        private void RunLoginFlow()
+        {
+            if (_mainWindowScope is null)
+            {
+                throw new InvalidOperationException("El scope principal no está disponible para mostrar LoginWindow.");
+            }
+
+            var loginWindow = _mainWindowScope.ServiceProvider.GetRequiredService<LoginWindow>();
+            var loginDialogResult = loginWindow.ShowDialog();
+
+            if (StartupFlowCoordinator.DecideForLoginDialogResult(loginDialogResult) == StartupFlowDecision.ShutdownCancelled)
+            {
+                var session = _mainWindowScope.ServiceProvider.GetRequiredService<ICurrentUserSession>();
+                session.Clear();
+
+                Shutdown(0);
+                return;
+            }
+
+            ShowMainWindow();
+        }
+
+        // Único punto donde se resuelve y muestra MainWindow, para el flujo de login exitoso
+        // (inicial o tras logout). Debe ejecutarse mientras _mainWindowScope sigue vivo y antes
+        // de que cualquier código dependa de Application.MainWindow.
         private void ShowMainWindow()
         {
             if (_mainWindowScope is null)
@@ -147,14 +179,37 @@ namespace Pos.Desktop
             }
 
             var mainWindow = _mainWindowScope.ServiceProvider.GetRequiredService<MainWindow>();
+            mainWindow.LogoutRequested += OnMainWindowLogoutRequested;
 
             MainWindow = mainWindow;
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             mainWindow.Show();
         }
 
+        // Logout sin reiniciar el proceso: cierra la MainWindow actual (la sesión ya fue
+        // limpiada por MainWindowViewModel antes de emitir el evento) y vuelve a mostrar
+        // LoginWindow. No se crea un segundo Host ni un segundo scope principal.
+        private void OnMainWindowLogoutRequested(object? sender, EventArgs e)
+        {
+            if (sender is MainWindow mainWindow)
+            {
+                mainWindow.LogoutRequested -= OnMainWindowLogoutRequested;
+            }
+
+            // Evita que cerrar la MainWindow actual dispare el apagado automático de
+            // ShutdownMode.OnMainWindowClose antes de que LoginWindow pueda mostrarse.
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+            (sender as MainWindow)?.Close();
+
+            RunLoginFlow();
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
+            var session = _mainWindowScope?.ServiceProvider.GetService<ICurrentUserSession>();
+            session?.Clear();
+
             _mainWindowScope?.Dispose();
 
             if (_host is not null)

@@ -11,9 +11,9 @@ public class StartupFlowCoordinatorTests
             StartupFlowCoordinator.DecideForInstallationState(InstallationState.RequiresSetup));
 
     [Fact]
-    public void InitializedDecidesToShowMainWindowDirectly() =>
+    public void InitializedDecidesToShowLoginNotMainWindow() =>
         Assert.Equal(
-            StartupFlowDecision.ShowMainWindow,
+            StartupFlowDecision.ShowLogin,
             StartupFlowCoordinator.DecideForInstallationState(InstallationState.Initialized));
 
     [Fact]
@@ -23,9 +23,9 @@ public class StartupFlowCoordinatorTests
             StartupFlowCoordinator.DecideForInstallationState(InstallationState.InvalidState));
 
     [Fact]
-    public void SuccessfulSetupDialogDecidesToShowMainWindow() =>
+    public void SuccessfulSetupDialogDecidesToShowLoginNotMainWindow() =>
         Assert.Equal(
-            StartupFlowDecision.ShowMainWindow,
+            StartupFlowDecision.ShowLogin,
             StartupFlowCoordinator.DecideForSetupDialogResult(true));
 
     [Fact]
@@ -39,4 +39,22 @@ public class StartupFlowCoordinatorTests
         Assert.Equal(
             StartupFlowDecision.ShutdownCancelled,
             StartupFlowCoordinator.DecideForSetupDialogResult(null));
+
+    [Fact]
+    public void SuccessfulLoginDialogDecidesToShowMainWindow() =>
+        Assert.Equal(
+            StartupFlowDecision.ShowMainWindowAfterLogin,
+            StartupFlowCoordinator.DecideForLoginDialogResult(true));
+
+    [Fact]
+    public void CancelledLoginDialogDecidesToShutdown() =>
+        Assert.Equal(
+            StartupFlowDecision.ShutdownCancelled,
+            StartupFlowCoordinator.DecideForLoginDialogResult(false));
+
+    [Fact]
+    public void ClosedLoginDialogWithoutResultDecidesToShutdown() =>
+        Assert.Equal(
+            StartupFlowDecision.ShutdownCancelled,
+            StartupFlowCoordinator.DecideForLoginDialogResult(null));
 }
