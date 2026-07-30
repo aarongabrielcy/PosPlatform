@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Pos.Application.Bootstrap;
 using Pos.Application.Common.Time;
+using Pos.Domain.Common.Exceptions;
 using Pos.Domain.Security;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Records;
@@ -314,6 +315,34 @@ public class InitialBusinessBootstrapIntegrationTests
             () => service.BootstrapAsync(ValidRequest(), CancellationToken.None));
 
         context.ChangeTracker.Clear();
+        Assert.Equal(0, await context.Set<UserRecord>().CountAsync());
+    }
+
+    // ---------- C.1 Rechazo de Domain durante la creación ----------
+
+    [Fact]
+    public async Task DomainRejectionDuringCreationSurfacesAsBootstrapValidationExceptionAndAddsNothing()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var service = CreateService(context);
+
+        // Viola la regla de Domain: Organization.Name exige entre 2 y 120 caracteres.
+        var request = ValidRequest() with { OrganizationName = "A" };
+
+        var thrown = await Assert.ThrowsAsync<InitialBusinessBootstrapValidationException>(
+            () => service.BootstrapAsync(request, CancellationToken.None));
+
+        Assert.IsType<DomainValidationException>(thrown.InnerException);
+
+        context.ChangeTracker.Clear();
+        Assert.Equal(0, await context.Set<OrganizationRecord>().CountAsync());
+        Assert.Equal(0, await context.Set<BranchRecord>().CountAsync());
+        Assert.Equal(0, await context.Set<RegisterRecord>().CountAsync());
+        Assert.Equal(0, await context.Set<RoleRecord>().CountAsync());
         Assert.Equal(0, await context.Set<UserRecord>().CountAsync());
     }
 

@@ -5,6 +5,7 @@ using Pos.Application.Bootstrap;
 using Pos.Application.Branches;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
+using Pos.Application.Installation;
 using Pos.Application.Inventory;
 using Pos.Application.Organizations;
 using Pos.Application.Products;
@@ -48,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<IRegisterSessionRepository, EfRegisterSessionRepository>();
 
         services.AddScoped<IInitialBusinessBootstrapService, InitialBusinessBootstrapService>();
+        services.AddScoped<IInstallationStateService, InstallationStateService>();
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IClock, SystemClock>();
