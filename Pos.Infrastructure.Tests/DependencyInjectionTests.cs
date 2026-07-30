@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Pos.Application.Authentication;
 using Pos.Application.Bootstrap;
 using Pos.Application.Branches;
 using Pos.Application.Common.Persistence;
@@ -14,6 +15,7 @@ using Pos.Application.Registers;
 using Pos.Application.Sales;
 using Pos.Application.Security;
 using Pos.Application.Users;
+using Pos.Infrastructure.Authentication;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Persistence.Repositories;
@@ -428,6 +430,102 @@ public class DependencyInjectionTests
         {
             using var scope = provider.CreateScope();
             scope.ServiceProvider.GetRequiredService<IInstallationStateService>();
+
+            Assert.False(Directory.Exists(pathProvider.DataDirectory));
+            Assert.False(File.Exists(pathProvider.DatabasePath));
+        }
+    }
+
+    [Fact]
+    public void IAuthenticationServiceResolvesAuthenticationServiceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<AuthenticationService>(scope.ServiceProvider.GetRequiredService<IAuthenticationService>());
+        }
+    }
+
+    [Fact]
+    public void IAuthenticationServiceIsScopedAndReusesTheSameInstanceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+
+            var first = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
+            var second = scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
+
+            Assert.Same(first, second);
+        }
+    }
+
+    [Fact]
+    public void IAuthenticationServiceProducesDifferentInstancesAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var serviceA = scopeA.ServiceProvider.GetRequiredService<IAuthenticationService>();
+            var serviceB = scopeB.ServiceProvider.GetRequiredService<IAuthenticationService>();
+
+            Assert.NotSame(serviceA, serviceB);
+        }
+    }
+
+    [Fact]
+    public void ICurrentUserSessionResolvesInMemoryCurrentUserSessionAsSingletonAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            var rootSession = provider.GetRequiredService<ICurrentUserSession>();
+
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var sessionA = scopeA.ServiceProvider.GetRequiredService<ICurrentUserSession>();
+            var sessionB = scopeB.ServiceProvider.GetRequiredService<ICurrentUserSession>();
+
+            Assert.IsType<InMemoryCurrentUserSession>(rootSession);
+            Assert.Same(rootSession, sessionA);
+            Assert.Same(rootSession, sessionB);
+        }
+    }
+
+    [Fact]
+    public void ICurrentUserSessionWriterResolvesTheSameSingletonInstanceAsICurrentUserSession()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            var session = provider.GetRequiredService<ICurrentUserSession>();
+            var writer = provider.GetRequiredService<ICurrentUserSessionWriter>();
+
+            Assert.Same(session, writer);
+        }
+    }
+
+    [Fact]
+    public void ResolvingAuthenticationServicesDoesNotCreateAnySqliteFile()
+    {
+        var (provider, pathProvider) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
+            provider.GetRequiredService<ICurrentUserSession>();
 
             Assert.False(Directory.Exists(pathProvider.DataDirectory));
             Assert.False(File.Exists(pathProvider.DatabasePath));

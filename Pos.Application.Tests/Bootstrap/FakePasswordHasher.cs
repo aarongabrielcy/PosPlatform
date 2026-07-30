@@ -6,6 +6,8 @@ internal sealed class FakePasswordHasher : IPasswordHasher
 {
     public int HashCallCount { get; private set; }
 
+    public int VerifyCallCount { get; private set; }
+
     public string Hash(string password)
     {
         HashCallCount++;
@@ -13,5 +15,10 @@ internal sealed class FakePasswordHasher : IPasswordHasher
         return $"hashed:{password}";
     }
 
-    public bool Verify(string password, string passwordHash) => passwordHash == $"hashed:{password}";
+    public bool Verify(string password, string passwordHash)
+    {
+        VerifyCallCount++;
+
+        return passwordHash == $"hashed:{password}";
+    }
 }

@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Pos.Application.Authentication;
 using Pos.Application.Bootstrap;
 using Pos.Application.Branches;
 using Pos.Application.Common.Persistence;
@@ -14,6 +15,7 @@ using Pos.Application.Registers;
 using Pos.Application.Sales;
 using Pos.Application.Security;
 using Pos.Application.Users;
+using Pos.Infrastructure.Authentication;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Persistence.Repositories;
@@ -50,6 +52,11 @@ public static class DependencyInjection
 
         services.AddScoped<IInitialBusinessBootstrapService, InitialBusinessBootstrapService>();
         services.AddScoped<IInstallationStateService, InstallationStateService>();
+
+        services.AddSingleton<InMemoryCurrentUserSession>();
+        services.AddSingleton<ICurrentUserSession>(sp => sp.GetRequiredService<InMemoryCurrentUserSession>());
+        services.AddSingleton<ICurrentUserSessionWriter>(sp => sp.GetRequiredService<InMemoryCurrentUserSession>());
+        services.AddScoped<IAuthenticationService, AuthenticationService>();
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IClock, SystemClock>();
