@@ -19,6 +19,7 @@ using Pos.Infrastructure.Authentication;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Persistence.Repositories;
+using Pos.Infrastructure.RegisterSessions;
 using Pos.Infrastructure.Security;
 using Pos.Infrastructure.Storage;
 using Pos.Infrastructure.Time;
@@ -526,6 +527,88 @@ public class DependencyInjectionTests
             using var scope = provider.CreateScope();
             scope.ServiceProvider.GetRequiredService<IAuthenticationService>();
             provider.GetRequiredService<ICurrentUserSession>();
+
+            Assert.False(Directory.Exists(pathProvider.DataDirectory));
+            Assert.False(File.Exists(pathProvider.DatabasePath));
+        }
+    }
+
+    [Fact]
+    public void IRegisterSessionServiceResolvesRegisterSessionServiceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<RegisterSessionService>(scope.ServiceProvider.GetRequiredService<IRegisterSessionService>());
+        }
+    }
+
+    [Fact]
+    public void IRegisterSessionServiceIsScopedAndReusesTheSameInstanceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+
+            var first = scope.ServiceProvider.GetRequiredService<IRegisterSessionService>();
+            var second = scope.ServiceProvider.GetRequiredService<IRegisterSessionService>();
+
+            Assert.Same(first, second);
+        }
+    }
+
+    [Fact]
+    public void IRegisterSessionServiceProducesDifferentInstancesAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var serviceA = scopeA.ServiceProvider.GetRequiredService<IRegisterSessionService>();
+            var serviceB = scopeB.ServiceProvider.GetRequiredService<IRegisterSessionService>();
+
+            Assert.NotSame(serviceA, serviceB);
+        }
+    }
+
+    [Fact]
+    public void ICurrentRegisterSessionResolvesInMemoryCurrentRegisterSessionAsSingletonAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            var rootSession = provider.GetRequiredService<ICurrentRegisterSession>();
+
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var sessionA = scopeA.ServiceProvider.GetRequiredService<ICurrentRegisterSession>();
+            var sessionB = scopeB.ServiceProvider.GetRequiredService<ICurrentRegisterSession>();
+
+            Assert.IsType<InMemoryCurrentRegisterSession>(rootSession);
+            Assert.Same(rootSession, sessionA);
+            Assert.Same(rootSession, sessionB);
+        }
+    }
+
+    [Fact]
+    public void ResolvingRegisterSessionServicesDoesNotCreateAnySqliteFile()
+    {
+        var (provider, pathProvider) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IRegisterSessionService>();
+            provider.GetRequiredService<ICurrentRegisterSession>();
 
             Assert.False(Directory.Exists(pathProvider.DataDirectory));
             Assert.False(File.Exists(pathProvider.DatabasePath));

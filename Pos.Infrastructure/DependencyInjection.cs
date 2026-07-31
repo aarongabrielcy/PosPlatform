@@ -19,6 +19,7 @@ using Pos.Infrastructure.Authentication;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Persistence.Repositories;
+using Pos.Infrastructure.RegisterSessions;
 using Pos.Infrastructure.Security;
 using Pos.Infrastructure.Storage;
 using Pos.Infrastructure.Time;
@@ -57,6 +58,10 @@ public static class DependencyInjection
         services.AddSingleton<ICurrentUserSession>(sp => sp.GetRequiredService<InMemoryCurrentUserSession>());
         services.AddSingleton<ICurrentUserSessionWriter>(sp => sp.GetRequiredService<InMemoryCurrentUserSession>());
         services.AddScoped<IAuthenticationService, AuthenticationService>();
+
+        services.AddSingleton<InMemoryCurrentRegisterSession>();
+        services.AddSingleton<ICurrentRegisterSession>(sp => sp.GetRequiredService<InMemoryCurrentRegisterSession>());
+        services.AddScoped<IRegisterSessionService, RegisterSessionService>();
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IClock, SystemClock>();

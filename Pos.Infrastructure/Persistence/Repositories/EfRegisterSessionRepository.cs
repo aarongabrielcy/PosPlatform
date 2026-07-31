@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Pos.Application.Common.Exceptions;
 using Pos.Application.RegisterSessions;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.RegisterSessions;
@@ -29,7 +30,7 @@ public sealed class EfRegisterSessionRepository : IRegisterSessionRepository
     {
         var records = await _context.RegisterSessions
             .AsNoTracking()
-            .Where(r => r.RegisterId == registerId.Value && r.Status == RegisterSessionStatus.Open)
+            .Where(r => r.RegisterId == registerId.Value && r.Status == Pos.Domain.RegisterSessions.RegisterSessionStatus.Open)
             .Take(2)
             .ToListAsync(cancellationToken);
 
@@ -54,5 +55,20 @@ public sealed class EfRegisterSessionRepository : IRegisterSessionRepository
         var record = RegisterSessionMapper.ToRecord(registerSession);
 
         await _context.RegisterSessions.AddAsync(record, cancellationToken);
+    }
+
+    public async Task UpdateAsync(RegisterSession registerSession, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(registerSession);
+
+        var record = await _context.RegisterSessions
+            .SingleOrDefaultAsync(r => r.Id == registerSession.Id.Value, cancellationToken);
+
+        if (record is null)
+        {
+            throw new EntityNotFoundException("RegisterSession", registerSession.Id.ToString());
+        }
+
+        RegisterSessionMapper.UpdateRecord(registerSession, record);
     }
 }

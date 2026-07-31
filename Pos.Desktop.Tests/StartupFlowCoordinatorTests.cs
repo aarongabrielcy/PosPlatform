@@ -1,4 +1,6 @@
 using Pos.Application.Installation;
+using Pos.Application.RegisterSessions;
+using Pos.Desktop.RegisterSessions;
 
 namespace Pos.Desktop.Tests;
 
@@ -41,9 +43,9 @@ public class StartupFlowCoordinatorTests
             StartupFlowCoordinator.DecideForSetupDialogResult(null));
 
     [Fact]
-    public void SuccessfulLoginDialogDecidesToShowMainWindow() =>
+    public void SuccessfulLoginDialogDecidesToContinueAfterLoginNotMainWindow() =>
         Assert.Equal(
-            StartupFlowDecision.ShowMainWindowAfterLogin,
+            StartupFlowDecision.ContinueAfterLogin,
             StartupFlowCoordinator.DecideForLoginDialogResult(true));
 
     [Fact]
@@ -57,4 +59,40 @@ public class StartupFlowCoordinatorTests
         Assert.Equal(
             StartupFlowDecision.ShutdownCancelled,
             StartupFlowCoordinator.DecideForLoginDialogResult(null));
+
+    [Fact]
+    public void OpenRegisterSessionStatusDecidesToShowMainWindow() =>
+        Assert.Equal(
+            StartupFlowDecision.ShowMainWindowAfterLogin,
+            StartupFlowCoordinator.DecideForRegisterSessionStatus(RegisterSessionStatus.Open));
+
+    [Fact]
+    public void NoneOpenRegisterSessionStatusDecidesToShowOpenRegisterSessionDialog() =>
+        Assert.Equal(
+            StartupFlowDecision.ShowOpenRegisterSessionDialog,
+            StartupFlowCoordinator.DecideForRegisterSessionStatus(RegisterSessionStatus.NoneOpen));
+
+    [Fact]
+    public void InvalidRegisterSessionStatusDecidesToShutdown() =>
+        Assert.Equal(
+            StartupFlowDecision.ShutdownInvalidRegisterSessionState,
+            StartupFlowCoordinator.DecideForRegisterSessionStatus(RegisterSessionStatus.InvalidState));
+
+    [Fact]
+    public void RegisterOpenedResultDecidesToShowMainWindow() =>
+        Assert.Equal(
+            StartupFlowDecision.ShowMainWindowAfterLogin,
+            StartupFlowCoordinator.DecideForOpenRegisterSessionResult(OpenRegisterSessionWindowResult.RegisterOpened));
+
+    [Fact]
+    public void LogoutRequestedResultDecidesToShowLoginNotShutdown() =>
+        Assert.Equal(
+            StartupFlowDecision.ShowLogin,
+            StartupFlowCoordinator.DecideForOpenRegisterSessionResult(OpenRegisterSessionWindowResult.LogoutRequested));
+
+    [Fact]
+    public void ExitRequestedResultDecidesToShutdown() =>
+        Assert.Equal(
+            StartupFlowDecision.ShutdownCancelled,
+            StartupFlowCoordinator.DecideForOpenRegisterSessionResult(OpenRegisterSessionWindowResult.ExitRequested));
 }
