@@ -5,8 +5,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Pos.Application.Authentication;
 using Pos.Application.Installation;
+using Pos.Application.RegisterSessions;
 using Pos.Desktop.Login;
 using Pos.Desktop.Main;
+using Pos.Desktop.RegisterSessions;
 using Pos.Desktop.Setup;
 using Pos.Infrastructure;
 using Pos.Infrastructure.Storage;
@@ -54,6 +56,10 @@ public class DependencyInjectionTests
         services.AddTransient<InitialSetupWindow>();
         services.AddTransient<LoginViewModel>();
         services.AddTransient<LoginWindow>();
+        services.AddTransient<OpenRegisterSessionViewModel>();
+        services.AddTransient<OpenRegisterSessionWindow>();
+        services.AddTransient<CloseRegisterSessionViewModel>();
+        services.AddTransient<CloseRegisterSessionWindow>();
 
         return services.BuildServiceProvider(new ServiceProviderOptions
         {
@@ -194,6 +200,60 @@ public class DependencyInjectionTests
         });
 
     [Fact]
+    public void OpenRegisterSessionWindowResolvesWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<OpenRegisterSessionWindow>());
+        });
+
+    [Fact]
+    public void CloseRegisterSessionWindowResolvesWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<CloseRegisterSessionWindow>());
+        });
+
+    [Fact]
+    public void OpenAndCloseRegisterSessionWindowsProduceNewInstancesEachResolution() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            var firstOpenWindow = scope.ServiceProvider.GetRequiredService<OpenRegisterSessionWindow>();
+            var secondOpenWindow = scope.ServiceProvider.GetRequiredService<OpenRegisterSessionWindow>();
+            Assert.NotSame(firstOpenWindow, secondOpenWindow);
+
+            var firstCloseWindow = scope.ServiceProvider.GetRequiredService<CloseRegisterSessionWindow>();
+            var secondCloseWindow = scope.ServiceProvider.GetRequiredService<CloseRegisterSessionWindow>();
+            Assert.NotSame(firstCloseWindow, secondCloseWindow);
+        });
+
+    [Fact]
+    public void MainWindowAndLoginWindowShareTheSameSingletonCurrentRegisterSessionAcrossScopes() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+
+            var rootSession = provider.GetRequiredService<ICurrentRegisterSession>();
+
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var sessionA = scopeA.ServiceProvider.GetRequiredService<ICurrentRegisterSession>();
+            var sessionB = scopeB.ServiceProvider.GetRequiredService<ICurrentRegisterSession>();
+
+            Assert.Same(rootSession, sessionA);
+            Assert.Same(rootSession, sessionB);
+        });
+
+    [Fact]
     public void MainWindowAndLoginWindowShareTheSameSingletonCurrentUserSessionAcrossScopes() =>
         RunOnStaThread(() =>
         {
@@ -222,6 +282,8 @@ public class DependencyInjectionTests
             scope.ServiceProvider.GetRequiredService<MainWindow>();
             scope.ServiceProvider.GetRequiredService<InitialSetupWindow>();
             scope.ServiceProvider.GetRequiredService<LoginWindow>();
+            scope.ServiceProvider.GetRequiredService<OpenRegisterSessionWindow>();
+            scope.ServiceProvider.GetRequiredService<CloseRegisterSessionWindow>();
 
             Assert.False(Directory.Exists(pathProvider.DataDirectory));
             Assert.False(File.Exists(pathProvider.DatabasePath));

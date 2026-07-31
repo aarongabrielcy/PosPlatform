@@ -42,7 +42,7 @@ public class MainWindowTests
         RunOnStaThread(() =>
         {
             var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
-            var viewModel = new MainWindowViewModel(session);
+            var viewModel = new MainWindowViewModel(session, new FakeCurrentRegisterSession());
             var window = new MainWindow(viewModel);
 
             Assert.Same(viewModel, window.DataContext);
@@ -60,7 +60,7 @@ public class MainWindowTests
         RunOnStaThread(() =>
         {
             var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
-            var viewModel = new MainWindowViewModel(session);
+            var viewModel = new MainWindowViewModel(session, new FakeCurrentRegisterSession());
             var window = new MainWindow(viewModel);
 
             var binding = BindingOperations.GetBinding(window.LogoutButton, Button.CommandProperty);

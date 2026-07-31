@@ -10,4 +10,6 @@ public interface IRegisterSessionRepository
     Task<RegisterSession?> GetOpenByRegisterAsync(RegisterId registerId, CancellationToken cancellationToken);
 
     Task AddAsync(RegisterSession registerSession, CancellationToken cancellationToken);
+
+    Task UpdateAsync(RegisterSession registerSession, CancellationToken cancellationToken);
 }

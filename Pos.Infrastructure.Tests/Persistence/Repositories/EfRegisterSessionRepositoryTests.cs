@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Pos.Application.Common.Exceptions;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Common.ValueObjects;
 using Pos.Domain.RegisterSessions;
@@ -218,6 +219,93 @@ public class EfRegisterSessionRepositoryTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => repository.GetOpenByRegisterAsync(new RegisterId(registerId), CancellationToken.None));
+    }
+
+    // ---------- UpdateAsync ----------
+
+    [Fact]
+    public async Task UpdateAsyncPersistsTheCloseOfAPreviouslyOpenSession()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var (registerId, userId) = await SeedRegisterAndUserAsync(context);
+        var repository = new EfRegisterSessionRepository(context);
+        var session = CreateOpenSession(new RegisterId(registerId), new UserId(userId));
+
+        await repository.AddAsync(session, CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        session.Close(new UserId(userId), new Money(100m, "MXN"), new Money(105m, "MXN"), ClosedAtUtc);
+        await repository.UpdateAsync(session, CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var reloaded = await repository.GetByIdAsync(session.Id, CancellationToken.None);
+
+        Assert.NotNull(reloaded);
+        Assert.Equal(RegisterSessionStatus.Closed, reloaded!.Status);
+        Assert.Equal(ClosedAtUtc, reloaded.ClosedAtUtc);
+        Assert.Equal(userId, reloaded.ClosedByUserId!.Value.Value);
+        Assert.Equal(5m, reloaded.CashDifference!.Amount);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncDoesNotPersistBeforeCommit()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var (registerId, userId) = await SeedRegisterAndUserAsync(context);
+        var repository = new EfRegisterSessionRepository(context);
+        var session = CreateOpenSession(new RegisterId(registerId), new UserId(userId));
+
+        await repository.AddAsync(session, CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        session.Close(new UserId(userId), new Money(100m, "MXN"), new Money(100m, "MXN"), ClosedAtUtc);
+        await repository.UpdateAsync(session, CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var reloaded = await repository.GetByIdAsync(session.Id, CancellationToken.None);
+
+        Assert.Equal(RegisterSessionStatus.Open, reloaded!.Status);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncThrowsWhenTheSessionDoesNotExist()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var (registerId, userId) = await SeedRegisterAndUserAsync(context);
+        var repository = new EfRegisterSessionRepository(context);
+        var session = CreateOpenSession(new RegisterId(registerId), new UserId(userId));
+        session.Close(new UserId(userId), new Money(100m, "MXN"), new Money(100m, "MXN"), ClosedAtUtc);
+
+        await Assert.ThrowsAsync<EntityNotFoundException>(
+            () => repository.UpdateAsync(session, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task UpdateAsyncRejectsNullSession()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var repository = new EfRegisterSessionRepository(context);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => repository.UpdateAsync(null!, CancellationToken.None));
     }
 
     // ---------- AddAsync ----------
