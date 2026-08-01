@@ -37,6 +37,19 @@ public sealed class EfProductRepository : IProductRepository
         return record is null ? null : ProductMapper.ToDomain(record);
     }
 
+    public async Task<Product?> GetByBarcodeAsync(OrganizationId organizationId, Barcode barcode, CancellationToken cancellationToken)
+    {
+        var barcodeValue = barcode.Value;
+
+        var record = await _context.Products
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                r => r.OrganizationId == organizationId.Value && r.Barcode == barcodeValue,
+                cancellationToken);
+
+        return record is null ? null : ProductMapper.ToDomain(record);
+    }
+
     public async Task<IReadOnlyList<Product>> GetByOrganizationAsync(
         OrganizationId organizationId, CancellationToken cancellationToken)
     {
@@ -45,6 +58,43 @@ public sealed class EfProductRepository : IProductRepository
             .Where(r => r.OrganizationId == organizationId.Value)
             .OrderBy(r => r.Name)
             .ThenBy(r => r.Id)
+            .ToListAsync(cancellationToken);
+
+        return records.Select(ProductMapper.ToDomain).ToList();
+    }
+
+    public async Task<IReadOnlyList<Product>> SearchActiveAsync(
+        OrganizationId organizationId, string searchTerm, int maxResults, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(searchTerm);
+
+        if (maxResults <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxResults), maxResults, "maxResults debe ser mayor que cero.");
+        }
+
+        var term = searchTerm.Trim();
+        var upperTerm = term.ToUpperInvariant();
+
+        // La coincidencia exacta de Sku/Barcode se prioriza (rango 0), luego el nombre que
+        // comienza con el término (rango 1) y por último cualquier otra coincidencia parcial de
+        // Sku/Barcode/Name (rango 2). Sku ya se almacena normalizado en mayúsculas.
+        var records = await _context.Products
+            .AsNoTracking()
+            .Where(r => r.OrganizationId == organizationId.Value && r.IsActive)
+            .Where(r =>
+                r.Sku.Contains(upperTerm) ||
+                (r.Barcode != null && r.Barcode.Contains(term)) ||
+                EF.Functions.Like(r.Name, $"%{term}%"))
+            .OrderBy(r =>
+                r.Sku == upperTerm || r.Barcode == term
+                    ? 0
+                    : EF.Functions.Like(r.Name, $"{term}%")
+                        ? 1
+                        : 2)
+            .ThenBy(r => r.Name)
+            .ThenBy(r => r.Id)
+            .Take(maxResults)
             .ToListAsync(cancellationToken);
 
         return records.Select(ProductMapper.ToDomain).ToList();

@@ -5,8 +5,10 @@ using Microsoft.Extensions.Logging;
 using Pos.Application.Authentication;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
+using Pos.Application.SalesCart;
 using Pos.Desktop.Login;
 using Pos.Desktop.Main;
+using Pos.Desktop.Products;
 using Pos.Desktop.RegisterSessions;
 using Pos.Desktop.Setup;
 using Pos.Infrastructure;
@@ -70,6 +72,8 @@ namespace Pos.Desktop
                         services.AddTransient<OpenRegisterSessionWindow>();
                         services.AddTransient<CloseRegisterSessionViewModel>();
                         services.AddTransient<CloseRegisterSessionWindow>();
+                        services.AddTransient<CreateProductViewModel>();
+                        services.AddTransient<CreateProductWindow>();
                     })
                     .Build();
 
@@ -253,9 +257,11 @@ namespace Pos.Desktop
             Shutdown(0);
         }
 
-        // Limpieza defensiva de ambas sesiones: ICurrentRegisterSession normalmente ya está vacía
-        // en este punto (no hay caja abierta que bloquear), pero se limpia igual para no dejar
-        // estado residual antes de volver a LoginWindow o de terminar el proceso.
+        // Limpieza defensiva de ambas sesiones y del carrito: ICurrentRegisterSession normalmente
+        // ya está vacía en este punto (no hay caja abierta que bloquear) y el carrito ya debería
+        // estarlo también (MainWindowViewModel bloquea el cierre de caja mientras tenga líneas),
+        // pero se limpia igual para no dejar estado residual antes de volver a LoginWindow o de
+        // terminar el proceso.
         private void ClearRegisterAndUserSessions()
         {
             if (_mainWindowScope is null)
@@ -263,6 +269,7 @@ namespace Pos.Desktop
                 return;
             }
 
+            _mainWindowScope.ServiceProvider.GetRequiredService<ICurrentSalesCart>().Clear();
             _mainWindowScope.ServiceProvider.GetRequiredService<ICurrentRegisterSession>().Clear();
             _mainWindowScope.ServiceProvider.GetRequiredService<ICurrentUserSession>().Clear();
         }
@@ -281,6 +288,7 @@ namespace Pos.Desktop
             var mainWindow = _mainWindowScope.ServiceProvider.GetRequiredService<MainWindow>();
             mainWindow.LogoutRequested += OnMainWindowLogoutRequested;
             mainWindow.CloseRegisterRequested += OnMainWindowCloseRegisterRequested;
+            mainWindow.NewProductRequested += OnMainWindowNewProductRequested;
 
             MainWindow = mainWindow;
             ShutdownMode = ShutdownMode.OnMainWindowClose;
@@ -289,14 +297,20 @@ namespace Pos.Desktop
 
         // Logout sin reiniciar el proceso: cierra la MainWindow actual (la sesión ya fue
         // limpiada por MainWindowViewModel antes de emitir el evento) y vuelve a mostrar
-        // LoginWindow. No se crea un segundo Host ni un segundo scope principal.
+        // LoginWindow. No se crea un segundo Host ni un segundo scope principal. El logout ya
+        // está bloqueado mientras la caja siga abierta (y por lo tanto mientras el carrito pueda
+        // tener líneas), pero se limpia el carrito igual, de forma defensiva, sin depender de esa
+        // garantía transitiva.
         private async void OnMainWindowLogoutRequested(object? sender, EventArgs e)
         {
             if (sender is MainWindow mainWindow)
             {
                 mainWindow.LogoutRequested -= OnMainWindowLogoutRequested;
                 mainWindow.CloseRegisterRequested -= OnMainWindowCloseRegisterRequested;
+                mainWindow.NewProductRequested -= OnMainWindowNewProductRequested;
             }
+
+            _mainWindowScope?.ServiceProvider.GetService<ICurrentSalesCart>()?.Clear();
 
             // Evita que cerrar la MainWindow actual dispare el apagado automático de
             // ShutdownMode.OnMainWindowClose antes de que LoginWindow pueda mostrarse.
@@ -327,8 +341,13 @@ namespace Pos.Desktop
                 return;
             }
 
+            // MainWindowViewModel ya bloquea este flujo mientras el carrito tenga líneas; se
+            // limpia igual, de forma defensiva, sin depender únicamente de esa garantía.
+            _mainWindowScope.ServiceProvider.GetRequiredService<ICurrentSalesCart>().Clear();
+
             mainWindow.LogoutRequested -= OnMainWindowLogoutRequested;
             mainWindow.CloseRegisterRequested -= OnMainWindowCloseRegisterRequested;
+            mainWindow.NewProductRequested -= OnMainWindowNewProductRequested;
 
             // Evita que cerrar la MainWindow actual dispare el apagado automático de
             // ShutdownMode.OnMainWindowClose antes de que OpenRegisterSessionWindow pueda mostrarse.
@@ -339,8 +358,30 @@ namespace Pos.Desktop
             await RunOpenRegisterSessionFlowAsync();
         }
 
+        // Muestra CreateProductWindow sobre MainWindow (que permanece abierta como owner). Si el
+        // producto se crea con éxito, actualiza el buscador de MainWindow con el SKU recién
+        // creado; cancelar o cerrar con la X no tiene efecto alguno.
+        private void OnMainWindowNewProductRequested(object? sender, EventArgs e)
+        {
+            if (_mainWindowScope is null || sender is not MainWindow mainWindow)
+            {
+                return;
+            }
+
+            var createProductWindow = _mainWindowScope.ServiceProvider.GetRequiredService<CreateProductWindow>();
+            createProductWindow.Owner = mainWindow;
+            var dialogResult = createProductWindow.ShowDialog();
+
+            if (dialogResult == true && createProductWindow.CreatedSku is { } sku)
+            {
+                mainWindow.ApplyProductCreated(sku);
+            }
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
+            _mainWindowScope?.ServiceProvider.GetService<ICurrentSalesCart>()?.Clear();
+
             var session = _mainWindowScope?.ServiceProvider.GetService<ICurrentUserSession>();
             session?.Clear();
 

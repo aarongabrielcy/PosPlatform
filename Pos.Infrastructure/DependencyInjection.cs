@@ -10,9 +10,11 @@ using Pos.Application.Installation;
 using Pos.Application.Inventory;
 using Pos.Application.Organizations;
 using Pos.Application.Products;
+using Pos.Application.Products.CreateProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Registers;
 using Pos.Application.Sales;
+using Pos.Application.SalesCart;
 using Pos.Application.Security;
 using Pos.Application.Users;
 using Pos.Infrastructure.Authentication;
@@ -20,6 +22,7 @@ using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Persistence.Repositories;
 using Pos.Infrastructure.RegisterSessions;
+using Pos.Infrastructure.SalesCart;
 using Pos.Infrastructure.Security;
 using Pos.Infrastructure.Storage;
 using Pos.Infrastructure.Time;
@@ -50,6 +53,7 @@ public static class DependencyInjection
         services.AddScoped<IRoleRepository, EfRoleRepository>();
         services.AddScoped<IUserRepository, EfUserRepository>();
         services.AddScoped<IRegisterSessionRepository, EfRegisterSessionRepository>();
+        services.AddScoped<ICreateProductService, CreateProductService>();
 
         services.AddScoped<IInitialBusinessBootstrapService, InitialBusinessBootstrapService>();
         services.AddScoped<IInstallationStateService, InstallationStateService>();
@@ -62,6 +66,10 @@ public static class DependencyInjection
         services.AddSingleton<InMemoryCurrentRegisterSession>();
         services.AddSingleton<ICurrentRegisterSession>(sp => sp.GetRequiredService<InMemoryCurrentRegisterSession>());
         services.AddScoped<IRegisterSessionService, RegisterSessionService>();
+
+        services.AddSingleton<InMemoryCurrentSalesCart>();
+        services.AddSingleton<ICurrentSalesCart>(sp => sp.GetRequiredService<InMemoryCurrentSalesCart>());
+        services.AddScoped<ISalesCartService, SalesCartService>();
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IClock, SystemClock>();

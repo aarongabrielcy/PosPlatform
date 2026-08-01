@@ -10,9 +10,11 @@ using Pos.Application.Installation;
 using Pos.Application.Inventory;
 using Pos.Application.Organizations;
 using Pos.Application.Products;
+using Pos.Application.Products.CreateProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Registers;
 using Pos.Application.Sales;
+using Pos.Application.SalesCart;
 using Pos.Application.Security;
 using Pos.Application.Users;
 using Pos.Infrastructure.Authentication;
@@ -20,6 +22,7 @@ using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Persistence.Repositories;
 using Pos.Infrastructure.RegisterSessions;
+using Pos.Infrastructure.SalesCart;
 using Pos.Infrastructure.Security;
 using Pos.Infrastructure.Storage;
 using Pos.Infrastructure.Time;
@@ -612,6 +615,133 @@ public class DependencyInjectionTests
 
             Assert.False(Directory.Exists(pathProvider.DataDirectory));
             Assert.False(File.Exists(pathProvider.DatabasePath));
+        }
+    }
+
+    [Fact]
+    public void ISalesCartServiceResolvesSalesCartServiceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<SalesCartService>(scope.ServiceProvider.GetRequiredService<ISalesCartService>());
+        }
+    }
+
+    [Fact]
+    public void ISalesCartServiceIsScopedAndReusesTheSameInstanceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+
+            var first = scope.ServiceProvider.GetRequiredService<ISalesCartService>();
+            var second = scope.ServiceProvider.GetRequiredService<ISalesCartService>();
+
+            Assert.Same(first, second);
+        }
+    }
+
+    [Fact]
+    public void ISalesCartServiceProducesDifferentInstancesAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var serviceA = scopeA.ServiceProvider.GetRequiredService<ISalesCartService>();
+            var serviceB = scopeB.ServiceProvider.GetRequiredService<ISalesCartService>();
+
+            Assert.NotSame(serviceA, serviceB);
+        }
+    }
+
+    [Fact]
+    public void ICurrentSalesCartResolvesInMemoryCurrentSalesCartAsSingletonAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            var rootCart = provider.GetRequiredService<ICurrentSalesCart>();
+
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var cartA = scopeA.ServiceProvider.GetRequiredService<ICurrentSalesCart>();
+            var cartB = scopeB.ServiceProvider.GetRequiredService<ICurrentSalesCart>();
+
+            Assert.IsType<InMemoryCurrentSalesCart>(rootCart);
+            Assert.Same(rootCart, cartA);
+            Assert.Same(rootCart, cartB);
+        }
+    }
+
+    [Fact]
+    public void ResolvingSalesCartServicesDoesNotCreateAnySqliteFile()
+    {
+        var (provider, pathProvider) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            scope.ServiceProvider.GetRequiredService<ISalesCartService>();
+            provider.GetRequiredService<ICurrentSalesCart>();
+
+            Assert.False(Directory.Exists(pathProvider.DataDirectory));
+            Assert.False(File.Exists(pathProvider.DatabasePath));
+        }
+    }
+
+    [Fact]
+    public void ICreateProductServiceResolvesCreateProductServiceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<CreateProductService>(scope.ServiceProvider.GetRequiredService<ICreateProductService>());
+        }
+    }
+
+    [Fact]
+    public void ICreateProductServiceIsScopedAndReusesTheSameInstanceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+
+            var first = scope.ServiceProvider.GetRequiredService<ICreateProductService>();
+            var second = scope.ServiceProvider.GetRequiredService<ICreateProductService>();
+
+            Assert.Same(first, second);
+        }
+    }
+
+    [Fact]
+    public void ICreateProductServiceProducesDifferentInstancesAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var serviceA = scopeA.ServiceProvider.GetRequiredService<ICreateProductService>();
+            var serviceB = scopeB.ServiceProvider.GetRequiredService<ICreateProductService>();
+
+            Assert.NotSame(serviceA, serviceB);
         }
     }
 

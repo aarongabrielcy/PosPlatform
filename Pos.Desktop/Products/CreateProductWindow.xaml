@@ -1,0 +1,108 @@
+<Window x:Class="Pos.Desktop.Products.CreateProductWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Nuevo producto — PosPlatform"
+        Height="560" Width="480"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    </Window.Resources>
+    <Grid Margin="32" IsEnabled="{Binding IsNotBusy}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                    Text="Nuevo producto"
+                    FontSize="20" FontWeight="Bold" Margin="0,0,0,16" />
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="160" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Label Grid.Row="0" Grid.Column="0" Content="SKU" Target="{Binding ElementName=SkuTextBox}" />
+            <TextBox x:Name="SkuTextBox" Grid.Row="0" Grid.Column="1"
+                    Margin="0,6" Padding="6,4" TabIndex="0"
+                    Text="{Binding Sku, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Label Grid.Row="1" Grid.Column="0" Content="Código de barras" Target="{Binding ElementName=BarcodeTextBox}" />
+            <TextBox x:Name="BarcodeTextBox" Grid.Row="1" Grid.Column="1"
+                    Margin="0,6" Padding="6,4" TabIndex="1"
+                    Text="{Binding Barcode, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Label Grid.Row="2" Grid.Column="0" Content="Nombre" Target="{Binding ElementName=NameTextBox}" />
+            <TextBox x:Name="NameTextBox" Grid.Row="2" Grid.Column="1"
+                    Margin="0,6" Padding="6,4" TabIndex="2"
+                    Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Label Grid.Row="3" Grid.Column="0" Content="Descripción" Target="{Binding ElementName=DescriptionTextBox}" />
+            <TextBox x:Name="DescriptionTextBox" Grid.Row="3" Grid.Column="1"
+                    Margin="0,6" Padding="6,4" TabIndex="3"
+                    Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Label Grid.Row="4" Grid.Column="0" Content="Precio de venta" Target="{Binding ElementName=SalePriceTextBox}" />
+            <TextBox x:Name="SalePriceTextBox" Grid.Row="4" Grid.Column="1"
+                    Margin="0,6" Padding="6,4" TabIndex="4"
+                    Text="{Binding SalePriceText, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Label Grid.Row="5" Grid.Column="0" Content="Costo" Target="{Binding ElementName=CostTextBox}" />
+            <TextBox x:Name="CostTextBox" Grid.Row="5" Grid.Column="1"
+                    Margin="0,6" Padding="6,4" TabIndex="5"
+                    Text="{Binding CostText, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Label Grid.Row="6" Grid.Column="0" Content="Controla inventario" />
+            <CheckBox x:Name="TracksInventoryCheckBox" Grid.Row="6" Grid.Column="1"
+                    Margin="0,10" VerticalAlignment="Center" TabIndex="6"
+                    IsChecked="{Binding TracksInventory}" />
+
+            <Label Grid.Row="7" Grid.Column="0" Content="Existencia inicial" Target="{Binding ElementName=InitialQuantityTextBox}" />
+            <TextBox x:Name="InitialQuantityTextBox" Grid.Row="7" Grid.Column="1"
+                    Margin="0,6" Padding="6,4" TabIndex="7"
+                    IsEnabled="{Binding TracksInventory}"
+                    Text="{Binding InitialQuantityText, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Label Grid.Row="8" Grid.Column="0" Content="Punto de reorden" Target="{Binding ElementName=ReorderPointTextBox}" />
+            <TextBox x:Name="ReorderPointTextBox" Grid.Row="8" Grid.Column="1"
+                    Margin="0,6" Padding="6,4" TabIndex="8"
+                    IsEnabled="{Binding TracksInventory}"
+                    Text="{Binding ReorderPointText, UpdateSourceTrigger=PropertyChanged}" />
+        </Grid>
+
+        <TextBlock Grid.Row="2" Text="{Binding GeneralError}"
+                    Foreground="Red" TextWrapping="Wrap" Margin="0,12,0,0" />
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,8,0,0"
+                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}">
+            <ProgressBar IsIndeterminate="True" Width="160" Height="6" VerticalAlignment="Center" />
+            <TextBlock Text="Guardando…" Margin="8,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Cancelar" Width="120" Margin="0,0,8,0" TabIndex="10"
+                    Command="{Binding CancelCommand}" />
+            <Button Content="Guardar" Width="120" TabIndex="9"
+                    IsDefault="True" Command="{Binding SaveCommand}" />
+        </StackPanel>
+    </Grid>
+</Window>
