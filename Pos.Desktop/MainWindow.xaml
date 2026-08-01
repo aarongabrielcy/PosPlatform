@@ -4,8 +4,12 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Pos.Desktop"
+        xmlns:converters="clr-namespace:Pos.Desktop.Common"
         mc:Ignorable="d"
-        Title="PosPlatform" Height="450" Width="800">
+        Title="PosPlatform" Height="700" Width="1100">
+    <Window.Resources>
+        <converters:ProductAvailabilityStatusConverter x:Key="ProductAvailabilityStatusConverter" />
+    </Window.Resources>
     <DockPanel>
         <Border DockPanel.Dock="Top" Padding="12,8" Background="#F0F0F0" BorderBrush="#D0D0D0" BorderThickness="0,0,0,1">
             <Grid>
@@ -60,9 +64,172 @@
             </Grid>
         </Border>
 
-        <TextBlock DockPanel.Dock="Top" Text="{Binding LogoutBlockedMessage}"
-                    Foreground="Red" Margin="12,8" TextWrapping="Wrap" />
+        <StackPanel DockPanel.Dock="Top" Margin="12,8">
+            <TextBlock Text="{Binding LogoutBlockedMessage}" Foreground="Red" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding CloseRegisterBlockedMessage}" Foreground="Red" TextWrapping="Wrap" />
+        </StackPanel>
 
-        <Grid />
+        <Grid Margin="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="180" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBox x:Name="SearchTextBox" Grid.Column="0" Padding="6" VerticalContentAlignment="Center"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
+                    <TextBox.InputBindings>
+                        <KeyBinding Key="Return" Command="{Binding SearchCommand}" />
+                    </TextBox.InputBindings>
+                </TextBox>
+
+                <Button x:Name="SearchButton" Grid.Column="1" Content="Buscar" Padding="14,6" Margin="8,0,0,0"
+                        Command="{Binding SearchCommand}" />
+            </Grid>
+
+            <TextBlock x:Name="SearchStatusText" Grid.Row="1" Margin="0,0,0,8" TextWrapping="Wrap"
+                       Text="{Binding SearchStatusMessage}" />
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8">
+                <Button x:Name="AddSelectedProductButton" Content="Agregar" Padding="14,6"
+                        Command="{Binding AddSelectedProductCommand}" />
+                <Button x:Name="NewProductButton" Content="Nuevo producto" Padding="14,6" Margin="8,0,0,0"
+                        Command="{Binding NewProductCommand}" />
+            </StackPanel>
+
+            <DataGrid x:Name="SearchResultsGrid" Grid.Row="3" Margin="0,0,0,8"
+                      ItemsSource="{Binding SearchResults}" SelectedItem="{Binding SelectedSearchResult}"
+                      AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                      SelectionMode="Single" SelectionUnit="FullRow">
+                <DataGrid.InputBindings>
+                    <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding AddSelectedProductCommand}" />
+                </DataGrid.InputBindings>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120" />
+                    <DataGridTextColumn Header="Producto" Binding="{Binding Name}" Width="*" />
+                    <DataGridTextColumn Header="Precio" Width="110">
+                        <DataGridTextColumn.Binding>
+                            <MultiBinding StringFormat="{}{0:N2} {1}">
+                                <Binding Path="UnitPriceAmount" />
+                                <Binding Path="Currency" />
+                            </MultiBinding>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Existencia" Binding="{Binding AvailableQuantity}" Width="100" />
+                    <DataGridCheckBoxColumn Header="Disponible" Binding="{Binding IsAvailable, Mode=OneWay}" Width="90" />
+                    <DataGridTextColumn Header="Estado" Width="150"
+                                         Binding="{Binding Converter={StaticResource ProductAvailabilityStatusConverter}, Mode=OneWay}" />
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <TextBlock x:Name="CartErrorText" Grid.Row="4" Margin="0,0,0,8" TextWrapping="Wrap"
+                       Foreground="Red" Text="{Binding GeneralError}" />
+
+            <DataGrid x:Name="CartGrid" Grid.Row="5" Margin="0,0,0,8"
+                      ItemsSource="{Binding CartLines}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Producto" Binding="{Binding ProductName}" Width="*" />
+                    <DataGridTextColumn Header="Precio" Width="100">
+                        <DataGridTextColumn.Binding>
+                            <MultiBinding StringFormat="{}{0:N2} {1}">
+                                <Binding Path="UnitPriceAmount" />
+                                <Binding Path="Currency" />
+                            </MultiBinding>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+                    <DataGridTemplateColumn Header="Cantidad" Width="140">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <Button Content="-" Width="26"
+                                            Command="{Binding DataContext.DecreaseQuantityCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding}" />
+                                    <TextBlock Text="{Binding Quantity}" Width="40" TextAlignment="Center" VerticalAlignment="Center" />
+                                    <Button Content="+" Width="26"
+                                            Command="{Binding DataContext.IncreaseQuantityCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Subtotal" Width="100">
+                        <DataGridTextColumn.Binding>
+                            <MultiBinding StringFormat="{}{0:N2} {1}">
+                                <Binding Path="LineSubtotalAmount" />
+                                <Binding Path="Currency" />
+                            </MultiBinding>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Impuesto" Width="100">
+                        <DataGridTextColumn.Binding>
+                            <MultiBinding StringFormat="{}{0:N2} {1}">
+                                <Binding Path="LineTaxAmount" />
+                                <Binding Path="Currency" />
+                            </MultiBinding>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Total" Width="100">
+                        <DataGridTextColumn.Binding>
+                            <MultiBinding StringFormat="{}{0:N2} {1}">
+                                <Binding Path="LineTotalAmount" />
+                                <Binding Path="Currency" />
+                            </MultiBinding>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+                    <DataGridTemplateColumn Header="Eliminar" Width="90">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="Eliminar"
+                                        Command="{Binding DataContext.RemoveLineCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Grid Grid.Row="6" Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <StackPanel Margin="0,0,24,0">
+                        <TextBlock Text="Subtotal" FontWeight="Bold" />
+                        <TextBlock Text="{Binding Subtotal}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,24,0">
+                        <TextBlock Text="Descuento" FontWeight="Bold" />
+                        <TextBlock Text="{Binding DiscountTotal}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,24,0">
+                        <TextBlock Text="Impuesto" FontWeight="Bold" />
+                        <TextBlock Text="{Binding TaxTotal}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,24,0">
+                        <TextBlock Text="Total" FontWeight="Bold" />
+                        <TextBlock Text="{Binding GrandTotal}" FontSize="16" FontWeight="Bold" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="CancelSaleButton" Content="Cancelar venta" Padding="12,6" Margin="0,0,8,0"
+                            Command="{Binding CancelSaleCommand}" />
+                    <Button x:Name="CheckoutButton" Content="Cobrar" Padding="12,6" IsEnabled="False"
+                            ToolTip="El cobro se implementará en la siguiente fase." />
+                </StackPanel>
+            </Grid>
+        </Grid>
     </DockPanel>
 </Window>

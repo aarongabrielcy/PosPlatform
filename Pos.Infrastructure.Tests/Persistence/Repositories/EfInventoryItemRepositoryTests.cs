@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Pos.Application.Common.Exceptions;
 using Pos.Domain.Common.Identifiers;
+using Pos.Domain.Inventory;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Records;
 using Pos.Infrastructure.Persistence.Repositories;
@@ -159,6 +160,75 @@ public class EfInventoryItemRepositoryTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => repository.GetByBranchAndProductAsync(BranchId.New(), ProductId.New(), cancelledSource.Token));
+    }
+
+    // ---------- AddAsync ----------
+
+    [Fact]
+    public async Task AddAsyncDoesNotPersistBeforeCommit()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var branchId = BranchId.New();
+        var productId = ProductId.New();
+        await SqliteSeedHelper.SeedOrganizationBranchAndProductAsync(
+            context, CreatedAtUtc, branchId: branchId.Value, productId: productId.Value);
+
+        var item = new InventoryItem(
+            InventoryItemId.New(), branchId, productId, 10m, 2m, CreatedAtUtc);
+        var repository = new EfInventoryItemRepository(context);
+
+        await repository.AddAsync(item, CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var exists = await context.Set<InventoryItemRecord>().AnyAsync(r => r.Id == item.Id.Value);
+        Assert.False(exists);
+    }
+
+    [Fact]
+    public async Task AddAsyncPersistsInventoryItemAfterCommit()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var branchId = BranchId.New();
+        var productId = ProductId.New();
+        await SqliteSeedHelper.SeedOrganizationBranchAndProductAsync(
+            context, CreatedAtUtc, branchId: branchId.Value, productId: productId.Value);
+
+        var item = new InventoryItem(
+            InventoryItemId.New(), branchId, productId, 10m, 2m, CreatedAtUtc);
+        var repository = new EfInventoryItemRepository(context);
+
+        await repository.AddAsync(item, CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var reloaded = await repository.GetByBranchAndProductAsync(branchId, productId, CancellationToken.None);
+        Assert.NotNull(reloaded);
+        Assert.Equal(10m, reloaded!.Quantity);
+        Assert.Equal(2m, reloaded.ReorderPoint);
+    }
+
+    [Fact]
+    public async Task AddAsyncRejectsNullInventoryItem()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var repository = new EfInventoryItemRepository(context);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => repository.AddAsync(null!, CancellationToken.None));
     }
 
     [Fact]

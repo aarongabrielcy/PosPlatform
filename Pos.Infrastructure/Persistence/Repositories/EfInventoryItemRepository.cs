@@ -30,6 +30,15 @@ public sealed class EfInventoryItemRepository : IInventoryItemRepository
         return record is null ? null : InventoryItemMapper.ToDomain(record);
     }
 
+    public async Task AddAsync(InventoryItem inventoryItem, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(inventoryItem);
+
+        var record = InventoryItemMapper.ToRecord(inventoryItem);
+
+        await _context.InventoryItems.AddAsync(record, cancellationToken);
+    }
+
     public async Task UpdateAsync(InventoryItem inventoryItem, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(inventoryItem);

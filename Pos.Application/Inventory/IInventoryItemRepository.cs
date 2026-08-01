@@ -10,5 +10,7 @@ public interface IInventoryItemRepository
         ProductId productId,
         CancellationToken cancellationToken);
 
+    Task AddAsync(InventoryItem inventoryItem, CancellationToken cancellationToken);
+
     Task UpdateAsync(InventoryItem inventoryItem, CancellationToken cancellationToken);
 }

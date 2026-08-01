@@ -18,6 +18,8 @@ namespace Pos.Desktop
             _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             _viewModel.LogoutRequested += OnViewModelLogoutRequested;
             _viewModel.CloseRegisterRequested += OnViewModelCloseRegisterRequested;
+            _viewModel.CancelSaleConfirmationRequested += OnViewModelCancelSaleConfirmationRequested;
+            _viewModel.NewProductRequested += OnViewModelNewProductRequested;
 
             DataContext = _viewModel;
 
@@ -29,11 +31,35 @@ namespace Pos.Desktop
 
         public event EventHandler? CloseRegisterRequested;
 
+        public event EventHandler? NewProductRequested;
+
         private void OnViewModelLogoutRequested(object? sender, EventArgs e) =>
             LogoutRequested?.Invoke(this, EventArgs.Empty);
 
         private void OnViewModelCloseRegisterRequested(object? sender, EventArgs e) =>
             CloseRegisterRequested?.Invoke(this, EventArgs.Empty);
+
+        private void OnViewModelNewProductRequested(object? sender, EventArgs e) =>
+            NewProductRequested?.Invoke(this, EventArgs.Empty);
+
+        // Llamado desde App.xaml.cs tras crear un producto exitosamente en CreateProductWindow.
+        public void ApplyProductCreated(string sku) => _viewModel.ApplyProductCreated(sku);
+
+        // El ViewModel nunca muestra ventanas ni MessageBox: solo pide confirmación. Confirmar o
+        // cancelar el diálogo es responsabilidad exclusiva del código detrás de la vista.
+        private void OnViewModelCancelSaleConfirmationRequested(object? sender, EventArgs e)
+        {
+            var result = MessageBox.Show(
+                "¿Deseas cancelar la venta actual? Se perderán los productos agregados al carrito.",
+                "PosPlatform",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                _viewModel.ConfirmCancelSale();
+            }
+        }
 
         // Nunca permite terminar el proceso silenciosamente con una caja abierta: cierra la
         // ventana con la X requiere primero confirmar o completar el cierre de caja.
@@ -62,6 +88,8 @@ namespace Pos.Desktop
         {
             _viewModel.LogoutRequested -= OnViewModelLogoutRequested;
             _viewModel.CloseRegisterRequested -= OnViewModelCloseRegisterRequested;
+            _viewModel.CancelSaleConfirmationRequested -= OnViewModelCancelSaleConfirmationRequested;
+            _viewModel.NewProductRequested -= OnViewModelNewProductRequested;
             Closing -= OnWindowClosing;
             Closed -= OnWindowClosed;
         }
