@@ -539,15 +539,130 @@ public class MainWindowViewModelTests
         Assert.Equal(0, salesCartService.AddCallCount);
     }
 
+    // ---------- Editar producto / Incluir inactivos (TAREA 24B) ----------
+
+    [Fact]
+    public void EditProductCommandCannotExecuteWithoutASelection()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.False(viewModel.EditProductCommand.CanExecute(null));
+
+        viewModel.SelectedSearchResult = CreateSearchResult();
+
+        Assert.True(viewModel.EditProductCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void EditProductCommandCannotExecuteWithoutManageProductsPermission()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
+        var viewModel = CreateViewModel(session: session);
+        viewModel.SelectedSearchResult = CreateSearchResult();
+
+        Assert.False(viewModel.EditProductCommand.CanExecute(null));
+        Assert.False(viewModel.CanManageProducts);
+    }
+
+    [Fact]
+    public void EditProductCommandRaisesEditProductRequestedWithTheSelectedProductId()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+        var viewModel = CreateViewModel(session: session);
+        var searchResult = CreateSearchResult();
+        viewModel.SelectedSearchResult = searchResult;
+
+        ProductId? raisedProductId = null;
+        viewModel.EditProductRequested += (_, productId) => raisedProductId = productId;
+
+        viewModel.EditProductCommand.Execute(null);
+
+        Assert.Equal(searchResult.ProductId, raisedProductId);
+    }
+
+    [Fact]
+    public void IncludeInactiveCheckboxIsNotVisibleWithoutManageProductsPermission()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.False(viewModel.CanManageProducts);
+    }
+
+    [Fact]
+    public void SearchWithIncludeInactiveUsesTheManagementServiceWhenPermitted()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+        var productManagementService = new FakeProductManagementService(
+            searchHandler: (_, _, _) => Task.FromResult<IReadOnlyList<ProductSearchResult>>([CreateSearchResult()]));
+        var salesCartService = new FakeSalesCartService();
+        var viewModel = CreateViewModel(session: session, salesCartService: salesCartService, productManagementService: productManagementService);
+        viewModel.SearchText = "agua";
+
+        viewModel.IncludeInactive = true;
+
+        Assert.Equal(1, productManagementService.SearchCallCount);
+        Assert.True(productManagementService.LastIncludeInactive);
+        Assert.Equal(0, salesCartService.SearchCallCount);
+    }
+
+    [Fact]
+    public void SearchWithoutIncludeInactiveUsesTheSalesCartService()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+        var productManagementService = new FakeProductManagementService();
+        var salesCartService = new FakeSalesCartService(
+            searchHandler: (_, _) => Task.FromResult<IReadOnlyList<ProductSearchResult>>([CreateSearchResult()]));
+        var viewModel = CreateViewModel(session: session, salesCartService: salesCartService, productManagementService: productManagementService);
+        viewModel.SearchText = "agua";
+
+        viewModel.SearchCommand.Execute(null);
+
+        Assert.Equal(1, salesCartService.SearchCallCount);
+        Assert.Equal(0, productManagementService.SearchCallCount);
+    }
+
+    [Fact]
+    public void IncludeInactiveIsIgnoredWithoutManageProductsPermissionAndFallsBackToSalesCartService()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
+        var productManagementService = new FakeProductManagementService();
+        var salesCartService = new FakeSalesCartService(
+            searchHandler: (_, _) => Task.FromResult<IReadOnlyList<ProductSearchResult>>([CreateSearchResult()]));
+        var viewModel = CreateViewModel(session: session, salesCartService: salesCartService, productManagementService: productManagementService);
+        viewModel.SearchText = "agua";
+
+        viewModel.IncludeInactive = true;
+
+        Assert.Equal(0, productManagementService.SearchCallCount);
+        Assert.Equal(1, salesCartService.SearchCallCount);
+    }
+
+    [Fact]
+    public void ApplyProductUpdatedSetsSearchTextAndRunsSearch()
+    {
+        var salesCartService = new FakeSalesCartService(
+            searchHandler: (_, _) => Task.FromResult<IReadOnlyList<ProductSearchResult>>([CreateSearchResult()]));
+        var viewModel = CreateViewModel(salesCartService: salesCartService);
+
+        viewModel.ApplyProductUpdated("SKU-EDITED");
+
+        Assert.Equal("SKU-EDITED", viewModel.SearchText);
+        Assert.Equal(1, salesCartService.SearchCallCount);
+    }
+
     private static MainWindowViewModel CreateViewModel(
         FakeCurrentUserSession? session = null,
         FakeCurrentRegisterSession? registerSession = null,
         FakeSalesCartService? salesCartService = null,
+        FakeProductManagementService? productManagementService = null,
         FakeCurrentSalesCart? currentSalesCart = null) =>
         new(
             session ?? new FakeCurrentUserSession(),
             registerSession ?? new FakeCurrentRegisterSession(),
             salesCartService ?? new FakeSalesCartService(),
+            productManagementService ?? new FakeProductManagementService(),
             currentSalesCart ?? new FakeCurrentSalesCart());
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>
@@ -559,6 +674,16 @@ public class MainWindowViewModelTests
             displayName,
             roleName,
             [Permission.ProcessSale]);
+
+    private static AuthenticatedUser CreateManageProductsUser() =>
+        new(
+            UserId.New(),
+            OrganizationId.New(),
+            RoleId.New(),
+            "GERENTE",
+            "Ana Pérez",
+            "Gerente",
+            [Permission.ProcessSale, Permission.ManageProducts]);
 
     private static ActiveRegisterSession CreateActiveRegisterSession() =>
         new(

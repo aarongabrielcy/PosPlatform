@@ -11,6 +11,7 @@ using Pos.Application.Inventory;
 using Pos.Application.Organizations;
 using Pos.Application.Products;
 using Pos.Application.Products.CreateProduct;
+using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Registers;
 using Pos.Application.Sales;
@@ -740,6 +741,52 @@ public class DependencyInjectionTests
 
             var serviceA = scopeA.ServiceProvider.GetRequiredService<ICreateProductService>();
             var serviceB = scopeB.ServiceProvider.GetRequiredService<ICreateProductService>();
+
+            Assert.NotSame(serviceA, serviceB);
+        }
+    }
+
+    [Fact]
+    public void IProductManagementServiceResolvesProductManagementServiceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<ProductManagementService>(
+                scope.ServiceProvider.GetRequiredService<IProductManagementService>());
+        }
+    }
+
+    [Fact]
+    public void IProductManagementServiceIsScopedAndReusesTheSameInstanceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+
+            var first = scope.ServiceProvider.GetRequiredService<IProductManagementService>();
+            var second = scope.ServiceProvider.GetRequiredService<IProductManagementService>();
+
+            Assert.Same(first, second);
+        }
+    }
+
+    [Fact]
+    public void IProductManagementServiceProducesDifferentInstancesAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var serviceA = scopeA.ServiceProvider.GetRequiredService<IProductManagementService>();
+            var serviceB = scopeB.ServiceProvider.GetRequiredService<IProductManagementService>();
 
             Assert.NotSame(serviceA, serviceB);
         }

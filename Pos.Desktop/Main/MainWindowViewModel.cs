@@ -2,9 +2,12 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Input;
 using Pos.Application.Authentication;
+using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.SalesCart;
 using Pos.Desktop.Common;
+using Pos.Domain.Common.Identifiers;
+using Pos.Domain.Security;
 
 namespace Pos.Desktop.Main;
 
@@ -13,6 +16,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly ICurrentUserSession _session;
     private readonly ICurrentRegisterSession _registerSession;
     private readonly ISalesCartService _salesCartService;
+    private readonly IProductManagementService _productManagementService;
     private readonly ICurrentSalesCart _currentSalesCart;
     private readonly AsyncRelayCommand _logoutCommand;
     private readonly AsyncRelayCommand _closeRegisterCommand;
@@ -23,12 +27,14 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly AsyncRelayCommand<SalesCartLine> _removeLineCommand;
     private readonly AsyncRelayCommand _cancelSaleCommand;
     private readonly AsyncRelayCommand _newProductCommand;
+    private readonly AsyncRelayCommand _editProductCommand;
 
     private string? _logoutBlockedMessage;
     private string? _closeRegisterBlockedMessage;
     private string _searchText = string.Empty;
     private string? _searchStatusMessage;
     private ProductSearchResult? _selectedSearchResult;
+    private bool _includeInactive;
     private string _subtotal = string.Empty;
     private string _discountTotal = string.Empty;
     private string _taxTotal = string.Empty;
@@ -42,11 +48,13 @@ public sealed class MainWindowViewModel : ViewModelBase
         ICurrentUserSession session,
         ICurrentRegisterSession registerSession,
         ISalesCartService salesCartService,
+        IProductManagementService productManagementService,
         ICurrentSalesCart currentSalesCart)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _registerSession = registerSession ?? throw new ArgumentNullException(nameof(registerSession));
         _salesCartService = salesCartService ?? throw new ArgumentNullException(nameof(salesCartService));
+        _productManagementService = productManagementService ?? throw new ArgumentNullException(nameof(productManagementService));
         _currentSalesCart = currentSalesCart ?? throw new ArgumentNullException(nameof(currentSalesCart));
 
         _logoutCommand = new AsyncRelayCommand(ExecuteLogoutAsync);
@@ -60,6 +68,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         _removeLineCommand = new AsyncRelayCommand<SalesCartLine>(ExecuteRemoveLineAsync, onError: HandleUnexpectedError);
         _cancelSaleCommand = new AsyncRelayCommand(ExecuteCancelSaleAsync);
         _newProductCommand = new AsyncRelayCommand(ExecuteNewProductAsync);
+        _editProductCommand = new AsyncRelayCommand(
+            ExecuteEditProductAsync, () => SelectedSearchResult is not null && CanManageProducts && !IsBusy, HandleUnexpectedError);
 
         CartLines = new ObservableCollection<SalesCartLine>();
         SearchResults = new ObservableCollection<ProductSearchResult>();
@@ -79,6 +89,11 @@ public sealed class MainWindowViewModel : ViewModelBase
     // ventanas desde el contenedor de DI.
     public event EventHandler? NewProductRequested;
 
+    // Igual patrón que NewProductRequested, pero para EditProductWindow: el ProductId del
+    // producto seleccionado viaja en el evento para que App.xaml.cs pueda cargarlo antes de
+    // mostrar la ventana.
+    public event EventHandler<ProductId>? EditProductRequested;
+
     public ICommand LogoutCommand => _logoutCommand;
 
     public ICommand CloseRegisterCommand => _closeRegisterCommand;
@@ -97,10 +112,16 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     public ICommand NewProductCommand => _newProductCommand;
 
+    public ICommand EditProductCommand => _editProductCommand;
+
     // Sesión ausente produce un estado seguro: cadenas vacías en lugar de excepción.
     public string DisplayName => _session.CurrentUser?.DisplayName ?? string.Empty;
 
     public string RoleName => _session.CurrentUser?.RoleName ?? string.Empty;
+
+    // Gobierna la visibilidad/habilitación del botón "Editar producto" y del checkbox "Incluir
+    // inactivos": ambos son funcionalidad administrativa, no disponible para cualquier cajero.
+    public bool CanManageProducts => _session.CurrentUser?.HasPermission(Permission.ManageProducts) ?? false;
 
     public bool IsRegisterOpen => _registerSession.IsOpen;
 
@@ -148,6 +169,20 @@ public sealed class MainWindowViewModel : ViewModelBase
         private set => SetProperty(ref _searchStatusMessage, value);
     }
 
+    // Solo tiene efecto para usuarios con ManageProducts: MainWindow.xaml la oculta/deshabilita
+    // para el resto. La búsqueda del carrito (SalesCartService) nunca incluye inactivos.
+    public bool IncludeInactive
+    {
+        get => _includeInactive;
+        set
+        {
+            if (SetProperty(ref _includeInactive, value) && _searchCommand.CanExecute(null))
+            {
+                _searchCommand.Execute(null);
+            }
+        }
+    }
+
     public ObservableCollection<ProductSearchResult> SearchResults { get; }
 
     public ProductSearchResult? SelectedSearchResult
@@ -158,6 +193,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             if (SetProperty(ref _selectedSearchResult, value))
             {
                 _addSelectedProductCommand.RaiseCanExecuteChanged();
+                _editProductCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -197,7 +233,13 @@ public sealed class MainWindowViewModel : ViewModelBase
     public bool IsBusy
     {
         get => _isBusy;
-        private set => SetProperty(ref _isBusy, value);
+        private set
+        {
+            if (SetProperty(ref _isBusy, value))
+            {
+                _editProductCommand.RaiseCanExecuteChanged();
+            }
+        }
     }
 
     public string? GeneralError
@@ -232,6 +274,12 @@ public sealed class MainWindowViewModel : ViewModelBase
             _searchCommand.Execute(null);
         }
     }
+
+    // Llamado desde App.xaml.cs tras cerrar EditProductWindow (edición, activar/desactivar o
+    // ajuste de inventario): refresca el buscador con el SKU del producto editado, igual que
+    // ApplyProductCreated. Si el producto quedó inactivo y no se incluyen inactivos, desaparece
+    // del grid como se espera.
+    public void ApplyProductUpdated(string sku) => ApplyProductCreated(sku);
 
     private Task ExecuteLogoutAsync()
     {
@@ -279,7 +327,12 @@ public sealed class MainWindowViewModel : ViewModelBase
 
         try
         {
-            var results = await _salesCartService.SearchProductsAsync(SearchText);
+            // "Incluir inactivos" solo tiene efecto para usuarios con ManageProducts; el resto
+            // (y el propio carrito de venta) siempre buscan exclusivamente productos activos a
+            // través de SalesCartService.
+            var results = IncludeInactive && CanManageProducts
+                ? await _productManagementService.SearchAsync(SearchText, includeInactive: true)
+                : await _salesCartService.SearchProductsAsync(SearchText);
 
             SearchResults.Clear();
 
@@ -395,6 +448,16 @@ public sealed class MainWindowViewModel : ViewModelBase
     private Task ExecuteNewProductAsync()
     {
         NewProductRequested?.Invoke(this, EventArgs.Empty);
+
+        return Task.CompletedTask;
+    }
+
+    private Task ExecuteEditProductAsync()
+    {
+        if (SelectedSearchResult is { } selected)
+        {
+            EditProductRequested?.Invoke(this, selected.ProductId);
+        }
 
         return Task.CompletedTask;
     }

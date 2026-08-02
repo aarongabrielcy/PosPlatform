@@ -23,6 +23,12 @@ public sealed class ProductSearchResult
 
     public bool TracksInventory { get; }
 
+    // IsActive refleja Product.IsActive (independiente de existencia). IsAvailable ya combina
+    // TracksInventory/AvailableQuantity, pero nunca es true si el producto está inactivo: la
+    // búsqueda del carrito (SearchActiveAsync) nunca produce IsActive=false, pero la búsqueda
+    // administrativa (SearchAsync con includeInactive) sí puede hacerlo.
+    public bool IsActive { get; }
+
     public bool IsAvailable { get; }
 
     public ProductSearchResult(
@@ -32,7 +38,8 @@ public sealed class ProductSearchResult
         decimal unitPriceAmount,
         string currency,
         decimal availableQuantity,
-        bool tracksInventory)
+        bool tracksInventory,
+        bool isActive = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sku);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -45,6 +52,7 @@ public sealed class ProductSearchResult
         Currency = currency;
         AvailableQuantity = availableQuantity;
         TracksInventory = tracksInventory;
-        IsAvailable = !tracksInventory || availableQuantity > 0m;
+        IsActive = isActive;
+        IsAvailable = isActive && (!tracksInventory || availableQuantity > 0m);
     }
 }

@@ -18,5 +18,13 @@ public interface IProductRepository
     Task<IReadOnlyList<Product>> SearchActiveAsync(
         OrganizationId organizationId, string searchTerm, int maxResults, CancellationToken cancellationToken);
 
+    // Búsqueda administrativa: mismo criterio de coincidencia/orden que SearchActiveAsync, pero
+    // opcionalmente incluye productos inactivos (para poder localizarlos y reactivarlos). No la
+    // usa SalesCartService, que debe seguir usando exclusivamente SearchActiveAsync.
+    Task<IReadOnlyList<Product>> SearchAsync(
+        OrganizationId organizationId, string searchTerm, bool includeInactive, int maxResults, CancellationToken cancellationToken);
+
     Task AddAsync(Product product, CancellationToken cancellationToken);
+
+    Task UpdateAsync(Product product, CancellationToken cancellationToken);
 }

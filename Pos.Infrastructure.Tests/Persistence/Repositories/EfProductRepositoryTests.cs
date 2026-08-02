@@ -429,6 +429,153 @@ public class EfProductRepositoryTests
             () => repository.SearchActiveAsync(OrganizationId.New(), "   ", 20, CancellationToken.None));
     }
 
+    // ---------- SearchAsync ----------
+
+    [Fact]
+    public async Task SearchAsyncExcludesInactiveProductsWhenIncludeInactiveIsFalse()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var organizationId = await SeedOrganizationAsync(context);
+        var repository = new EfProductRepository(context);
+        var inactive = CreateProduct(new OrganizationId(organizationId), "SKU-001", "Manzana Roja");
+        inactive.Deactivate();
+        await repository.AddAsync(inactive, CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var results = await repository.SearchAsync(
+            new OrganizationId(organizationId), "manzana", includeInactive: false, 20, CancellationToken.None);
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task SearchAsyncIncludesInactiveProductsWhenIncludeInactiveIsTrue()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var organizationId = await SeedOrganizationAsync(context);
+        var repository = new EfProductRepository(context);
+        var inactive = CreateProduct(new OrganizationId(organizationId), "SKU-001", "Manzana Roja");
+        inactive.Deactivate();
+        await repository.AddAsync(inactive, CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var results = await repository.SearchAsync(
+            new OrganizationId(organizationId), "manzana", includeInactive: true, 20, CancellationToken.None);
+
+        Assert.Single(results);
+        Assert.False(results[0].IsActive);
+    }
+
+    [Fact]
+    public async Task SearchAsyncWithIncludeInactiveStillReturnsActiveProducts()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var organizationId = await SeedOrganizationAsync(context);
+        var repository = new EfProductRepository(context);
+        await repository.AddAsync(CreateProduct(new OrganizationId(organizationId), "SKU-001", "Manzana Roja"), CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var results = await repository.SearchAsync(
+            new OrganizationId(organizationId), "manzana", includeInactive: true, 20, CancellationToken.None);
+
+        Assert.Single(results);
+        Assert.True(results[0].IsActive);
+    }
+
+    [Fact]
+    public async Task SearchAsyncFiltersByOrganizationId()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var organizationA = await SeedOrganizationAsync(context, "A");
+        var organizationB = await SeedOrganizationAsync(context, "B");
+
+        var repository = new EfProductRepository(context);
+        await repository.AddAsync(CreateProduct(new OrganizationId(organizationA), "SKU-001", "Manzana"), CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var results = await repository.SearchAsync(
+            new OrganizationId(organizationB), "manzana", includeInactive: true, 20, CancellationToken.None);
+
+        Assert.Empty(results);
+    }
+
+    // ---------- UpdateAsync ----------
+
+    [Fact]
+    public async Task UpdateAsyncPersistsChangesAfterCommit()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var organizationId = await SeedOrganizationAsync(context);
+        var repository = new EfProductRepository(context);
+        var product = CreateProduct(new OrganizationId(organizationId), "SKU-001", "Nombre original");
+        await repository.AddAsync(product, CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var reloaded = await repository.GetByIdAsync(product.Id, CancellationToken.None);
+        reloaded!.Rename("Nombre actualizado");
+        reloaded.Deactivate();
+        await repository.UpdateAsync(reloaded, CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var afterUpdate = await repository.GetByIdAsync(product.Id, CancellationToken.None);
+        Assert.Equal("Nombre actualizado", afterUpdate!.Name);
+        Assert.False(afterUpdate.IsActive);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncThrowsWhenProductDoesNotExist()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var repository = new EfProductRepository(context);
+        var product = CreateProduct(OrganizationId.New(), "SKU-001");
+
+        await Assert.ThrowsAsync<Pos.Application.Common.Exceptions.EntityNotFoundException>(
+            () => repository.UpdateAsync(product, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task UpdateAsyncRejectsNullProduct()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var repository = new EfProductRepository(context);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => repository.UpdateAsync(null!, CancellationToken.None));
+    }
+
     // ---------- AddAsync ----------
 
     [Fact]

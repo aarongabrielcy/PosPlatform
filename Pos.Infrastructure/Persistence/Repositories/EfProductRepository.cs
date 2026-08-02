@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Pos.Application.Common.Exceptions;
 using Pos.Application.Products;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Products;
@@ -100,6 +101,41 @@ public sealed class EfProductRepository : IProductRepository
         return records.Select(ProductMapper.ToDomain).ToList();
     }
 
+    public async Task<IReadOnlyList<Product>> SearchAsync(
+        OrganizationId organizationId, string searchTerm, bool includeInactive, int maxResults, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(searchTerm);
+
+        if (maxResults <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxResults), maxResults, "maxResults debe ser mayor que cero.");
+        }
+
+        var term = searchTerm.Trim();
+        var upperTerm = term.ToUpperInvariant();
+
+        // Mismo criterio de orden que SearchActiveAsync, solo difiere en el filtro de IsActive.
+        var records = await _context.Products
+            .AsNoTracking()
+            .Where(r => r.OrganizationId == organizationId.Value && (includeInactive || r.IsActive))
+            .Where(r =>
+                r.Sku.Contains(upperTerm) ||
+                (r.Barcode != null && r.Barcode.Contains(term)) ||
+                EF.Functions.Like(r.Name, $"%{term}%"))
+            .OrderBy(r =>
+                r.Sku == upperTerm || r.Barcode == term
+                    ? 0
+                    : EF.Functions.Like(r.Name, $"{term}%")
+                        ? 1
+                        : 2)
+            .ThenBy(r => r.Name)
+            .ThenBy(r => r.Id)
+            .Take(maxResults)
+            .ToListAsync(cancellationToken);
+
+        return records.Select(ProductMapper.ToDomain).ToList();
+    }
+
     public async Task AddAsync(Product product, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(product);
@@ -107,5 +143,20 @@ public sealed class EfProductRepository : IProductRepository
         var record = ProductMapper.ToRecord(product);
 
         await _context.Products.AddAsync(record, cancellationToken);
+    }
+
+    public async Task UpdateAsync(Product product, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(product);
+
+        var record = await _context.Products
+            .SingleOrDefaultAsync(r => r.Id == product.Id.Value, cancellationToken);
+
+        if (record is null)
+        {
+            throw new EntityNotFoundException("Product", product.Id.ToString());
+        }
+
+        ProductMapper.UpdateRecord(product, record);
     }
 }

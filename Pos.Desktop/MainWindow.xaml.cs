@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using Pos.Desktop.Main;
+using Pos.Domain.Common.Identifiers;
 
 namespace Pos.Desktop
 {
@@ -20,6 +21,7 @@ namespace Pos.Desktop
             _viewModel.CloseRegisterRequested += OnViewModelCloseRegisterRequested;
             _viewModel.CancelSaleConfirmationRequested += OnViewModelCancelSaleConfirmationRequested;
             _viewModel.NewProductRequested += OnViewModelNewProductRequested;
+            _viewModel.EditProductRequested += OnViewModelEditProductRequested;
 
             DataContext = _viewModel;
 
@@ -33,6 +35,8 @@ namespace Pos.Desktop
 
         public event EventHandler? NewProductRequested;
 
+        public event EventHandler<ProductId>? EditProductRequested;
+
         private void OnViewModelLogoutRequested(object? sender, EventArgs e) =>
             LogoutRequested?.Invoke(this, EventArgs.Empty);
 
@@ -42,8 +46,15 @@ namespace Pos.Desktop
         private void OnViewModelNewProductRequested(object? sender, EventArgs e) =>
             NewProductRequested?.Invoke(this, EventArgs.Empty);
 
+        private void OnViewModelEditProductRequested(object? sender, ProductId e) =>
+            EditProductRequested?.Invoke(this, e);
+
         // Llamado desde App.xaml.cs tras crear un producto exitosamente en CreateProductWindow.
         public void ApplyProductCreated(string sku) => _viewModel.ApplyProductCreated(sku);
+
+        // Llamado desde App.xaml.cs tras cerrar EditProductWindow (edición, activar/desactivar o
+        // ajuste de inventario).
+        public void ApplyProductUpdated(string sku) => _viewModel.ApplyProductUpdated(sku);
 
         // El ViewModel nunca muestra ventanas ni MessageBox: solo pide confirmación. Confirmar o
         // cancelar el diálogo es responsabilidad exclusiva del código detrás de la vista.
@@ -90,6 +101,7 @@ namespace Pos.Desktop
             _viewModel.CloseRegisterRequested -= OnViewModelCloseRegisterRequested;
             _viewModel.CancelSaleConfirmationRequested -= OnViewModelCancelSaleConfirmationRequested;
             _viewModel.NewProductRequested -= OnViewModelNewProductRequested;
+            _viewModel.EditProductRequested -= OnViewModelEditProductRequested;
             Closing -= OnWindowClosing;
             Closed -= OnWindowClosed;
         }
