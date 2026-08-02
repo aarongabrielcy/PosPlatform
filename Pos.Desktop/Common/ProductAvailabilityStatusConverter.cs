@@ -15,6 +15,11 @@ public sealed class ProductAvailabilityStatusConverter : IValueConverter
             return string.Empty;
         }
 
+        if (!result.IsActive)
+        {
+            return "Inactivo";
+        }
+
         if (!result.TracksInventory)
         {
             return "No controla inventario";

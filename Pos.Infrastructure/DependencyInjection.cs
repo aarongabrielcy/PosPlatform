@@ -11,6 +11,7 @@ using Pos.Application.Inventory;
 using Pos.Application.Organizations;
 using Pos.Application.Products;
 using Pos.Application.Products.CreateProduct;
+using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Registers;
 using Pos.Application.Sales;
@@ -54,6 +55,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, EfUserRepository>();
         services.AddScoped<IRegisterSessionRepository, EfRegisterSessionRepository>();
         services.AddScoped<ICreateProductService, CreateProductService>();
+        services.AddScoped<IProductManagementService, ProductManagementService>();
 
         services.AddScoped<IInitialBusinessBootstrapService, InitialBusinessBootstrapService>();
         services.AddScoped<IInstallationStateService, InstallationStateService>();

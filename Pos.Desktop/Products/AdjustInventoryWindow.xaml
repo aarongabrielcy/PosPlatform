@@ -1,0 +1,83 @@
+<Window x:Class="Pos.Desktop.Products.AdjustInventoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Ajustar inventario — PosPlatform"
+        Height="360" Width="420"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    </Window.Resources>
+    <Grid Margin="32" IsEnabled="{Binding IsNotBusy}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                    Text="Ajustar inventario"
+                    FontSize="20" FontWeight="Bold" Margin="0,0,0,16" />
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="160" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Label Grid.Row="0" Grid.Column="0" Content="Producto" />
+            <TextBlock Grid.Row="0" Grid.Column="1" Margin="0,10" VerticalAlignment="Center"
+                    Text="{Binding ProductName, Mode=OneWay}" TextWrapping="Wrap" />
+
+            <Label Grid.Row="1" Grid.Column="0" Content="Existencia actual" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,10" VerticalAlignment="Center"
+                    Text="{Binding CurrentQuantity, Mode=OneWay}" />
+
+            <Label Grid.Row="2" Grid.Column="0" Content="Tipo de ajuste" />
+            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,10">
+                <RadioButton x:Name="IncreaseRadioButton" Content="Incrementar" Margin="0,0,16,0"
+                        IsChecked="{Binding IsIncreaseSelected}" GroupName="AdjustmentType" TabIndex="0" />
+                <RadioButton x:Name="DecreaseRadioButton" Content="Disminuir"
+                        IsChecked="{Binding IsDecreaseSelected}"
+                        GroupName="AdjustmentType" TabIndex="1" />
+            </StackPanel>
+
+            <Label Grid.Row="3" Grid.Column="0" Content="Cantidad" Target="{Binding ElementName=QuantityTextBox}" />
+            <TextBox x:Name="QuantityTextBox" Grid.Row="3" Grid.Column="1"
+                    Margin="0,6" Padding="6,4" TabIndex="2"
+                    Text="{Binding QuantityText, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Label Grid.Row="4" Grid.Column="0" Content="Existencia resultante" />
+            <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,10" VerticalAlignment="Center" FontWeight="Bold"
+                    Text="{Binding ResultingQuantityText, Mode=OneWay}" />
+        </Grid>
+
+        <TextBlock Grid.Row="2" Text="{Binding GeneralError}"
+                    Foreground="Red" TextWrapping="Wrap" Margin="0,12,0,0" />
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,8,0,0"
+                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}">
+            <ProgressBar IsIndeterminate="True" Width="160" Height="6" VerticalAlignment="Center" />
+            <TextBlock Text="Procesando…" Margin="8,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Cancelar" Width="120" Margin="0,0,8,0" TabIndex="4"
+                    Command="{Binding CancelCommand}" />
+            <Button Content="Confirmar" Width="120" TabIndex="3"
+                    IsDefault="True" Command="{Binding ConfirmCommand}" />
+        </StackPanel>
+    </Grid>
+</Window>

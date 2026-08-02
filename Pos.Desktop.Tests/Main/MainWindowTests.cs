@@ -52,7 +52,8 @@ public class MainWindowTests
         {
             var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
             var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(), new FakeCurrentSalesCart());
+                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
+                new FakeProductManagementService(), new FakeCurrentSalesCart());
             var window = new MainWindow(viewModel);
 
             Assert.Same(viewModel, window.DataContext);
@@ -71,7 +72,8 @@ public class MainWindowTests
         {
             var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
             var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(), new FakeCurrentSalesCart());
+                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
+                new FakeProductManagementService(), new FakeCurrentSalesCart());
             var window = new MainWindow(viewModel);
 
             var binding = BindingOperations.GetBinding(window.LogoutButton, Button.CommandProperty);
@@ -88,7 +90,8 @@ public class MainWindowTests
         {
             var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
             var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(), new FakeCurrentSalesCart());
+                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
+                new FakeProductManagementService(), new FakeCurrentSalesCart());
             var window = new MainWindow(viewModel);
 
             var binding = BindingOperations.GetBinding(window.NewProductButton, Button.CommandProperty);
@@ -106,7 +109,8 @@ public class MainWindowTests
         {
             var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
             var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(), new FakeCurrentSalesCart());
+                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
+                new FakeProductManagementService(), new FakeCurrentSalesCart());
             var window = new MainWindow(viewModel);
 
             var raised = false;
@@ -117,6 +121,78 @@ public class MainWindowTests
             Assert.True(raised);
         });
 
+    // El comportamiento del comando en sí ya está cubierto por MainWindowViewModelTests; aquí solo
+    // se confirma que el botón "Editar producto" está cableado al comando correcto.
+    [Fact]
+    public void EditProductButtonIsBoundToTheEditProductCommandProperty() =>
+        RunOnStaThread(() =>
+        {
+            var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
+            var viewModel = new MainWindowViewModel(
+                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
+                new FakeProductManagementService(), new FakeCurrentSalesCart());
+            var window = new MainWindow(viewModel);
+
+            var binding = BindingOperations.GetBinding(window.EditProductButton, Button.CommandProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(nameof(MainWindowViewModel.EditProductCommand), binding.Path.Path);
+        });
+
+    [Fact]
+    public void IncludeInactiveCheckBoxIsBoundToTheIncludeInactivePropertyAndItsVisibilityToCanManageProducts() =>
+        RunOnStaThread(() =>
+        {
+            var window = CreateWindow();
+
+            var checkedBinding = BindingOperations.GetBinding(window.IncludeInactiveCheckBox, ToggleButton.IsCheckedProperty);
+            Assert.NotNull(checkedBinding);
+            Assert.Equal(nameof(MainWindowViewModel.IncludeInactive), checkedBinding.Path.Path);
+
+            var visibilityBinding = BindingOperations.GetBinding(window.IncludeInactiveCheckBox, System.Windows.UIElement.VisibilityProperty);
+            Assert.NotNull(visibilityBinding);
+            Assert.Equal(nameof(MainWindowViewModel.CanManageProducts), visibilityBinding.Path.Path);
+        });
+
+    // Verifica el mismo defecto que OpenRegisterSessionWindowTests para NewProductRequested: el
+    // evento del ViewModel debe reenviarse hasta el evento público de MainWindow, único punto que
+    // App.xaml.cs usa para resolver EditProductWindow.
+    [Fact]
+    public void ViewModelEditProductRequestedBubblesUpToMainWindowEvent() =>
+        RunOnStaThread(() =>
+        {
+            var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+            var viewModel = new MainWindowViewModel(
+                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
+                new FakeProductManagementService(), new FakeCurrentSalesCart());
+            var window = new MainWindow(viewModel);
+            viewModel.SelectedSearchResult = CreateSearchResult(true);
+
+            ProductId? raisedProductId = null;
+            window.EditProductRequested += (_, productId) => raisedProductId = productId;
+
+            viewModel.EditProductCommand.Execute(null);
+
+            Assert.Equal(viewModel.SelectedSearchResult.ProductId, raisedProductId);
+        });
+
+    [Fact]
+    public void ApplyProductUpdatedForwardsToTheViewModel() =>
+        RunOnStaThread(() =>
+        {
+            var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
+            var salesCartService = new FakeSalesCartService();
+            var viewModel = new MainWindowViewModel(
+                session, new FakeCurrentRegisterSession(), salesCartService,
+                new FakeProductManagementService(), new FakeCurrentSalesCart());
+            var window = new MainWindow(viewModel);
+
+            window.ApplyProductUpdated("SKU-EDITED");
+
+            Assert.Equal("SKU-EDITED", viewModel.SearchText);
+            Assert.Equal(1, salesCartService.SearchCallCount);
+        });
+
     [Fact]
     public void ApplyProductCreatedForwardsToTheViewModel() =>
         RunOnStaThread(() =>
@@ -124,7 +200,8 @@ public class MainWindowTests
             var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
             var salesCartService = new FakeSalesCartService();
             var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), salesCartService, new FakeCurrentSalesCart());
+                session, new FakeCurrentRegisterSession(), salesCartService,
+                new FakeProductManagementService(), new FakeCurrentSalesCart());
             var window = new MainWindow(viewModel);
 
             window.ApplyProductCreated("SKU-NEW");
@@ -377,7 +454,8 @@ public class MainWindowTests
     {
         var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
         var viewModel = new MainWindowViewModel(
-            session, new FakeCurrentRegisterSession(), new FakeSalesCartService(), new FakeCurrentSalesCart());
+            session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
+            new FakeProductManagementService(), new FakeCurrentSalesCart());
 
         return new MainWindow(viewModel);
     }
@@ -391,4 +469,14 @@ public class MainWindowTests
             displayName,
             roleName,
             [Permission.ProcessSale]);
+
+    private static AuthenticatedUser CreateManageProductsUser() =>
+        new(
+            UserId.New(),
+            OrganizationId.New(),
+            RoleId.New(),
+            "GERENTE",
+            "Ana Pérez",
+            "Gerente",
+            [Permission.ProcessSale, Permission.ManageProducts]);
 }

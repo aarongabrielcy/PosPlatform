@@ -32,9 +32,20 @@ internal sealed class FakeProductRepository : IProductRepository
         OrganizationId organizationId, string searchTerm, int maxResults, CancellationToken cancellationToken) =>
         throw new NotSupportedException("No se usa en las pruebas de CreateProductService.");
 
+    public Task<IReadOnlyList<Product>> SearchAsync(
+        OrganizationId organizationId, string searchTerm, bool includeInactive, int maxResults, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("No se usa en las pruebas de CreateProductService.");
+
     public Task AddAsync(Product product, CancellationToken cancellationToken)
     {
         AddCallCount++;
+        _products[product.Id] = product;
+
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateAsync(Product product, CancellationToken cancellationToken)
+    {
         _products[product.Id] = product;
 
         return Task.CompletedTask;

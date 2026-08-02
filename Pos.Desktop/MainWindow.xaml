@@ -9,6 +9,7 @@
         Title="PosPlatform" Height="700" Width="1100">
     <Window.Resources>
         <converters:ProductAvailabilityStatusConverter x:Key="ProductAvailabilityStatusConverter" />
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
     </Window.Resources>
     <DockPanel>
         <Border DockPanel.Dock="Top" Padding="12,8" Background="#F0F0F0" BorderBrush="#D0D0D0" BorderThickness="0,0,0,1">
@@ -105,6 +106,12 @@
                         Command="{Binding AddSelectedProductCommand}" />
                 <Button x:Name="NewProductButton" Content="Nuevo producto" Padding="14,6" Margin="8,0,0,0"
                         Command="{Binding NewProductCommand}" />
+                <Button x:Name="EditProductButton" Content="Editar producto" Padding="14,6" Margin="8,0,0,0"
+                        Command="{Binding EditProductCommand}" />
+                <CheckBox x:Name="IncludeInactiveCheckBox" Content="Incluir inactivos" Margin="16,0,0,0"
+                        VerticalAlignment="Center"
+                        Visibility="{Binding CanManageProducts, Converter={StaticResource BoolToVisibilityConverter}}"
+                        IsChecked="{Binding IncludeInactive}" />
             </StackPanel>
 
             <DataGrid x:Name="SearchResultsGrid" Grid.Row="3" Margin="0,0,0,8"
