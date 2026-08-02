@@ -71,6 +71,23 @@ public class MainWindowTests
             Assert.Equal(nameof(MainWindowViewModel.LogoutCommand), binding.Path.Path);
         });
 
+    // TAREA 24C.2: el botón de logout debe usar el mismo lenguaje visual del sidebar
+    // (SidebarFooterButtonStyle) en vez del chrome de Button por defecto, y conservar su ToolTip
+    // tanto expandido como colapsado.
+    [Fact]
+    public void LogoutButtonUsesTheSidebarFooterButtonStyleAndKeepsItsToolTip() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(CreateAuthenticatedUser("Ana Pérez", "Cajero"));
+            var window = new MainWindow(viewModel);
+
+            var expectedStyle = window.LogoutButton.TryFindResource("SidebarFooterButtonStyle");
+
+            Assert.NotNull(expectedStyle);
+            Assert.Same(expectedStyle, window.LogoutButton.Style);
+            Assert.Equal("Cerrar sesión", window.LogoutButton.ToolTip);
+        });
+
     [Fact]
     public void CloseRegisterButtonIsBoundToTheCloseRegisterCommandProperty() =>
         RunOnStaThread(() =>
