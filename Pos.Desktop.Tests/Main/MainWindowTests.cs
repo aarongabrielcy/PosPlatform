@@ -4,21 +4,21 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using Pos.Application.Authentication;
-using Pos.Application.SalesCart;
-using Pos.Desktop.Common;
+using Pos.Desktop.Dashboard;
+using Pos.Desktop.Inventory;
 using Pos.Desktop.Main;
+using Pos.Desktop.Products.Catalog;
+using Pos.Desktop.Register;
+using Pos.Desktop.Sales;
+using Pos.Desktop.Settings;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Security;
+using CatalogFakeProductManagementService = Pos.Desktop.Tests.Products.Catalog.FakeProductManagementService;
 
 namespace Pos.Desktop.Tests.Main;
 
 public class MainWindowTests
 {
-    private static readonly string[] SearchResultsTextHeaders = { "SKU", "Producto" };
-
-    private static readonly string[] CartGridCalculatedHeaders =
-        { "Producto", "Precio", "Subtotal", "Impuesto", "Total" };
-
     // MainWindow solo puede crearse en un hilo STA.
     private static void RunOnStaThread(Action action)
     {
@@ -50,10 +50,7 @@ public class MainWindowTests
     public void MainWindowBindsDisplayNameAndRoleNameFromTheViewModel() =>
         RunOnStaThread(() =>
         {
-            var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
-            var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
-                new FakeProductManagementService(), new FakeCurrentSalesCart());
+            var viewModel = CreateViewModel(CreateAuthenticatedUser("Ana Pérez", "Cajero"));
             var window = new MainWindow(viewModel);
 
             Assert.Same(viewModel, window.DataContext);
@@ -61,19 +58,11 @@ public class MainWindowTests
             Assert.Equal("Cajero", viewModel.RoleName);
         });
 
-    // La ventana nunca se muestra (Show()) en esta prueba, así que WPF no llega a evaluar el
-    // binding (eso ocurre en la cola del Dispatcher durante el layout real); en su lugar se
-    // inspecciona la expresión de binding declarada en XAML para confirmar el cableado sin
-    // depender de un PresentationSource real. El comportamiento del comando en sí ya está
-    // cubierto por MainWindowViewModelTests.
     [Fact]
     public void LogoutButtonIsBoundToTheLogoutCommandProperty() =>
         RunOnStaThread(() =>
         {
-            var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
-            var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
-                new FakeProductManagementService(), new FakeCurrentSalesCart());
+            var viewModel = CreateViewModel(CreateAuthenticatedUser("Ana Pérez", "Cajero"));
             var window = new MainWindow(viewModel);
 
             var binding = BindingOperations.GetBinding(window.LogoutButton, Button.CommandProperty);
@@ -82,382 +71,222 @@ public class MainWindowTests
             Assert.Equal(nameof(MainWindowViewModel.LogoutCommand), binding.Path.Path);
         });
 
-    // El comportamiento del comando en sí ya está cubierto por MainWindowViewModelTests; aquí solo
-    // se confirma que el botón "Nuevo producto" está cableado al comando correcto.
     [Fact]
-    public void NewProductButtonIsBoundToTheNewProductCommandProperty() =>
+    public void CloseRegisterButtonIsBoundToTheCloseRegisterCommandProperty() =>
         RunOnStaThread(() =>
         {
-            var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
-            var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
-                new FakeProductManagementService(), new FakeCurrentSalesCart());
+            var viewModel = CreateViewModel(CreateAuthenticatedUser("Ana Pérez", "Cajero"));
             var window = new MainWindow(viewModel);
 
-            var binding = BindingOperations.GetBinding(window.NewProductButton, Button.CommandProperty);
+            var binding = BindingOperations.GetBinding(window.CloseRegisterButton, Button.CommandProperty);
 
             Assert.NotNull(binding);
-            Assert.Equal(nameof(MainWindowViewModel.NewProductCommand), binding.Path.Path);
+            Assert.Equal(nameof(MainWindowViewModel.CloseRegisterCommand), binding.Path.Path);
         });
 
-    // Verifica el mismo defecto que OpenRegisterSessionWindowTests para NewProductRequested: el
-    // evento del ViewModel debe reenviarse hasta el evento público de MainWindow, único punto que
-    // App.xaml.cs usa para resolver CreateProductWindow.
     [Fact]
-    public void ViewModelNewProductRequestedBubblesUpToMainWindowEvent() =>
+    public void NavigationListBoxIsBoundToNavigationItemsAndSelectedNavigationItem() =>
         RunOnStaThread(() =>
         {
-            var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
-            var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
-                new FakeProductManagementService(), new FakeCurrentSalesCart());
+            var viewModel = CreateViewModel(CreateAuthenticatedUser("Ana Pérez", "Cajero"));
             var window = new MainWindow(viewModel);
 
-            var raised = false;
-            window.NewProductRequested += (_, _) => raised = true;
+            var itemsBinding = BindingOperations.GetBinding(window.NavigationListBox, ItemsControl.ItemsSourceProperty);
+            var selectedBinding = BindingOperations.GetBinding(window.NavigationListBox, Selector.SelectedItemProperty);
 
-            viewModel.NewProductCommand.Execute(null);
-
-            Assert.True(raised);
+            Assert.NotNull(itemsBinding);
+            Assert.Equal(nameof(MainWindowViewModel.NavigationItems), itemsBinding.Path.Path);
+            Assert.NotNull(selectedBinding);
+            Assert.Equal(nameof(MainWindowViewModel.SelectedNavigationItem), selectedBinding.Path.Path);
         });
 
-    // El comportamiento del comando en sí ya está cubierto por MainWindowViewModelTests; aquí solo
-    // se confirma que el botón "Editar producto" está cableado al comando correcto.
     [Fact]
-    public void EditProductButtonIsBoundToTheEditProductCommandProperty() =>
+    public void ToggleSidebarButtonIsBoundToTheToggleSidebarCommandProperty() =>
         RunOnStaThread(() =>
         {
-            var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
-            var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
-                new FakeProductManagementService(), new FakeCurrentSalesCart());
+            var viewModel = CreateViewModel(CreateAuthenticatedUser("Ana Pérez", "Cajero"));
             var window = new MainWindow(viewModel);
 
-            var binding = BindingOperations.GetBinding(window.EditProductButton, Button.CommandProperty);
+            var binding = BindingOperations.GetBinding(window.ToggleSidebarButton, Button.CommandProperty);
 
             Assert.NotNull(binding);
-            Assert.Equal(nameof(MainWindowViewModel.EditProductCommand), binding.Path.Path);
+            Assert.Equal(nameof(MainWindowViewModel.ToggleSidebarCommand), binding.Path.Path);
         });
 
     [Fact]
-    public void IncludeInactiveCheckBoxIsBoundToTheIncludeInactivePropertyAndItsVisibilityToCanManageProducts() =>
+    public void SidebarStartsExpandedAndTogglingChangesTheWidth() =>
         RunOnStaThread(() =>
         {
-            var window = CreateWindow();
+            var viewModel = CreateViewModel(CreateAuthenticatedUser("Ana Pérez", "Cajero"));
+            _ = new MainWindow(viewModel);
 
-            var checkedBinding = BindingOperations.GetBinding(window.IncludeInactiveCheckBox, ToggleButton.IsCheckedProperty);
-            Assert.NotNull(checkedBinding);
-            Assert.Equal(nameof(MainWindowViewModel.IncludeInactive), checkedBinding.Path.Path);
+            Assert.True(viewModel.IsSidebarExpanded);
+            var expandedWidth = viewModel.SidebarWidth;
 
-            var visibilityBinding = BindingOperations.GetBinding(window.IncludeInactiveCheckBox, System.Windows.UIElement.VisibilityProperty);
-            Assert.NotNull(visibilityBinding);
-            Assert.Equal(nameof(MainWindowViewModel.CanManageProducts), visibilityBinding.Path.Path);
+            viewModel.ToggleSidebarCommand.Execute(null);
+
+            Assert.False(viewModel.IsSidebarExpanded);
+            Assert.NotEqual(expandedWidth, viewModel.SidebarWidth);
+
+            viewModel.ToggleSidebarCommand.Execute(null);
+
+            Assert.True(viewModel.IsSidebarExpanded);
+            Assert.Equal(expandedWidth, viewModel.SidebarWidth);
         });
 
-    // Verifica el mismo defecto que OpenRegisterSessionWindowTests para NewProductRequested: el
-    // evento del ViewModel debe reenviarse hasta el evento público de MainWindow, único punto que
-    // App.xaml.cs usa para resolver EditProductWindow.
     [Fact]
-    public void ViewModelEditProductRequestedBubblesUpToMainWindowEvent() =>
+    public void TogglingTheSidebarDoesNotChangeTheCurrentNavigationOrClearTheCart() =>
         RunOnStaThread(() =>
         {
             var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+            var registerSession = new FakeCurrentRegisterSession();
+            var currentSalesCart = new FakeCurrentSalesCart();
+            currentSalesCart.SetSnapshot(new Pos.Application.SalesCart.SalesCartSnapshot(
+                [new Pos.Application.SalesCart.SalesCartLine(ProductId.New(), "SKU-001", "Agua 1L", 1m, 10m, 10m, "MXN", 5m, true)], "MXN"));
+            var dashboardViewModel = new DashboardViewModel(session, registerSession, currentSalesCart, new FakeProductManagementService());
+            var salesViewModel = new SalesViewModel(session, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
+            var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
             var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
-                new FakeProductManagementService(), new FakeCurrentSalesCart());
-            var window = new MainWindow(viewModel);
-            viewModel.SelectedSearchResult = CreateSearchResult(true);
+                session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
+                new InventoryViewModel(), new RegisterViewModel(registerSession), new SettingsViewModel());
+            _ = new MainWindow(viewModel);
 
-            ProductId? raisedProductId = null;
-            window.EditProductRequested += (_, productId) => raisedProductId = productId;
+            viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
 
-            viewModel.EditProductCommand.Execute(null);
+            viewModel.ToggleSidebarCommand.Execute(null);
 
-            Assert.Equal(viewModel.SelectedSearchResult.ProductId, raisedProductId);
+            Assert.Same(salesViewModel, viewModel.CurrentViewModel);
+            Assert.Single(salesViewModel.CartLines);
         });
 
     [Fact]
-    public void ApplyProductUpdatedForwardsToTheViewModel() =>
+    public void SidebarFooterShowsDisplayNameAndRoleName() =>
         RunOnStaThread(() =>
         {
-            var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
-            var salesCartService = new FakeSalesCartService();
-            var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), salesCartService,
-                new FakeProductManagementService(), new FakeCurrentSalesCart());
+            var viewModel = CreateViewModel(CreateAuthenticatedUser("Ana Pérez", "Cajero"));
             var window = new MainWindow(viewModel);
+
+            var displayNameBinding = BindingOperations.GetBinding(window.DisplayNameText, TextBlock.TextProperty);
+            var roleNameBinding = BindingOperations.GetBinding(window.RoleNameText, TextBlock.TextProperty);
+
+            Assert.NotNull(displayNameBinding);
+            Assert.Equal(nameof(MainWindowViewModel.DisplayName), displayNameBinding.Path.Path);
+            Assert.NotNull(roleNameBinding);
+            Assert.Equal(nameof(MainWindowViewModel.RoleName), roleNameBinding.Path.Path);
+        });
+
+    [Fact]
+    public void BrandNameTextIsPresent() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(CreateAuthenticatedUser("Ana Pérez", "Cajero"));
+            var window = new MainWindow(viewModel);
+
+            Assert.Equal("POSPlatform", window.BrandNameText.Text);
+        });
+
+    [Fact]
+    public void SectionTitleTextIsBoundToCurrentNavigationTitle() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(CreateAuthenticatedUser("Ana Pérez", "Cajero"));
+            var window = new MainWindow(viewModel);
+
+            var binding = BindingOperations.GetBinding(window.SectionTitleText, TextBlock.TextProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(nameof(MainWindowViewModel.CurrentNavigationTitle), binding.Path.Path);
+        });
+
+    [Fact]
+    public void ShellContentControlIsBoundToCurrentViewModel() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(CreateAuthenticatedUser("Ana Pérez", "Cajero"));
+            var window = new MainWindow(viewModel);
+
+            var binding = BindingOperations.GetBinding(window.ShellContentControl, ContentControl.ContentProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(nameof(MainWindowViewModel.CurrentViewModel), binding.Path.Path);
+        });
+
+    // Dashboard debe estar seleccionado inicialmente para cualquier usuario autenticado (TAREA
+    // 24C.1, sección 10).
+    [Fact]
+    public void DashboardIsSelectedInitially() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(CreateAuthenticatedUser("Ana Pérez", "Cajero"));
+            _ = new MainWindow(viewModel);
+
+            Assert.IsType<DashboardViewModel>(viewModel.CurrentViewModel);
+        });
+
+    [Fact]
+    public void NavigatingToEachAllowedSectionChangesTheContentToTheMatchingViewModel() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(CreateManageProductsUser());
+            _ = new MainWindow(viewModel);
+
+            viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Products);
+            Assert.IsType<ProductsViewModel>(viewModel.CurrentViewModel);
+
+            viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Inventory);
+            Assert.IsType<InventoryViewModel>(viewModel.CurrentViewModel);
+
+            viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
+            Assert.IsType<SalesViewModel>(viewModel.CurrentViewModel);
+
+            viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Dashboard);
+            Assert.IsType<DashboardViewModel>(viewModel.CurrentViewModel);
+        });
+
+    // Confirma que el shell reenvía ApplyProductUpdated al ViewModel que originó la solicitud de
+    // edición (Venta), tal como pide App.xaml.cs tras cerrar EditProductWindow.
+    [Fact]
+    public void ApplyProductUpdatedForwardsToTheOriginatingChildViewModel() =>
+        RunOnStaThread(() =>
+        {
+            var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+            var salesCartService = new FakeSalesCartService();
+            var salesViewModel = new SalesViewModel(session, salesCartService, new FakeProductManagementService(), new FakeCurrentSalesCart());
+            var dashboardViewModel = new DashboardViewModel(
+                session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), new FakeProductManagementService());
+            var viewModel = new MainWindowViewModel(
+                session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), dashboardViewModel, salesViewModel,
+                new ProductsViewModel(new CatalogFakeProductManagementService()), new InventoryViewModel(),
+                new RegisterViewModel(new FakeCurrentRegisterSession()), new SettingsViewModel());
+            var window = new MainWindow(viewModel);
+
+            salesViewModel.SelectedSearchResult = new Pos.Application.SalesCart.ProductSearchResult(
+                ProductId.New(), "SKU-001", "Producto", 10m, "MXN", 5m, true);
+            salesViewModel.EditProductCommand.Execute(null);
 
             window.ApplyProductUpdated("SKU-EDITED");
 
-            Assert.Equal("SKU-EDITED", viewModel.SearchText);
-            Assert.Equal(1, salesCartService.SearchCallCount);
+            Assert.Equal("SKU-EDITED", salesViewModel.SearchText);
         });
 
-    [Fact]
-    public void ApplyProductCreatedForwardsToTheViewModel() =>
-        RunOnStaThread(() =>
-        {
-            var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
-            var salesCartService = new FakeSalesCartService();
-            var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), salesCartService,
-                new FakeProductManagementService(), new FakeCurrentSalesCart());
-            var window = new MainWindow(viewModel);
-
-            window.ApplyProductCreated("SKU-NEW");
-
-            Assert.Equal("SKU-NEW", viewModel.SearchText);
-            Assert.Equal(1, salesCartService.SearchCallCount);
-        });
-
-    // Regresión: SearchResultsGrid.IsAvailable usaba Binding sin Mode explícito, lo que WPF
-    // resuelve a TwoWay para DataGridCheckBoxColumn (misma resolución que CheckBox.IsChecked).
-    // ProductSearchResult.IsAvailable no tiene setter público, así que WPF lanzaba
-    // InvalidOperationException al generar la celda, cerrando la aplicación en cuanto la
-    // búsqueda devolvía resultados. El grid completo ya es IsReadOnly, pero eso no evita el
-    // error porque DataGridCheckBoxColumn reutiliza el mismo CheckBox para mostrar y editar.
-    [Fact]
-    public void SearchResultsGridIsReadOnly() =>
-        RunOnStaThread(() => Assert.True(CreateWindow().SearchResultsGrid.IsReadOnly));
-
-    [Fact]
-    public void CartGridIsReadOnly() =>
-        RunOnStaThread(() => Assert.True(CreateWindow().CartGrid.IsReadOnly));
-
-    [Fact]
-    public void IsAvailableColumnBindingIsOneWay() =>
-        RunOnStaThread(() =>
-        {
-            var window = CreateWindow();
-            var column = Assert.IsType<DataGridCheckBoxColumn>(
-                window.SearchResultsGrid.Columns.Single(c => (string)c.Header == "Disponible"));
-            var binding = Assert.IsType<Binding>(column.Binding);
-
-            Assert.Equal(nameof(ProductSearchResult.IsAvailable), binding.Path.Path);
-            Assert.Equal(BindingMode.OneWay, binding.Mode);
-        });
-
-    [Fact]
-    public void AvailableQuantityColumnBindingIsNotTwoWay() =>
-        RunOnStaThread(() =>
-        {
-            var window = CreateWindow();
-            var column = Assert.IsType<DataGridTextColumn>(
-                window.SearchResultsGrid.Columns.Single(c => (string)c.Header == "Existencia"));
-            var binding = Assert.IsType<Binding>(column.Binding);
-
-            Assert.Equal(nameof(ProductSearchResult.AvailableQuantity), binding.Path.Path);
-            AssertBindingIsNotTwoWay(binding);
-        });
-
-    [Fact]
-    public void SearchResultsGridPriceAndTextColumnsAreNotTwoWay() =>
-        RunOnStaThread(() =>
-        {
-            var window = CreateWindow();
-
-            foreach (var header in SearchResultsTextHeaders)
-            {
-                var column = Assert.IsType<DataGridTextColumn>(
-                    window.SearchResultsGrid.Columns.Single(c => (string)c.Header == header));
-                AssertBindingIsNotTwoWay(column.Binding);
-            }
-
-            var priceColumn = Assert.IsType<DataGridTextColumn>(
-                window.SearchResultsGrid.Columns.Single(c => (string)c.Header == "Precio"));
-            AssertBindingIsNotTwoWay(priceColumn.Binding);
-        });
-
-    [Fact]
-    public void CartGridCalculatedColumnsAreNotTwoWay() =>
-        RunOnStaThread(() =>
-        {
-            var window = CreateWindow();
-
-            foreach (var header in CartGridCalculatedHeaders)
-            {
-                var column = Assert.IsType<DataGridTextColumn>(
-                    window.CartGrid.Columns.Single(c => (string)c.Header == header));
-                AssertBindingIsNotTwoWay(column.Binding);
-            }
-        });
-
-    // Reproduce exactamente el camino que provocaba el crash: toma el Binding declarado en el
-    // XAML para la columna "Disponible" y lo aplica a un CheckBox real, tal como hace
-    // DataGridCheckBoxColumn internamente al generar la celda. Antes de la corrección esto
-    // lanzaba InvalidOperationException; ahora debe completarse sin error.
-    [Fact]
-    public void IsAvailableColumnBindingDoesNotThrowWhenAppliedToACheckBox() =>
-        RunOnStaThread(() =>
-        {
-            var window = CreateWindow();
-            var column = Assert.IsType<DataGridCheckBoxColumn>(
-                window.SearchResultsGrid.Columns.Single(c => (string)c.Header == "Disponible"));
-            var binding = Assert.IsType<Binding>(column.Binding);
-
-            var checkBox = new CheckBox { DataContext = CreateSearchResult(isAvailable: true) };
-
-            var exception = Record.Exception(
-                () => BindingOperations.SetBinding(checkBox, ToggleButton.IsCheckedProperty, binding));
-
-            Assert.Null(exception);
-            Assert.True(checkBox.IsChecked);
-        });
-
-    // Revisión preventiva del carrito: Cantidad se controla solo por los botones +/-, nunca por
-    // edición directa de celda.
-    [Fact]
-    public void CartQuantityTemplateKeepsIncreaseAndDecreaseButtonsBoundToCommands() =>
-        RunOnStaThread(() =>
-        {
-            var window = CreateWindow();
-            var column = Assert.IsType<DataGridTemplateColumn>(
-                window.CartGrid.Columns.Single(c => (string)c.Header == "Cantidad"));
-
-            var content = (StackPanel)column.CellTemplate.LoadContent();
-            var buttons = content.Children.OfType<Button>().ToList();
-
-            var decreaseButton = Assert.Single(buttons, b => (string)b.Content == "-");
-            var increaseButton = Assert.Single(buttons, b => (string)b.Content == "+");
-
-            AssertCommandBindingPath(decreaseButton, "DataContext." + nameof(MainWindowViewModel.DecreaseQuantityCommand));
-            AssertCommandBindingPath(increaseButton, "DataContext." + nameof(MainWindowViewModel.IncreaseQuantityCommand));
-        });
-
-    // ---------- Mensajes de búsqueda y existencia (CORRECCIÓN UX FINAL TAREA 24A) ----------
-
-    [Fact]
-    public void SearchStatusTextIsBoundToTheSearchStatusMessageProperty() =>
-        RunOnStaThread(() =>
-        {
-            var window = CreateWindow();
-
-            var binding = BindingOperations.GetBinding(window.SearchStatusText, TextBlock.TextProperty);
-
-            Assert.NotNull(binding);
-            Assert.Equal(nameof(MainWindowViewModel.SearchStatusMessage), binding.Path.Path);
-        });
-
-    [Fact]
-    public void CartErrorTextIsBoundToGeneralErrorAndPlacedNearTheCartGrid() =>
-        RunOnStaThread(() =>
-        {
-            var window = CreateWindow();
-
-            var binding = BindingOperations.GetBinding(window.CartErrorText, TextBlock.TextProperty);
-
-            Assert.NotNull(binding);
-            Assert.Equal(nameof(MainWindowViewModel.GeneralError), binding.Path.Path);
-            Assert.True(Grid.GetRow(window.CartErrorText) < Grid.GetRow(window.CartGrid));
-        });
-
-    [Fact]
-    public void AvailabilityStatusColumnUsesTheProductAvailabilityStatusConverter() =>
-        RunOnStaThread(() =>
-        {
-            var window = CreateWindow();
-            var column = Assert.IsType<DataGridTextColumn>(
-                window.SearchResultsGrid.Columns.Single(c => (string)c.Header == "Estado"));
-            var binding = Assert.IsType<Binding>(column.Binding);
-
-            Assert.IsType<ProductAvailabilityStatusConverter>(binding.Converter);
-            AssertBindingIsNotTwoWay(binding);
-        });
-
-    [Fact]
-    public void AvailabilityStatusConverterShowsOutOfStockForATrackedProductWithoutQuantity()
+    private static MainWindowViewModel CreateViewModel(AuthenticatedUser user)
     {
-        var converter = new ProductAvailabilityStatusConverter();
+        var session = new FakeCurrentUserSession { CurrentUser = user };
+        var registerSession = new FakeCurrentRegisterSession();
+        var currentSalesCart = new FakeCurrentSalesCart();
 
-        var text = converter.Convert(CreateSearchResult(isAvailable: false), typeof(string), null, null!);
+        var dashboardViewModel = new DashboardViewModel(
+            session, registerSession, currentSalesCart, new FakeProductManagementService());
+        var salesViewModel = new SalesViewModel(
+            session, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
+        var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
+        var inventoryViewModel = new InventoryViewModel();
+        var registerViewModel = new RegisterViewModel(registerSession);
+        var settingsViewModel = new SettingsViewModel();
 
-        Assert.Equal("Sin existencia", text);
-    }
-
-    [Fact]
-    public void AvailabilityStatusConverterShowsNothingForATrackedProductWithStock()
-    {
-        var converter = new ProductAvailabilityStatusConverter();
-
-        var text = converter.Convert(CreateSearchResult(isAvailable: true), typeof(string), null, null!);
-
-        Assert.Equal(string.Empty, text);
-    }
-
-    [Fact]
-    public void AvailabilityStatusConverterShowsDoesNotTrackInventoryForAnUntrackedProduct()
-    {
-        var converter = new ProductAvailabilityStatusConverter();
-        var result = new ProductSearchResult(
-            ProductId.New(), "SKU-2", "Servicio", 10m, "MXN", availableQuantity: 0m, tracksInventory: false);
-
-        var text = converter.Convert(result, typeof(string), null, null!);
-
-        Assert.Equal("No controla inventario", text);
-    }
-
-    [Fact]
-    public void CartRemoveTemplateKeepsButtonBoundToRemoveLineCommand() =>
-        RunOnStaThread(() =>
-        {
-            var window = CreateWindow();
-            var column = Assert.IsType<DataGridTemplateColumn>(
-                window.CartGrid.Columns.Single(c => (string)c.Header == "Eliminar"));
-
-            var button = Assert.IsType<Button>(column.CellTemplate.LoadContent());
-
-            AssertCommandBindingPath(button, "DataContext." + nameof(MainWindowViewModel.RemoveLineCommand));
-        });
-
-    private static void AssertBindingIsNotTwoWay(BindingBase bindingBase)
-    {
-        switch (bindingBase)
-        {
-            case Binding binding:
-                Assert.NotEqual(BindingMode.TwoWay, binding.Mode);
-                Assert.NotEqual(BindingMode.OneWayToSource, binding.Mode);
-                break;
-            case MultiBinding multiBinding:
-                Assert.NotEqual(BindingMode.TwoWay, multiBinding.Mode);
-                Assert.NotEqual(BindingMode.OneWayToSource, multiBinding.Mode);
-
-                foreach (var inner in multiBinding.Bindings)
-                {
-                    AssertBindingIsNotTwoWay(inner);
-                }
-
-                break;
-            default:
-                throw new InvalidOperationException($"Tipo de binding no soportado en la prueba: {bindingBase.GetType()}");
-        }
-    }
-
-    private static void AssertCommandBindingPath(Button button, string expectedPath)
-    {
-        var binding = BindingOperations.GetBinding(button, Button.CommandProperty);
-
-        Assert.NotNull(binding);
-        Assert.Equal(expectedPath, binding.Path.Path);
-    }
-
-    private static ProductSearchResult CreateSearchResult(bool isAvailable) =>
-        new(
-            ProductId.New(),
-            "SKU-1",
-            "Producto de prueba",
-            10m,
-            "MXN",
-            availableQuantity: isAvailable ? 5m : 0m,
-            tracksInventory: true);
-
-    private static MainWindow CreateWindow()
-    {
-        var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
-        var viewModel = new MainWindowViewModel(
-            session, new FakeCurrentRegisterSession(), new FakeSalesCartService(),
-            new FakeProductManagementService(), new FakeCurrentSalesCart());
-
-        return new MainWindow(viewModel);
+        return new MainWindowViewModel(
+            session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
+            inventoryViewModel, registerViewModel, settingsViewModel);
     }
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>
@@ -478,5 +307,5 @@ public class MainWindowTests
             "GERENTE",
             "Ana Pérez",
             "Gerente",
-            [Permission.ProcessSale, Permission.ManageProducts]);
+            [Permission.ProcessSale, Permission.ManageProducts, Permission.AdjustInventory]);
 }

@@ -35,6 +35,13 @@ internal sealed class FakeProductManagementService : IProductManagementService
     public Task<ProductDetails?> GetByIdAsync(ProductId productId, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("No se usa en las pruebas de MainWindowViewModel.");
 
+    public Task<ProductCatalogPageResult> GetCatalogPageAsync(
+        string? searchTerm, ProductCatalogStatusFilter filter, int skip, int take, CancellationToken cancellationToken = default) =>
+        Task.FromResult(ProductCatalogPageResult.Empty);
+
+    public Task<ProductCatalogSummary> GetDashboardSummaryAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(ProductCatalogSummary.Empty);
+
     public Task<UpdateProductResult> UpdateAsync(
         UpdateProductRequest request, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("No se usa en las pruebas de MainWindowViewModel.");

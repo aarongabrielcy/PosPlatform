@@ -22,6 +22,7 @@ public class ProductManagementServiceTests
         FakeProductRepository ProductRepository,
         FakeInventoryItemRepository InventoryItemRepository,
         FakeInventoryMovementRepository InventoryMovementRepository,
+        FakeProductCatalogQuery ProductCatalogQuery,
         FakeUnitOfWork UnitOfWork,
         OrganizationId OrganizationId,
         BranchId BranchId);
@@ -68,16 +69,17 @@ public class ProductManagementServiceTests
         var productRepository = new FakeProductRepository();
         var inventoryItemRepository = new FakeInventoryItemRepository();
         var inventoryMovementRepository = new FakeInventoryMovementRepository();
+        var productCatalogQuery = new FakeProductCatalogQuery();
         var unitOfWork = new FakeUnitOfWork();
         var clock = new FakeClock(UtcNow);
 
         var service = new ProductManagementService(
             userSession, registerSession, productRepository, inventoryItemRepository,
-            inventoryMovementRepository, unitOfWork, clock);
+            inventoryMovementRepository, productCatalogQuery, unitOfWork, clock);
 
         return new Fixture(
             service, userSession, registerSession, productRepository, inventoryItemRepository,
-            inventoryMovementRepository, unitOfWork, organizationId, branchId);
+            inventoryMovementRepository, productCatalogQuery, unitOfWork, organizationId, branchId);
     }
 
     private static Product CreateProduct(
@@ -189,7 +191,7 @@ public class ProductManagementServiceTests
         var fixture = CreateFixture(authenticated: false);
 
         var result = await fixture.Service.UpdateAsync(
-            new UpdateProductRequest(ProductId.New(), null, "Nuevo nombre", null, 12m, null, null));
+            new UpdateProductRequest(ProductId.New(), "SKU-001", null, "Nuevo nombre", null, 12m, null, null));
 
         Assert.Equal(UpdateProductResultStatus.NotAuthenticated, result.Status);
     }
@@ -200,7 +202,7 @@ public class ProductManagementServiceTests
         var fixture = CreateFixture(permissions: [Permission.ProcessSale]);
 
         var result = await fixture.Service.UpdateAsync(
-            new UpdateProductRequest(ProductId.New(), null, "Nuevo nombre", null, 12m, null, null));
+            new UpdateProductRequest(ProductId.New(), "SKU-001", null, "Nuevo nombre", null, 12m, null, null));
 
         Assert.Equal(UpdateProductResultStatus.NotAuthorized, result.Status);
     }
@@ -211,7 +213,7 @@ public class ProductManagementServiceTests
         var fixture = CreateFixture();
 
         var result = await fixture.Service.UpdateAsync(
-            new UpdateProductRequest(ProductId.New(), null, "Nuevo nombre", null, 12m, null, null));
+            new UpdateProductRequest(ProductId.New(), "SKU-001", null, "Nuevo nombre", null, 12m, null, null));
 
         Assert.Equal(UpdateProductResultStatus.ProductNotFound, result.Status);
     }
@@ -224,7 +226,7 @@ public class ProductManagementServiceTests
         fixture.ProductRepository.Add(product);
 
         var result = await fixture.Service.UpdateAsync(
-            new UpdateProductRequest(product.Id, null, "Nuevo nombre", null, 12m, null, null));
+            new UpdateProductRequest(product.Id, product.Sku.Value, null, "Nuevo nombre", null, 12m, null, null));
 
         Assert.Equal(UpdateProductResultStatus.ProductNotFound, result.Status);
     }
@@ -237,7 +239,7 @@ public class ProductManagementServiceTests
         fixture.ProductRepository.Add(product);
 
         var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
-            product.Id, null, "Nombre actualizado", "Descripción actualizada", 20m, 8m, null));
+            product.Id, product.Sku.Value, null, "Nombre actualizado", "Descripción actualizada", 20m, 8m, null));
 
         Assert.True(result.Success);
         Assert.Equal("Nombre actualizado", result.Product!.Name);
@@ -257,7 +259,7 @@ public class ProductManagementServiceTests
         fixture.InventoryItemRepository.Add(CreateInventoryItem(fixture.BranchId, product.Id));
 
         var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
-            product.Id, "7509999999999", product.Name, product.Description, 10m, 5m, null));
+            product.Id, product.Sku.Value, "7509999999999", product.Name, product.Description, 10m, 5m, null));
 
         Assert.True(result.Success);
         Assert.Equal("7509999999999", result.Product!.Barcode);
@@ -273,7 +275,7 @@ public class ProductManagementServiceTests
         fixture.ProductRepository.Add(product);
 
         var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
-            product.Id, "7501111111111", product.Name, product.Description, 10m, 5m, null));
+            product.Id, product.Sku.Value, "7501111111111", product.Name, product.Description, 10m, 5m, null));
 
         Assert.Equal(UpdateProductResultStatus.DuplicateBarcode, result.Status);
         Assert.Equal(0, fixture.ProductRepository.UpdateCallCount);
@@ -287,7 +289,7 @@ public class ProductManagementServiceTests
         fixture.ProductRepository.Add(product);
 
         var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
-            product.Id, "7501234567890", product.Name, product.Description, 10m, 5m, null));
+            product.Id, product.Sku.Value, "7501234567890", product.Name, product.Description, 10m, 5m, null));
 
         Assert.True(result.Success);
     }
@@ -300,7 +302,7 @@ public class ProductManagementServiceTests
         fixture.ProductRepository.Add(product);
 
         var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
-            product.Id, null, product.Name, product.Description, -5m, null, null));
+            product.Id, product.Sku.Value, null, product.Name, product.Description, -5m, null, null));
 
         Assert.Equal(UpdateProductResultStatus.InvalidSalePrice, result.Status);
         Assert.Equal(0, fixture.ProductRepository.UpdateCallCount);
@@ -314,7 +316,7 @@ public class ProductManagementServiceTests
         fixture.ProductRepository.Add(product);
 
         var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
-            product.Id, null, product.Name, product.Description, 10m, -1m, null));
+            product.Id, product.Sku.Value, null, product.Name, product.Description, 10m, -1m, null));
 
         Assert.Equal(UpdateProductResultStatus.InvalidCost, result.Status);
     }
@@ -327,24 +329,87 @@ public class ProductManagementServiceTests
         fixture.ProductRepository.Add(product);
 
         var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
-            product.Id, null, product.Name, product.Description, 15m, null, null));
+            product.Id, product.Sku.Value, null, product.Name, product.Description, 15m, null, null));
 
         Assert.True(result.Success);
         Assert.Equal("MXN", result.Product!.Currency);
     }
 
     [Fact]
-    public async Task UpdateAsyncDoesNotChangeSku()
+    public async Task UpdateAsyncKeepsTheSameSkuWhenUnchanged()
     {
         var fixture = CreateFixture();
         var product = CreateProduct(fixture.OrganizationId, sku: "SKU-FIXED");
         fixture.ProductRepository.Add(product);
 
         var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
-            product.Id, null, "Otro nombre", null, 10m, null, null));
+            product.Id, "SKU-FIXED", null, "Otro nombre", null, 10m, null, null));
 
         Assert.True(result.Success);
         Assert.Equal("SKU-FIXED", result.Product!.Sku);
+        Assert.Equal(0, fixture.ProductRepository.GetBySkuCallCount);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncChangesTheSkuAndNormalizesIt()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, sku: "SKU-OLD");
+        fixture.ProductRepository.Add(product);
+        var originalProductId = product.Id;
+
+        var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
+            product.Id, " sku-new ", null, product.Name, product.Description, 10m, null, null));
+
+        Assert.True(result.Success);
+        Assert.Equal("SKU-NEW", result.Product!.Sku);
+        Assert.Equal(originalProductId, result.Product.ProductId);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncRejectsAnInvalidSku()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, sku: "SKU-OLD");
+        fixture.ProductRepository.Add(product);
+
+        var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
+            product.Id, "!", null, product.Name, product.Description, 10m, null, null));
+
+        Assert.Equal(UpdateProductResultStatus.InvalidSku, result.Status);
+        Assert.Equal(0, fixture.ProductRepository.UpdateCallCount);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncRejectsDuplicateSkuFromAnotherProductInTheSameOrganization()
+    {
+        var fixture = CreateFixture();
+        var other = CreateProduct(fixture.OrganizationId, sku: "SKU-TAKEN", barcode: "7501111111111");
+        var product = CreateProduct(fixture.OrganizationId, sku: "SKU-OWN", barcode: "7502222222222");
+        fixture.ProductRepository.Add(other);
+        fixture.ProductRepository.Add(product);
+
+        var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
+            product.Id, "SKU-TAKEN", null, product.Name, product.Description, 10m, null, null));
+
+        Assert.Equal(UpdateProductResultStatus.DuplicateSku, result.Status);
+        Assert.Equal(0, fixture.ProductRepository.UpdateCallCount);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncAllowsTheSameSkuUsedByAProductInAnotherOrganization()
+    {
+        var fixture = CreateFixture();
+        var otherOrganizationProduct = CreateProduct(OrganizationId.New(), sku: "SKU-SHARED");
+        var product = CreateProduct(fixture.OrganizationId, sku: "SKU-OWN");
+        fixture.ProductRepository.Add(otherOrganizationProduct);
+        fixture.ProductRepository.Add(product);
+
+        var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
+            product.Id, "SKU-SHARED", null, product.Name, product.Description, 10m, null, null));
+
+        Assert.True(result.Success);
+        Assert.Equal("SKU-SHARED", result.Product!.Sku);
     }
 
     [Fact]
@@ -356,7 +421,7 @@ public class ProductManagementServiceTests
         fixture.InventoryItemRepository.Add(CreateInventoryItem(fixture.BranchId, product.Id));
 
         var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
-            product.Id, null, product.Name, product.Description, 10m, null, 4m));
+            product.Id, product.Sku.Value, null, product.Name, product.Description, 10m, null, 4m));
 
         Assert.True(result.Success);
         Assert.True(result.Product!.TracksInventory);
@@ -371,7 +436,7 @@ public class ProductManagementServiceTests
         fixture.InventoryItemRepository.Add(CreateInventoryItem(fixture.BranchId, product.Id, quantity: 7m, reorderPoint: 2m));
 
         var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
-            product.Id, null, product.Name, product.Description, 10m, null, 5m));
+            product.Id, product.Sku.Value, null, product.Name, product.Description, 10m, null, 5m));
 
         Assert.True(result.Success);
         Assert.Equal(5m, result.Product!.ReorderPoint);
@@ -388,7 +453,7 @@ public class ProductManagementServiceTests
         fixture.ProductRepository.Add(product);
 
         var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
-            product.Id, null, product.Name, product.Description, 10m, null, 5m));
+            product.Id, product.Sku.Value, null, product.Name, product.Description, 10m, null, 5m));
 
         Assert.True(result.Success);
         Assert.Equal(0, fixture.InventoryItemRepository.UpdateCallCount);
@@ -404,7 +469,7 @@ public class ProductManagementServiceTests
         fixture.InventoryItemRepository.Add(CreateInventoryItem(fixture.BranchId, product.Id));
 
         await fixture.Service.UpdateAsync(new UpdateProductRequest(
-            product.Id, null, product.Name, product.Description, 10m, null, 6m));
+            product.Id, product.Sku.Value, null, product.Name, product.Description, 10m, null, 6m));
 
         Assert.Equal(1, fixture.UnitOfWork.CommitCallCount);
     }
@@ -629,5 +694,102 @@ public class ProductManagementServiceTests
         var reloaded = await fixture.InventoryItemRepository.GetByBranchAndProductAsync(
             fixture.BranchId, product.Id, CancellationToken.None);
         Assert.Equal(15m, reloaded!.Quantity);
+    }
+
+    // ---------- GetCatalogPageAsync ----------
+
+    [Fact]
+    public async Task GetCatalogPageAsyncReturnsEmptyWhenNotAuthenticated()
+    {
+        var fixture = CreateFixture(authenticated: false);
+
+        var result = await fixture.Service.GetCatalogPageAsync(null, ProductCatalogStatusFilter.All, 0, 50);
+
+        Assert.Empty(result.Items);
+        Assert.Equal(0, fixture.ProductCatalogQuery.SearchPageCallCount);
+    }
+
+    [Fact]
+    public async Task GetCatalogPageAsyncReturnsEmptyWithoutManageProductsPermission()
+    {
+        var fixture = CreateFixture(permissions: [Permission.ProcessSale]);
+
+        var result = await fixture.Service.GetCatalogPageAsync(null, ProductCatalogStatusFilter.All, 0, 50);
+
+        Assert.Empty(result.Items);
+        Assert.Equal(0, fixture.ProductCatalogQuery.SearchPageCallCount);
+    }
+
+    [Fact]
+    public async Task GetCatalogPageAsyncReturnsEmptyWithoutAnOpenRegisterSession()
+    {
+        var fixture = CreateFixture(registerOpen: false);
+
+        var result = await fixture.Service.GetCatalogPageAsync(null, ProductCatalogStatusFilter.All, 0, 50);
+
+        Assert.Empty(result.Items);
+        Assert.Equal(0, fixture.ProductCatalogQuery.SearchPageCallCount);
+    }
+
+    [Fact]
+    public async Task GetCatalogPageAsyncDelegatesToTheCatalogQueryWithTheCurrentOrganizationAndBranch()
+    {
+        var fixture = CreateFixture();
+
+        await fixture.Service.GetCatalogPageAsync("agua", ProductCatalogStatusFilter.LowStock, 50, 25);
+
+        Assert.Equal(1, fixture.ProductCatalogQuery.SearchPageCallCount);
+        Assert.Equal(fixture.OrganizationId, fixture.ProductCatalogQuery.LastOrganizationId);
+        Assert.Equal(fixture.BranchId, fixture.ProductCatalogQuery.LastBranchId);
+        Assert.Equal("agua", fixture.ProductCatalogQuery.LastSearchTerm);
+        Assert.Equal(ProductCatalogStatusFilter.LowStock, fixture.ProductCatalogQuery.LastFilter);
+        Assert.Equal(50, fixture.ProductCatalogQuery.LastSkip);
+        Assert.Equal(25, fixture.ProductCatalogQuery.LastTake);
+    }
+
+    // ---------- GetDashboardSummaryAsync ----------
+
+    [Fact]
+    public async Task GetDashboardSummaryAsyncReturnsEmptyWhenNotAuthenticated()
+    {
+        var fixture = CreateFixture(authenticated: false);
+
+        var result = await fixture.Service.GetDashboardSummaryAsync();
+
+        Assert.Equal(ProductCatalogSummary.Empty, result);
+        Assert.Equal(0, fixture.ProductCatalogQuery.GetSummaryCallCount);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummaryAsyncReturnsEmptyWithoutManageProductsPermission()
+    {
+        var fixture = CreateFixture(permissions: [Permission.ProcessSale]);
+
+        var result = await fixture.Service.GetDashboardSummaryAsync();
+
+        Assert.Equal(ProductCatalogSummary.Empty, result);
+        Assert.Equal(0, fixture.ProductCatalogQuery.GetSummaryCallCount);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummaryAsyncReturnsEmptyWithoutAnOpenRegisterSession()
+    {
+        var fixture = CreateFixture(registerOpen: false);
+
+        var result = await fixture.Service.GetDashboardSummaryAsync();
+
+        Assert.Equal(ProductCatalogSummary.Empty, result);
+    }
+
+    [Fact]
+    public async Task GetDashboardSummaryAsyncDelegatesToTheCatalogQueryWithTheCurrentOrganizationAndBranch()
+    {
+        var fixture = CreateFixture();
+
+        var result = await fixture.Service.GetDashboardSummaryAsync();
+
+        Assert.Equal(1, fixture.ProductCatalogQuery.GetSummaryCallCount);
+        Assert.Equal(fixture.OrganizationId, fixture.ProductCatalogQuery.LastOrganizationId);
+        Assert.Equal(fixture.BranchId, fixture.ProductCatalogQuery.LastBranchId);
     }
 }

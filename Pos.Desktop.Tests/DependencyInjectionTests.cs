@@ -6,9 +6,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Pos.Application.Authentication;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
+using Pos.Desktop.Dashboard;
+using Pos.Desktop.Inventory;
 using Pos.Desktop.Login;
 using Pos.Desktop.Main;
+using Pos.Desktop.Products.Catalog;
+using Pos.Desktop.Register;
 using Pos.Desktop.RegisterSessions;
+using Pos.Desktop.Sales;
+using Pos.Desktop.Settings;
 using Pos.Desktop.Setup;
 using Pos.Infrastructure;
 using Pos.Infrastructure.Storage;
@@ -52,6 +58,12 @@ public class DependencyInjectionTests
 
         services.AddTransient<MainWindow>();
         services.AddTransient<MainWindowViewModel>();
+        services.AddTransient<DashboardViewModel>();
+        services.AddTransient<SalesViewModel>();
+        services.AddTransient<ProductsViewModel>();
+        services.AddTransient<InventoryViewModel>();
+        services.AddTransient<RegisterViewModel>();
+        services.AddTransient<SettingsViewModel>();
         services.AddTransient<InitialSetupViewModel>();
         services.AddTransient<InitialSetupWindow>();
         services.AddTransient<LoginViewModel>();
@@ -185,6 +197,21 @@ public class DependencyInjectionTests
             using var scope = provider.CreateScope();
 
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<MainWindowViewModel>());
+        });
+
+    [Fact]
+    public void ChildShellViewModelsResolveWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<DashboardViewModel>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<SalesViewModel>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<ProductsViewModel>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<InventoryViewModel>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<RegisterViewModel>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<SettingsViewModel>());
         });
 
     [Fact]

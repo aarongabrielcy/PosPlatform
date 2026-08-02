@@ -7,9 +7,11 @@ public enum UpdateProductResultStatus
     NotAuthorized,
     ProductNotFound,
     InvalidName,
+    InvalidSku,
     InvalidBarcode,
     InvalidSalePrice,
     InvalidCost,
     InvalidReorderPoint,
+    DuplicateSku,
     DuplicateBarcode,
 }

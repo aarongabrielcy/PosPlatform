@@ -22,6 +22,7 @@ public sealed class ProductManagementService : IProductManagementService
     private readonly IProductRepository _productRepository;
     private readonly IInventoryItemRepository _inventoryItemRepository;
     private readonly IInventoryMovementRepository _inventoryMovementRepository;
+    private readonly IProductCatalogQuery _productCatalogQuery;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
@@ -31,6 +32,7 @@ public sealed class ProductManagementService : IProductManagementService
         IProductRepository productRepository,
         IInventoryItemRepository inventoryItemRepository,
         IInventoryMovementRepository inventoryMovementRepository,
+        IProductCatalogQuery productCatalogQuery,
         IUnitOfWork unitOfWork,
         IClock clock)
     {
@@ -39,6 +41,7 @@ public sealed class ProductManagementService : IProductManagementService
         _productRepository = productRepository ?? throw new ArgumentNullException(nameof(productRepository));
         _inventoryItemRepository = inventoryItemRepository ?? throw new ArgumentNullException(nameof(inventoryItemRepository));
         _inventoryMovementRepository = inventoryMovementRepository ?? throw new ArgumentNullException(nameof(inventoryMovementRepository));
+        _productCatalogQuery = productCatalogQuery ?? throw new ArgumentNullException(nameof(productCatalogQuery));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
@@ -106,6 +109,38 @@ public sealed class ProductManagementService : IProductManagementService
         return await BuildProductDetailsAsync(product, _currentRegisterSession.Current, cancellationToken);
     }
 
+    public async Task<ProductCatalogPageResult> GetCatalogPageAsync(
+        string? searchTerm,
+        ProductCatalogStatusFilter filter,
+        int skip,
+        int take,
+        CancellationToken cancellationToken = default)
+    {
+        var user = _currentUserSession.CurrentUser;
+        var registerSession = _currentRegisterSession.Current;
+
+        if (user is null || !user.HasPermission(Permission.ManageProducts) || registerSession is null)
+        {
+            return ProductCatalogPageResult.Empty;
+        }
+
+        return await _productCatalogQuery.SearchPageAsync(
+            user.OrganizationId, registerSession.BranchId, searchTerm, filter, skip, take, cancellationToken);
+    }
+
+    public async Task<ProductCatalogSummary> GetDashboardSummaryAsync(CancellationToken cancellationToken = default)
+    {
+        var user = _currentUserSession.CurrentUser;
+        var registerSession = _currentRegisterSession.Current;
+
+        if (user is null || !user.HasPermission(Permission.ManageProducts) || registerSession is null)
+        {
+            return ProductCatalogSummary.Empty;
+        }
+
+        return await _productCatalogQuery.GetSummaryAsync(user.OrganizationId, registerSession.BranchId, cancellationToken);
+    }
+
     public async Task<UpdateProductResult> UpdateAsync(
         UpdateProductRequest request, CancellationToken cancellationToken = default)
     {
@@ -133,6 +168,29 @@ public sealed class ProductManagementService : IProductManagementService
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return UpdateProductResult.Failure(UpdateProductResultStatus.InvalidName);
+        }
+
+        Sku sku;
+
+        try
+        {
+            sku = new Sku(request.Sku);
+        }
+        catch (DomainValidationException)
+        {
+            return UpdateProductResult.Failure(UpdateProductResultStatus.InvalidSku);
+        }
+
+        // Duplicado de Sku: solo si el valor normalizado realmente cambia respecto al actual, y
+        // excluyendo el propio producto (igual criterio que el duplicado de Barcode más abajo).
+        if (sku.Value != product.Sku.Value)
+        {
+            var existingBySku = await _productRepository.GetBySkuAsync(user.OrganizationId, sku, cancellationToken);
+
+            if (existingBySku is not null && existingBySku.Id != product.Id)
+            {
+                return UpdateProductResult.Failure(UpdateProductResultStatus.DuplicateSku);
+            }
         }
 
         Barcode? barcode = null;
@@ -206,6 +264,7 @@ public sealed class ProductManagementService : IProductManagementService
 
         try
         {
+            product.ChangeSku(sku);
             product.Rename(request.Name);
             product.ChangeDescription(request.Description);
             product.ChangeBarcode(barcode);

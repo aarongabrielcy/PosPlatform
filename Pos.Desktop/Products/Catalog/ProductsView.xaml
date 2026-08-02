@@ -1,0 +1,136 @@
+<UserControl x:Class="Pos.Desktop.Products.Catalog.ProductsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:converters="clr-namespace:Pos.Desktop.Common"
+             xmlns:manageProduct="clr-namespace:Pos.Application.Products.ManageProduct;assembly=Pos.Application"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="1000">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Pos.Desktop;component/Themes/AppColors.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <converters:ProductCatalogInventoryStatusConverter x:Key="InventoryStatusConverter" />
+            <converters:ProductCatalogQuantityTextConverter x:Key="QuantityTextConverter" />
+            <converters:BooleanToActiveStatusTextConverter x:Key="IsActiveTextConverter" />
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid Background="{StaticResource AppBackgroundBrush}" Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Productos" Style="{StaticResource PageTitleStyle}" />
+                <TextBlock Text="Administra el catálogo de productos." Style="{StaticResource PageSubtitleStyle}" />
+            </StackPanel>
+            <Button x:Name="NewProductButton" Grid.Column="1" Content="+ Nuevo producto" VerticalAlignment="Center"
+                    Style="{StaticResource PrimaryButtonStyle}" Command="{Binding NewProductCommand}" />
+        </Grid>
+
+        <Grid Grid.Row="1" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox x:Name="SearchTextBox" Grid.Column="0" Padding="8" VerticalContentAlignment="Center"
+                     BorderBrush="{StaticResource BorderBrush}"
+                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
+                <TextBox.InputBindings>
+                    <KeyBinding Key="Return" Command="{Binding SearchCommand}" />
+                </TextBox.InputBindings>
+            </TextBox>
+            <Button x:Name="SearchButton" Grid.Column="1" Content="Buscar" Margin="8,0,0,0"
+                    Style="{StaticResource PrimaryButtonStyle}" Command="{Binding SearchCommand}" />
+        </Grid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,12">
+            <ComboBox x:Name="FilterComboBox" Width="160" Padding="8,5"
+                      SelectedValuePath="Tag" SelectedValue="{Binding SelectedFilter}">
+                <ComboBoxItem Content="Todos" Tag="{x:Static manageProduct:ProductCatalogStatusFilter.All}" />
+                <ComboBoxItem Content="Activos" Tag="{x:Static manageProduct:ProductCatalogStatusFilter.Active}" />
+                <ComboBoxItem Content="Inactivos" Tag="{x:Static manageProduct:ProductCatalogStatusFilter.Inactive}" />
+                <ComboBoxItem Content="Stock bajo" Tag="{x:Static manageProduct:ProductCatalogStatusFilter.LowStock}" />
+                <ComboBoxItem Content="Sin existencia" Tag="{x:Static manageProduct:ProductCatalogStatusFilter.OutOfStock}" />
+            </ComboBox>
+        </StackPanel>
+
+        <TextBlock x:Name="StatusText" Grid.Row="3" Margin="0,0,0,8" TextWrapping="Wrap"
+                   Foreground="{StaticResource SecondaryTextBrush}" Text="{Binding StatusMessage}" />
+
+        <Border Grid.Row="4" Style="{StaticResource CardStyle}" Padding="0" Margin="0,0,0,12">
+            <DataGrid x:Name="ProductsGrid" BorderThickness="0" Background="Transparent"
+                      ItemsSource="{Binding Products}" SelectedItem="{Binding SelectedProduct}"
+                      AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                      SelectionMode="Single" SelectionUnit="FullRow">
+                <DataGrid.InputBindings>
+                    <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding EditProductCommand}"
+                                  CommandParameter="{Binding SelectedProduct}" />
+                </DataGrid.InputBindings>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="110" />
+                    <DataGridTextColumn Header="Producto" Binding="{Binding Name}" Width="*" />
+                    <DataGridTextColumn Header="Barcode" Binding="{Binding Barcode}" Width="120" />
+                    <DataGridTextColumn Header="Precio" Width="100">
+                        <DataGridTextColumn.Binding>
+                            <MultiBinding StringFormat="{}{0:N2} {1}">
+                                <Binding Path="SalePriceAmount" />
+                                <Binding Path="Currency" />
+                            </MultiBinding>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Existencia" Width="100"
+                                         Binding="{Binding Converter={StaticResource QuantityTextConverter}, ConverterParameter=Quantity, Mode=OneWay}" />
+                    <DataGridTextColumn Header="Punto reorden" Width="110"
+                                         Binding="{Binding Converter={StaticResource QuantityTextConverter}, ConverterParameter=ReorderPoint, Mode=OneWay}" />
+                    <DataGridTextColumn Header="Inventario" Width="150"
+                                         Binding="{Binding Converter={StaticResource InventoryStatusConverter}, Mode=OneWay}" />
+                    <DataGridTextColumn Header="Estado" Width="90"
+                                         Binding="{Binding IsActive, Converter={StaticResource IsActiveTextConverter}, Mode=OneWay}" />
+                    <DataGridTemplateColumn Header="Acciones" Width="90">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="Editar"
+                                        Command="{Binding DataContext.EditProductCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+        <Grid Grid.Row="5">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="{Binding GeneralError}" Foreground="{StaticResource DangerBrush}" />
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button x:Name="PreviousPageButton" Content="Anterior" Margin="0,0,8,0"
+                        Style="{StaticResource SecondaryButtonStyle}" Command="{Binding PreviousPageCommand}" />
+                <TextBlock x:Name="PageNumberText" Text="{Binding CurrentPage}" VerticalAlignment="Center" Margin="0,0,8,0"
+                           Foreground="{StaticResource PrimaryTextBrush}" />
+                <Button x:Name="NextPageButton" Content="Siguiente" Style="{StaticResource SecondaryButtonStyle}"
+                        Command="{Binding NextPageCommand}" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

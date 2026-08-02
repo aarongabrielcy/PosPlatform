@@ -1,14 +1,17 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Pos.Application.Products.ManageProduct;
+using Pos.Application.SalesCart;
 using Pos.Desktop.Products;
+using Pos.Desktop.Tests.Main;
 using Pos.Domain.Common.Identifiers;
 
 namespace Pos.Desktop.Tests.Products;
 
 public class EditProductViewModelTests
 {
-    private static EditProductViewModel CreateViewModel(FakeProductManagementService service) =>
-        new(service, NullLogger<EditProductViewModel>.Instance);
+    private static EditProductViewModel CreateViewModel(
+        FakeProductManagementService service, FakeCurrentSalesCart? currentSalesCart = null) =>
+        new(service, currentSalesCart ?? new FakeCurrentSalesCart(), NullLogger<EditProductViewModel>.Instance);
 
     private static ProductDetails CreateDetails(
         ProductId? productId = null,
@@ -24,9 +27,9 @@ public class EditProductViewModelTests
             tracksInventory, isActive, currentQuantity, reorderPoint);
 
     private static async Task<EditProductViewModel> CreateLoadedViewModelAsync(
-        FakeProductManagementService service, ProductDetails details)
+        FakeProductManagementService service, ProductDetails details, FakeCurrentSalesCart? currentSalesCart = null)
     {
-        var viewModel = CreateViewModel(service);
+        var viewModel = CreateViewModel(service, currentSalesCart);
         await viewModel.LoadAsync(details.ProductId);
 
         return viewModel;
@@ -132,6 +135,143 @@ public class EditProductViewModelTests
         Assert.Equal("Nombre actualizado", service.LastUpdateRequest.Name);
         Assert.Equal(20m, service.LastUpdateRequest.SalePrice);
         Assert.Equal(4m, service.LastUpdateRequest.ReorderPoint);
+    }
+
+    // ---------- SKU editable (TAREA 24C) ----------
+
+    [Fact]
+    public async Task SaveCommandRejectsBlankSku()
+    {
+        var details = CreateDetails();
+        var service = new FakeProductManagementService(getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details));
+        var viewModel = await CreateLoadedViewModelAsync(service, details);
+        viewModel.Sku = "   ";
+
+        viewModel.SaveCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Equal("El SKU es obligatorio.", viewModel.GeneralError);
+        Assert.Equal(0, service.UpdateCallCount);
+    }
+
+    [Fact]
+    public async Task SaveCommandSendsTheEditedSkuTrimmed()
+    {
+        var details = CreateDetails();
+        var service = new FakeProductManagementService(
+            getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details),
+            updateHandler: (_, _) => Task.FromResult(UpdateProductResult.SuccessResult(details)));
+        var viewModel = await CreateLoadedViewModelAsync(service, details);
+        viewModel.Sku = "  SKU-002  ";
+
+        viewModel.SaveCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Equal("SKU-002", service.LastUpdateRequest!.Sku);
+    }
+
+    [Fact]
+    public async Task SaveCommandMapsDuplicateSkuStatusToErrorMessage()
+    {
+        var details = CreateDetails();
+        var service = new FakeProductManagementService(
+            getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details),
+            updateHandler: (_, _) => Task.FromResult(UpdateProductResult.Failure(UpdateProductResultStatus.DuplicateSku)));
+        var viewModel = await CreateLoadedViewModelAsync(service, details);
+        viewModel.Sku = "SKU-002";
+
+        viewModel.SaveCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Equal("Ya existe otro producto con ese SKU.", viewModel.GeneralError);
+    }
+
+    [Fact]
+    public async Task SaveCommandRaisesCartWarningWhenSkuChangedAndProductIsInTheCurrentCart()
+    {
+        var details = CreateDetails(sku: "SKU-OLD");
+        var updated = CreateDetails(productId: details.ProductId, sku: "SKU-NEW");
+        var service = new FakeProductManagementService(
+            getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details),
+            updateHandler: (_, _) => Task.FromResult(UpdateProductResult.SuccessResult(updated)));
+        var cart = new FakeCurrentSalesCart();
+        cart.SetSnapshot(new SalesCartSnapshot(
+            [new SalesCartLine(details.ProductId, "SKU-OLD", details.Name, 1m, 10m, 10m, "MXN", 5m, true)], "MXN"));
+        var viewModel = await CreateLoadedViewModelAsync(service, details, cart);
+        viewModel.Sku = "SKU-NEW";
+
+        var raised = false;
+        viewModel.CartWarningRequested += (_, _) => raised = true;
+
+        viewModel.SaveCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.True(raised);
+    }
+
+    [Fact]
+    public async Task SaveCommandDoesNotRaiseCartWarningWhenSkuIsUnchanged()
+    {
+        var details = CreateDetails(sku: "SKU-OLD");
+        var service = new FakeProductManagementService(
+            getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details),
+            updateHandler: (_, _) => Task.FromResult(UpdateProductResult.SuccessResult(details)));
+        var cart = new FakeCurrentSalesCart();
+        cart.SetSnapshot(new SalesCartSnapshot(
+            [new SalesCartLine(details.ProductId, "SKU-OLD", details.Name, 1m, 10m, 10m, "MXN", 5m, true)], "MXN"));
+        var viewModel = await CreateLoadedViewModelAsync(service, details, cart);
+
+        var raised = false;
+        viewModel.CartWarningRequested += (_, _) => raised = true;
+
+        viewModel.SaveCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.False(raised);
+    }
+
+    [Fact]
+    public async Task SaveCommandDoesNotRaiseCartWarningWhenProductIsNotInTheCurrentCart()
+    {
+        var details = CreateDetails(sku: "SKU-OLD");
+        var updated = CreateDetails(productId: details.ProductId, sku: "SKU-NEW");
+        var service = new FakeProductManagementService(
+            getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details),
+            updateHandler: (_, _) => Task.FromResult(UpdateProductResult.SuccessResult(updated)));
+        var viewModel = await CreateLoadedViewModelAsync(service, details, new FakeCurrentSalesCart());
+        viewModel.Sku = "SKU-NEW";
+
+        var raised = false;
+        viewModel.CartWarningRequested += (_, _) => raised = true;
+
+        viewModel.SaveCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.False(raised);
+    }
+
+    [Fact]
+    public async Task SaveCommandDoesNotBlockEditingWhenProductIsInTheCurrentCart()
+    {
+        var details = CreateDetails(sku: "SKU-OLD");
+        var updated = CreateDetails(productId: details.ProductId, sku: "SKU-NEW");
+        var service = new FakeProductManagementService(
+            getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details),
+            updateHandler: (_, _) => Task.FromResult(UpdateProductResult.SuccessResult(updated)));
+        var cart = new FakeCurrentSalesCart();
+        cart.SetSnapshot(new SalesCartSnapshot(
+            [new SalesCartLine(details.ProductId, "SKU-OLD", details.Name, 1m, 10m, 10m, "MXN", 5m, true)], "MXN"));
+        var viewModel = await CreateLoadedViewModelAsync(service, details, cart);
+        viewModel.Sku = "SKU-NEW";
+
+        var saved = false;
+        viewModel.Saved += (_, _) => saved = true;
+
+        viewModel.SaveCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.True(saved);
+        Assert.Equal(1, service.UpdateCallCount);
     }
 
     [Fact]

@@ -1,127 +1,139 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Linq;
 using System.Windows.Input;
 using Pos.Application.Authentication;
-using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.SalesCart;
 using Pos.Desktop.Common;
+using Pos.Desktop.Dashboard;
+using Pos.Desktop.Inventory;
+using Pos.Desktop.Products.Catalog;
+using Pos.Desktop.Register;
+using Pos.Desktop.Sales;
+using Pos.Desktop.Settings;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Security;
 
 namespace Pos.Desktop.Main;
 
+// Shell de la aplicación (TAREA 24C): mantiene únicamente estado global (sesión, caja,
+// navegación) y coordina logout/cerrar caja/nuevo producto/editar producto entre las páginas
+// hijas. La lógica de presentación de cada página vive en su propio ViewModel
+// (SalesViewModel/ProductsViewModel/InventoryViewModel/RegisterViewModel/SettingsViewModel), ya
+// construido e inyectado aquí: MainWindowViewModel nunca resuelve servicios ni ventanas por sí
+// mismo (sin Service Locator).
 public sealed class MainWindowViewModel : ViewModelBase
 {
+    private const double SidebarExpandedWidth = 240d;
+    private const double SidebarCollapsedWidth = 68d;
+
     private readonly ICurrentUserSession _session;
     private readonly ICurrentRegisterSession _registerSession;
-    private readonly ISalesCartService _salesCartService;
-    private readonly IProductManagementService _productManagementService;
     private readonly ICurrentSalesCart _currentSalesCart;
+    private readonly DashboardViewModel _dashboardViewModel;
+    private readonly SalesViewModel _salesViewModel;
+    private readonly ProductsViewModel _productsViewModel;
+    private readonly InventoryViewModel _inventoryViewModel;
+    private readonly RegisterViewModel _registerViewModel;
+    private readonly SettingsViewModel _settingsViewModel;
     private readonly AsyncRelayCommand _logoutCommand;
     private readonly AsyncRelayCommand _closeRegisterCommand;
-    private readonly AsyncRelayCommand _searchCommand;
-    private readonly AsyncRelayCommand _addSelectedProductCommand;
-    private readonly AsyncRelayCommand<SalesCartLine> _increaseQuantityCommand;
-    private readonly AsyncRelayCommand<SalesCartLine> _decreaseQuantityCommand;
-    private readonly AsyncRelayCommand<SalesCartLine> _removeLineCommand;
-    private readonly AsyncRelayCommand _cancelSaleCommand;
-    private readonly AsyncRelayCommand _newProductCommand;
-    private readonly AsyncRelayCommand _editProductCommand;
+    private readonly AsyncRelayCommand _toggleSidebarCommand;
 
     private string? _logoutBlockedMessage;
     private string? _closeRegisterBlockedMessage;
-    private string _searchText = string.Empty;
-    private string? _searchStatusMessage;
-    private ProductSearchResult? _selectedSearchResult;
-    private bool _includeInactive;
-    private string _subtotal = string.Empty;
-    private string _discountTotal = string.Empty;
-    private string _taxTotal = string.Empty;
-    private string _grandTotal = string.Empty;
-    private bool _isSearching;
-    private bool _isBusy;
-    private string? _generalError;
-    private bool _hasItems;
+    private object _currentViewModel;
+    private NavigationItem? _selectedNavigationItem;
+    private bool _isSidebarExpanded = true;
+
+    // ProductId del producto para el que se pidió edición: recordado para poder reenviar
+    // ApplyProductUpdated al ViewModel que originó la solicitud (Venta o Productos), sin que el
+    // shell necesite saber cuál está activo en ese momento.
+    private object? _pendingNewProductSource;
+    private object? _pendingEditProductSource;
 
     public MainWindowViewModel(
         ICurrentUserSession session,
         ICurrentRegisterSession registerSession,
-        ISalesCartService salesCartService,
-        IProductManagementService productManagementService,
-        ICurrentSalesCart currentSalesCart)
+        ICurrentSalesCart currentSalesCart,
+        DashboardViewModel dashboardViewModel,
+        SalesViewModel salesViewModel,
+        ProductsViewModel productsViewModel,
+        InventoryViewModel inventoryViewModel,
+        RegisterViewModel registerViewModel,
+        SettingsViewModel settingsViewModel)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _registerSession = registerSession ?? throw new ArgumentNullException(nameof(registerSession));
-        _salesCartService = salesCartService ?? throw new ArgumentNullException(nameof(salesCartService));
-        _productManagementService = productManagementService ?? throw new ArgumentNullException(nameof(productManagementService));
         _currentSalesCart = currentSalesCart ?? throw new ArgumentNullException(nameof(currentSalesCart));
+        _dashboardViewModel = dashboardViewModel ?? throw new ArgumentNullException(nameof(dashboardViewModel));
+        _salesViewModel = salesViewModel ?? throw new ArgumentNullException(nameof(salesViewModel));
+        _productsViewModel = productsViewModel ?? throw new ArgumentNullException(nameof(productsViewModel));
+        _inventoryViewModel = inventoryViewModel ?? throw new ArgumentNullException(nameof(inventoryViewModel));
+        _registerViewModel = registerViewModel ?? throw new ArgumentNullException(nameof(registerViewModel));
+        _settingsViewModel = settingsViewModel ?? throw new ArgumentNullException(nameof(settingsViewModel));
 
         _logoutCommand = new AsyncRelayCommand(ExecuteLogoutAsync);
         _closeRegisterCommand = new AsyncRelayCommand(ExecuteCloseRegisterAsync);
-        _searchCommand = new AsyncRelayCommand(ExecuteSearchAsync, onError: HandleUnexpectedError);
-        _addSelectedProductCommand = new AsyncRelayCommand(
-            ExecuteAddSelectedProductAsync, () => SelectedSearchResult is { IsAvailable: true }, HandleUnexpectedError);
-        _increaseQuantityCommand = new AsyncRelayCommand<SalesCartLine>(ExecuteIncreaseQuantityAsync, onError: HandleUnexpectedError);
-        _decreaseQuantityCommand = new AsyncRelayCommand<SalesCartLine>(
-            ExecuteDecreaseQuantityAsync, line => line is not null && line.Quantity > 1m, HandleUnexpectedError);
-        _removeLineCommand = new AsyncRelayCommand<SalesCartLine>(ExecuteRemoveLineAsync, onError: HandleUnexpectedError);
-        _cancelSaleCommand = new AsyncRelayCommand(ExecuteCancelSaleAsync);
-        _newProductCommand = new AsyncRelayCommand(ExecuteNewProductAsync);
-        _editProductCommand = new AsyncRelayCommand(
-            ExecuteEditProductAsync, () => SelectedSearchResult is not null && CanManageProducts && !IsBusy, HandleUnexpectedError);
+        _toggleSidebarCommand = new AsyncRelayCommand(ExecuteToggleSidebarAsync);
 
-        CartLines = new ObservableCollection<SalesCartLine>();
-        SearchResults = new ObservableCollection<ProductSearchResult>();
-        ApplySnapshot(_currentSalesCart.Snapshot);
+        _dashboardViewModel.NavigateToProductsRequested += OnDashboardNavigateToProductsRequested;
+        _salesViewModel.NewProductRequested += OnSalesNewProductRequested;
+        _salesViewModel.EditProductRequested += OnSalesEditProductRequested;
+        _productsViewModel.NewProductRequested += OnProductsNewProductRequested;
+        _productsViewModel.EditProductRequested += OnProductsEditProductRequested;
+        _registerViewModel.CloseRegisterRequested += OnRegisterViewCloseRegisterRequested;
+
+        NavigationItems = new ObservableCollection<NavigationItem>(BuildNavigationItems());
+        _currentViewModel = _dashboardViewModel;
+
+        if (NavigationItems.FirstOrDefault() is { } firstItem)
+        {
+            _selectedNavigationItem = firstItem;
+            ApplySection(firstItem.Section);
+        }
     }
 
     public event EventHandler? LogoutRequested;
 
     public event EventHandler? CloseRegisterRequested;
 
-    // El ViewModel nunca muestra MessageBox directamente; solo pide confirmación. El código
-    // detrás de MainWindow decide cómo confirmarla y llama a ConfirmCancelSale().
-    public event EventHandler? CancelSaleConfirmationRequested;
-
-    // MainWindowViewModel nunca abre ventanas: solo pide abrir CreateProductWindow. El código
-    // detrás de MainWindow reenvía el evento hasta App.xaml.cs, único lugar que resuelve
+    // El ViewModel nunca abre ventanas: solo pide abrir CreateProductWindow/EditProductWindow. El
+    // código detrás de MainWindow reenvía el evento hasta App.xaml.cs, único lugar que resuelve
     // ventanas desde el contenedor de DI.
     public event EventHandler? NewProductRequested;
 
-    // Igual patrón que NewProductRequested, pero para EditProductWindow: el ProductId del
-    // producto seleccionado viaja en el evento para que App.xaml.cs pueda cargarlo antes de
-    // mostrar la ventana.
     public event EventHandler<ProductId>? EditProductRequested;
 
     public ICommand LogoutCommand => _logoutCommand;
 
     public ICommand CloseRegisterCommand => _closeRegisterCommand;
 
-    public ICommand SearchCommand => _searchCommand;
+    public ICommand ToggleSidebarCommand => _toggleSidebarCommand;
 
-    public ICommand AddSelectedProductCommand => _addSelectedProductCommand;
+    // Alternar el sidebar nunca recrea vistas, ViewModels ni limpia el carrito: solo cambia el
+    // ancho de la columna del sidebar (TAREA 24C.1, sección 4).
+    public bool IsSidebarExpanded
+    {
+        get => _isSidebarExpanded;
+        private set
+        {
+            if (SetProperty(ref _isSidebarExpanded, value))
+            {
+                OnPropertyChanged(nameof(SidebarWidth));
+            }
+        }
+    }
 
-    public ICommand IncreaseQuantityCommand => _increaseQuantityCommand;
+    public double SidebarWidth => IsSidebarExpanded ? SidebarExpandedWidth : SidebarCollapsedWidth;
 
-    public ICommand DecreaseQuantityCommand => _decreaseQuantityCommand;
-
-    public ICommand RemoveLineCommand => _removeLineCommand;
-
-    public ICommand CancelSaleCommand => _cancelSaleCommand;
-
-    public ICommand NewProductCommand => _newProductCommand;
-
-    public ICommand EditProductCommand => _editProductCommand;
+    public string CurrentNavigationTitle => SelectedNavigationItem?.Label ?? string.Empty;
 
     // Sesión ausente produce un estado seguro: cadenas vacías en lugar de excepción.
     public string DisplayName => _session.CurrentUser?.DisplayName ?? string.Empty;
 
     public string RoleName => _session.CurrentUser?.RoleName ?? string.Empty;
-
-    // Gobierna la visibilidad/habilitación del botón "Editar producto" y del checkbox "Incluir
-    // inactivos": ambos son funcionalidad administrativa, no disponible para cualquier cajero.
-    public bool CanManageProducts => _session.CurrentUser?.HasPermission(Permission.ManageProducts) ?? false;
 
     public bool IsRegisterOpen => _registerSession.IsOpen;
 
@@ -149,137 +161,120 @@ public sealed class MainWindowViewModel : ViewModelBase
         private set => SetProperty(ref _closeRegisterBlockedMessage, value);
     }
 
-    public string SearchText
+    // Items visibles según permisos del usuario actual (TAREA 24C, sección 23): un ítem sin
+    // permiso simplemente no aparece en la lista, en vez de mostrarse deshabilitado.
+    public ObservableCollection<NavigationItem> NavigationItems { get; }
+
+    public NavigationItem? SelectedNavigationItem
     {
-        get => _searchText;
+        get => _selectedNavigationItem;
         set
         {
-            if (SetProperty(ref _searchText, value))
+            if (SetProperty(ref _selectedNavigationItem, value))
             {
-                // Un término nuevo invalida el mensaje del resultado anterior: evita mostrar
-                // "No se encontraron productos" mientras el usuario ya está escribiendo otra cosa.
-                SearchStatusMessage = null;
+                OnPropertyChanged(nameof(CurrentNavigationTitle));
+
+                if (value is not null)
+                {
+                    ApplySection(value.Section);
+                }
             }
         }
     }
 
-    public string? SearchStatusMessage
+    // El ContentControl del shell se enlaza a esta propiedad; el DataTemplate correspondiente
+    // (por tipo de ViewModel) decide qué UserControl mostrar. Cambiar de página nunca recrea los
+    // ViewModels hijos: el carrito y el estado de cada página se conservan (TAREA 24C, sección 24).
+    public object CurrentViewModel
     {
-        get => _searchStatusMessage;
-        private set => SetProperty(ref _searchStatusMessage, value);
+        get => _currentViewModel;
+        private set => SetProperty(ref _currentViewModel, value);
     }
 
-    // Solo tiene efecto para usuarios con ManageProducts: MainWindow.xaml la oculta/deshabilita
-    // para el resto. La búsqueda del carrito (SalesCartService) nunca incluye inactivos.
-    public bool IncludeInactive
+    private void ApplySection(NavigationSection section)
     {
-        get => _includeInactive;
-        set
+        CurrentViewModel = section switch
         {
-            if (SetProperty(ref _includeInactive, value) && _searchCommand.CanExecute(null))
-            {
-                _searchCommand.Execute(null);
-            }
+            NavigationSection.Dashboard => _dashboardViewModel,
+            NavigationSection.Sales => _salesViewModel,
+            NavigationSection.Products => _productsViewModel,
+            NavigationSection.Inventory => _inventoryViewModel,
+            NavigationSection.Register => _registerViewModel,
+            NavigationSection.Settings => _settingsViewModel,
+            _ => _dashboardViewModel,
+        };
+
+        // ProductsView/DashboardView pueden refrescar al entrar (TAREA 24C, sección 24 / TAREA
+        // 24C.1, sección 10): se disparan a través del ICommand (no llamando al método async
+        // directamente) para reutilizar el manejo de errores de AsyncRelayCommand.
+        if (section == NavigationSection.Products && _productsViewModel.LoadCommand.CanExecute(null))
+        {
+            _productsViewModel.LoadCommand.Execute(null);
+        }
+
+        if (section == NavigationSection.Dashboard && _dashboardViewModel.LoadCommand.CanExecute(null))
+        {
+            _dashboardViewModel.LoadCommand.Execute(null);
         }
     }
 
-    public ObservableCollection<ProductSearchResult> SearchResults { get; }
-
-    public ProductSearchResult? SelectedSearchResult
+    private Task ExecuteToggleSidebarAsync()
     {
-        get => _selectedSearchResult;
-        set
+        IsSidebarExpanded = !IsSidebarExpanded;
+
+        return Task.CompletedTask;
+    }
+
+    private void OnDashboardNavigateToProductsRequested(object? sender, EventArgs e)
+    {
+        if (NavigationItems.FirstOrDefault(i => i.Section == NavigationSection.Products) is { } productsItem)
         {
-            if (SetProperty(ref _selectedSearchResult, value))
-            {
-                _addSelectedProductCommand.RaiseCanExecuteChanged();
-                _editProductCommand.RaiseCanExecuteChanged();
-            }
+            SelectedNavigationItem = productsItem;
         }
     }
 
-    public ObservableCollection<SalesCartLine> CartLines { get; }
-
-    public string Subtotal
+    private IEnumerable<NavigationItem> BuildNavigationItems()
     {
-        get => _subtotal;
-        private set => SetProperty(ref _subtotal, value);
-    }
+        var user = _session.CurrentUser;
 
-    public string DiscountTotal
-    {
-        get => _discountTotal;
-        private set => SetProperty(ref _discountTotal, value);
-    }
-
-    public string TaxTotal
-    {
-        get => _taxTotal;
-        private set => SetProperty(ref _taxTotal, value);
-    }
-
-    public string GrandTotal
-    {
-        get => _grandTotal;
-        private set => SetProperty(ref _grandTotal, value);
-    }
-
-    public bool IsSearching
-    {
-        get => _isSearching;
-        private set => SetProperty(ref _isSearching, value);
-    }
-
-    public bool IsBusy
-    {
-        get => _isBusy;
-        private set
+        if (user is null)
         {
-            if (SetProperty(ref _isBusy, value))
-            {
-                _editProductCommand.RaiseCanExecuteChanged();
-            }
+            yield break;
+        }
+
+        // Dashboard es visible para todo usuario autenticado, sin gate de permiso específico
+        // (TAREA 24C.1, sección 12): las tarjetas sensibles dentro del propio Dashboard sí
+        // respetan ManageProducts (ver DashboardViewModel.CanViewProductCards).
+        yield return new NavigationItem(NavigationSection.Dashboard, "Dashboard");
+
+        if (user.HasPermission(Permission.ProcessSale))
+        {
+            yield return new NavigationItem(NavigationSection.Sales, "Venta");
+        }
+
+        if (user.HasPermission(Permission.ManageProducts))
+        {
+            yield return new NavigationItem(NavigationSection.Products, "Productos");
+        }
+
+        if (user.HasPermission(Permission.ManageProducts) || user.HasPermission(Permission.AdjustInventory))
+        {
+            yield return new NavigationItem(NavigationSection.Inventory, "Inventario");
+        }
+
+        if (user.HasPermission(Permission.OpenRegisterSession) || user.HasPermission(Permission.CloseRegisterSession))
+        {
+            yield return new NavigationItem(NavigationSection.Register, "Caja");
+        }
+
+        // No existe un permiso administrativo genérico en Domain.Security.Permission: se usa
+        // ManageUsers (el permiso administrativo real más cercano) en vez de inventar uno nuevo o
+        // comparar RoleName=="Administrator" (TAREA 24C, sección 23). Reportado como decisión.
+        if (user.HasPermission(Permission.ManageUsers))
+        {
+            yield return new NavigationItem(NavigationSection.Settings, "Configuración");
         }
     }
-
-    public string? GeneralError
-    {
-        get => _generalError;
-        private set => SetProperty(ref _generalError, value);
-    }
-
-    public bool HasItems
-    {
-        get => _hasItems;
-        private set => SetProperty(ref _hasItems, value);
-    }
-
-    // Llamado desde el código detrás de MainWindow tras confirmar el diálogo. Cancelar solo
-    // limpia el carrito: no cierra caja ni cierra sesión.
-    public void ConfirmCancelSale()
-    {
-        var result = _salesCartService.Clear();
-        ApplyResult(result);
-    }
-
-    // Llamado desde App.xaml.cs tras cerrar CreateProductWindow con éxito: coloca el SKU recién
-    // creado en el buscador y ejecuta la búsqueda para que el producto aparezca de inmediato. No
-    // se agrega automáticamente al carrito.
-    public void ApplyProductCreated(string sku)
-    {
-        SearchText = sku;
-
-        if (_searchCommand.CanExecute(null))
-        {
-            _searchCommand.Execute(null);
-        }
-    }
-
-    // Llamado desde App.xaml.cs tras cerrar EditProductWindow (edición, activar/desactivar o
-    // ajuste de inventario): refresca el buscador con el SKU del producto editado, igual que
-    // ApplyProductCreated. Si el producto quedó inactivo y no se incluyen inactivos, desaparece
-    // del grid como se espera.
-    public void ApplyProductUpdated(string sku) => ApplyProductCreated(sku);
 
     private Task ExecuteLogoutAsync()
     {
@@ -298,7 +293,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     private Task ExecuteCloseRegisterAsync()
     {
-        if (CartLines.Count > 0)
+        if (_currentSalesCart.Snapshot.HasItems)
         {
             CloseRegisterBlockedMessage = "Cancela la venta actual antes de cerrar la caja.";
             return Task.CompletedTask;
@@ -310,205 +305,60 @@ public sealed class MainWindowViewModel : ViewModelBase
         return Task.CompletedTask;
     }
 
-    private async Task ExecuteSearchAsync()
+    private void OnRegisterViewCloseRegisterRequested(object? sender, EventArgs e) =>
+        _closeRegisterCommand.Execute(null);
+
+    private void OnSalesNewProductRequested(object? sender, EventArgs e)
     {
-        var trimmedSearchText = SearchText.Trim();
-
-        if (trimmedSearchText.Length == 0)
-        {
-            SearchResults.Clear();
-            SearchStatusMessage = "Escribe un SKU, código de barras o nombre para buscar.";
-            GeneralError = null;
-
-            return;
-        }
-
-        IsSearching = true;
-
-        try
-        {
-            // "Incluir inactivos" solo tiene efecto para usuarios con ManageProducts; el resto
-            // (y el propio carrito de venta) siempre buscan exclusivamente productos activos a
-            // través de SalesCartService.
-            var results = IncludeInactive && CanManageProducts
-                ? await _productManagementService.SearchAsync(SearchText, includeInactive: true)
-                : await _salesCartService.SearchProductsAsync(SearchText);
-
-            SearchResults.Clear();
-
-            foreach (var result in results)
-            {
-                SearchResults.Add(result);
-            }
-
-            SearchStatusMessage = results.Count switch
-            {
-                0 => "No se encontraron productos.",
-                1 => "1 producto encontrado.",
-                _ => $"{results.Count} productos encontrados.",
-            };
-
-            GeneralError = null;
-        }
-        finally
-        {
-            IsSearching = false;
-        }
-    }
-
-    private async Task ExecuteAddSelectedProductAsync()
-    {
-        var selected = SelectedSearchResult;
-
-        if (selected is null)
-        {
-            return;
-        }
-
-        IsBusy = true;
-
-        try
-        {
-            var result = await _salesCartService.AddProductAsync(new AddProductToCartRequest(selected.ProductId));
-            ApplyResult(result);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    private async Task ExecuteIncreaseQuantityAsync(SalesCartLine? line)
-    {
-        if (line is null)
-        {
-            return;
-        }
-
-        IsBusy = true;
-
-        try
-        {
-            var result = await _salesCartService.UpdateQuantityAsync(
-                new UpdateCartLineQuantityRequest(line.ProductId, line.Quantity + 1m));
-            ApplyResult(result);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    private async Task ExecuteDecreaseQuantityAsync(SalesCartLine? line)
-    {
-        if (line is null || line.Quantity <= 1m)
-        {
-            return;
-        }
-
-        IsBusy = true;
-
-        try
-        {
-            var result = await _salesCartService.UpdateQuantityAsync(
-                new UpdateCartLineQuantityRequest(line.ProductId, line.Quantity - 1m));
-            ApplyResult(result);
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    private Task ExecuteRemoveLineAsync(SalesCartLine? line)
-    {
-        if (line is null)
-        {
-            return Task.CompletedTask;
-        }
-
-        var result = _salesCartService.RemoveLine(line.ProductId);
-        ApplyResult(result);
-
-        return Task.CompletedTask;
-    }
-
-    private Task ExecuteCancelSaleAsync()
-    {
-        if (CartLines.Count == 0)
-        {
-            return Task.CompletedTask;
-        }
-
-        CancelSaleConfirmationRequested?.Invoke(this, EventArgs.Empty);
-
-        return Task.CompletedTask;
-    }
-
-    private Task ExecuteNewProductAsync()
-    {
+        _pendingNewProductSource = _salesViewModel;
         NewProductRequested?.Invoke(this, EventArgs.Empty);
-
-        return Task.CompletedTask;
     }
 
-    private Task ExecuteEditProductAsync()
+    private void OnProductsNewProductRequested(object? sender, EventArgs e)
     {
-        if (SelectedSearchResult is { } selected)
-        {
-            EditProductRequested?.Invoke(this, selected.ProductId);
-        }
-
-        return Task.CompletedTask;
+        _pendingNewProductSource = _productsViewModel;
+        NewProductRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    private void ApplyResult(SalesCartResult result)
+    private void OnSalesEditProductRequested(object? sender, ProductId productId)
     {
-        if (result.Success && result.Snapshot is not null)
+        _pendingEditProductSource = _salesViewModel;
+        EditProductRequested?.Invoke(this, productId);
+    }
+
+    private void OnProductsEditProductRequested(object? sender, ProductId productId)
+    {
+        _pendingEditProductSource = _productsViewModel;
+        EditProductRequested?.Invoke(this, productId);
+    }
+
+    // Llamado desde App.xaml.cs tras crear un producto exitosamente en CreateProductWindow:
+    // reenvía al ViewModel que originó la solicitud (Venta o Productos).
+    public void ApplyProductCreated(string sku)
+    {
+        switch (_pendingNewProductSource)
         {
-            ApplySnapshot(result.Snapshot);
-            GeneralError = null;
-        }
-        else
-        {
-            GeneralError = ToErrorMessage(result.Status, result.AvailableQuantity);
+            case SalesViewModel:
+                _salesViewModel.ApplyProductCreated(sku);
+                break;
+            case ProductsViewModel:
+                _productsViewModel.ApplyProductCreated(sku);
+                break;
         }
     }
 
-    private void ApplySnapshot(SalesCartSnapshot snapshot)
+    // Llamado desde App.xaml.cs tras cerrar EditProductWindow (edición, activar/desactivar o
+    // ajuste de inventario): reenvía al ViewModel que originó la solicitud.
+    public void ApplyProductUpdated(string sku)
     {
-        CartLines.Clear();
-
-        foreach (var line in snapshot.Lines)
+        switch (_pendingEditProductSource)
         {
-            CartLines.Add(line);
+            case SalesViewModel:
+                _salesViewModel.ApplyProductUpdated(sku);
+                break;
+            case ProductsViewModel:
+                _productsViewModel.ApplyProductUpdated(sku);
+                break;
         }
-
-        Subtotal = FormatAmount(snapshot.SubtotalAmount, snapshot.Currency);
-        DiscountTotal = FormatAmount(snapshot.DiscountTotalAmount, snapshot.Currency);
-        TaxTotal = FormatAmount(snapshot.TaxTotalAmount, snapshot.Currency);
-        GrandTotal = FormatAmount(snapshot.TotalAmount, snapshot.Currency);
-        HasItems = snapshot.HasItems;
     }
-
-    private void HandleUnexpectedError(Exception exception) => GeneralError = "Ocurrió un error inesperado.";
-
-    private static string FormatAmount(decimal amount, string currency) =>
-        $"{amount.ToString("N2", CultureInfo.CurrentCulture)} {currency}";
-
-    private static string ToErrorMessage(SalesCartResultStatus status, decimal? availableQuantity) => status switch
-    {
-        SalesCartResultStatus.NotAuthenticated => "Debes iniciar sesión para continuar.",
-        SalesCartResultStatus.RegisterSessionRequired => "Debes abrir la caja para continuar.",
-        SalesCartResultStatus.ProductNotFound => "El producto no existe o no pertenece a esta organización.",
-        SalesCartResultStatus.ProductInactive => "El producto no está activo.",
-        SalesCartResultStatus.OutOfStock => "El producto no tiene existencia disponible.",
-        SalesCartResultStatus.InsufficientStock => availableQuantity is { } quantity
-            ? $"Existencia insuficiente. Disponible: {quantity.ToString(CultureInfo.CurrentCulture)}."
-            : "No hay existencia suficiente para la cantidad solicitada.",
-        SalesCartResultStatus.InvalidQuantity => "La cantidad debe ser mayor que cero.",
-        SalesCartResultStatus.LineNotFound => "La línea ya no existe en el carrito.",
-        SalesCartResultStatus.CurrencyMismatch => "El producto tiene una moneda distinta a la de la caja.",
-        _ => "No fue posible completar la operación.",
-    };
 }
