@@ -8,17 +8,20 @@ internal sealed class FakeRegisterSessionService : IRegisterSessionService
     private readonly Func<CancellationToken, Task<IReadOnlyList<AvailableRegister>>>? _getAvailableRegistersHandler;
     private readonly Func<OpenRegisterSessionRequest, CancellationToken, Task<RegisterSessionResult>>? _openHandler;
     private readonly Func<CloseRegisterSessionRequest, CancellationToken, Task<RegisterSessionResult>>? _closeHandler;
+    private readonly Func<CancellationToken, Task<RegisterClosingSummaryResult>>? _getClosingSummaryHandler;
 
     public FakeRegisterSessionService(
         Func<CancellationToken, Task<RegisterSessionStatusResult>>? getCurrentHandler = null,
         Func<CancellationToken, Task<IReadOnlyList<AvailableRegister>>>? getAvailableRegistersHandler = null,
         Func<OpenRegisterSessionRequest, CancellationToken, Task<RegisterSessionResult>>? openHandler = null,
-        Func<CloseRegisterSessionRequest, CancellationToken, Task<RegisterSessionResult>>? closeHandler = null)
+        Func<CloseRegisterSessionRequest, CancellationToken, Task<RegisterSessionResult>>? closeHandler = null,
+        Func<CancellationToken, Task<RegisterClosingSummaryResult>>? getClosingSummaryHandler = null)
     {
         _getCurrentHandler = getCurrentHandler;
         _getAvailableRegistersHandler = getAvailableRegistersHandler;
         _openHandler = openHandler;
         _closeHandler = closeHandler;
+        _getClosingSummaryHandler = getClosingSummaryHandler;
     }
 
     public int GetCurrentCallCount { get; private set; }
@@ -28,6 +31,8 @@ internal sealed class FakeRegisterSessionService : IRegisterSessionService
     public int OpenCallCount { get; private set; }
 
     public int CloseCallCount { get; private set; }
+
+    public int GetClosingSummaryCallCount { get; private set; }
 
     public OpenRegisterSessionRequest? LastOpenRequest { get; private set; }
 
@@ -71,5 +76,14 @@ internal sealed class FakeRegisterSessionService : IRegisterSessionService
         return _closeHandler is null
             ? Task.FromResult(RegisterSessionResult.Failure(RegisterSessionResultStatus.SessionNotFound))
             : _closeHandler(request, cancellationToken);
+    }
+
+    public Task<RegisterClosingSummaryResult> GetClosingSummaryAsync(CancellationToken cancellationToken = default)
+    {
+        GetClosingSummaryCallCount++;
+
+        return _getClosingSummaryHandler is null
+            ? Task.FromResult(RegisterClosingSummaryResult.Failure(RegisterSessionResultStatus.SessionNotFound))
+            : _getClosingSummaryHandler(cancellationToken);
     }
 }

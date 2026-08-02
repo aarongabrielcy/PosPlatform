@@ -580,6 +580,23 @@ public class ProductManagementServiceTests
         Assert.Equal(0m, result.NewQuantity);
     }
 
+    // TAREA 25A-FIX sección 12: incrementar desde una existencia agotada (0) sigue siendo un
+    // incremento normal.
+    [Fact]
+    public async Task AdjustInventoryAsyncAllowsIncreasingFromZero()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, tracksInventory: true);
+        fixture.ProductRepository.Add(product);
+        fixture.InventoryItemRepository.Add(CreateInventoryItem(fixture.BranchId, product.Id, quantity: 0m));
+
+        var result = await fixture.Service.AdjustInventoryAsync(
+            new AdjustProductInventoryRequest(product.Id, InventoryAdjustmentType.Increase, 5m));
+
+        Assert.True(result.Success);
+        Assert.Equal(5m, result.NewQuantity);
+    }
+
     [Fact]
     public async Task AdjustInventoryAsyncRejectsADecreaseThatWouldGoNegative()
     {

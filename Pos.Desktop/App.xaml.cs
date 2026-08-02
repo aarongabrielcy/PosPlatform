@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -15,6 +16,7 @@ using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
 using Pos.Desktop.RegisterSessions;
 using Pos.Desktop.Sales;
+using Pos.Desktop.Sales.Checkout;
 using Pos.Desktop.Settings;
 using Pos.Desktop.Setup;
 using Pos.Domain.Common.Identifiers;
@@ -91,6 +93,8 @@ namespace Pos.Desktop
                         services.AddTransient<EditProductWindow>();
                         services.AddTransient<AdjustInventoryViewModel>();
                         services.AddTransient<AdjustInventoryWindow>();
+                        services.AddTransient<CheckoutViewModel>();
+                        services.AddTransient<CheckoutWindow>();
                     })
                     .Build();
 
@@ -307,6 +311,7 @@ namespace Pos.Desktop
             mainWindow.CloseRegisterRequested += OnMainWindowCloseRegisterRequested;
             mainWindow.NewProductRequested += OnMainWindowNewProductRequested;
             mainWindow.EditProductRequested += OnMainWindowEditProductRequested;
+            mainWindow.CheckoutRequested += OnMainWindowCheckoutRequested;
 
             MainWindow = mainWindow;
             ShutdownMode = ShutdownMode.OnMainWindowClose;
@@ -327,6 +332,7 @@ namespace Pos.Desktop
                 mainWindow.CloseRegisterRequested -= OnMainWindowCloseRegisterRequested;
                 mainWindow.NewProductRequested -= OnMainWindowNewProductRequested;
                 mainWindow.EditProductRequested -= OnMainWindowEditProductRequested;
+                mainWindow.CheckoutRequested -= OnMainWindowCheckoutRequested;
             }
 
             _mainWindowScope?.ServiceProvider.GetService<ICurrentSalesCart>()?.Clear();
@@ -353,6 +359,7 @@ namespace Pos.Desktop
 
             var closeWindow = _mainWindowScope.ServiceProvider.GetRequiredService<CloseRegisterSessionWindow>();
             closeWindow.Owner = mainWindow;
+            await closeWindow.LoadAsync();
             var dialogResult = closeWindow.ShowDialog();
 
             if (dialogResult != true)
@@ -368,6 +375,7 @@ namespace Pos.Desktop
             mainWindow.CloseRegisterRequested -= OnMainWindowCloseRegisterRequested;
             mainWindow.NewProductRequested -= OnMainWindowNewProductRequested;
             mainWindow.EditProductRequested -= OnMainWindowEditProductRequested;
+            mainWindow.CheckoutRequested -= OnMainWindowCheckoutRequested;
 
             // Evita que cerrar la MainWindow actual dispare el apagado automático de
             // ShutdownMode.OnMainWindowClose antes de que OpenRegisterSessionWindow pueda mostrarse.
@@ -445,6 +453,39 @@ namespace Pos.Desktop
             {
                 editProductWindow.ApplyInventoryAdjusted(newQuantity);
             }
+        }
+
+        // Muestra CheckoutWindow sobre MainWindow (que permanece abierta como owner). Un cobro
+        // exitoso refresca SalesViewModel (carrito ya vacío: CheckoutService lo limpió dentro de su
+        // único commit) y muestra el resumen de la venta; cancelar o cerrar con la X no tiene
+        // efecto alguno sobre el carrito ni la caja.
+        private void OnMainWindowCheckoutRequested(object? sender, EventArgs e)
+        {
+            if (_mainWindowScope is null || sender is not MainWindow mainWindow)
+            {
+                return;
+            }
+
+            var checkoutWindow = _mainWindowScope.ServiceProvider.GetRequiredService<CheckoutWindow>();
+            checkoutWindow.Owner = mainWindow;
+            var dialogResult = checkoutWindow.ShowDialog();
+
+            if (dialogResult != true || checkoutWindow.CompletedSummary is not { } summary)
+            {
+                return;
+            }
+
+            mainWindow.ApplyCheckoutCompleted();
+
+            MessageBox.Show(
+                "Venta completada correctamente." +
+                $"\n\nVenta: {summary.SaleId}" +
+                $"\n\nTotal:\n{summary.TotalAmount.ToString("N2", CultureInfo.CurrentCulture)} {summary.Currency}" +
+                $"\n\nEfectivo recibido:\n{summary.CashTendered.ToString("N2", CultureInfo.CurrentCulture)} {summary.Currency}" +
+                $"\n\nCambio:\n{summary.ChangeAmount.ToString("N2", CultureInfo.CurrentCulture)} {summary.Currency}",
+                "PosPlatform",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         }
 
         protected override void OnExit(ExitEventArgs e)

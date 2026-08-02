@@ -561,8 +561,15 @@ public class CompleteSaleHandlerTests
         public Task<Sale?> GetByIdAsync(SaleId saleId, CancellationToken cancellationToken) =>
             Task.FromResult<Sale?>(_sale.Id == saleId ? _sale : null);
 
+        public Task AddAsync(Sale sale, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Fallo simulado de persistencia.");
+
         public Task UpdateAsync(Sale sale, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Fallo simulado de persistencia.");
+
+        public Task<decimal> GetCompletedCashTotalByRegisterSessionAsync(
+            RegisterSessionId registerSessionId, CancellationToken cancellationToken) =>
+            Task.FromResult(0m);
     }
 
     // ---------- Helpers ----------

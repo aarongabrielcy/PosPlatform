@@ -21,6 +21,7 @@ namespace Pos.Desktop
             _viewModel.CloseRegisterRequested += OnViewModelCloseRegisterRequested;
             _viewModel.NewProductRequested += OnViewModelNewProductRequested;
             _viewModel.EditProductRequested += OnViewModelEditProductRequested;
+            _viewModel.CheckoutRequested += OnViewModelCheckoutRequested;
 
             DataContext = _viewModel;
 
@@ -36,6 +37,8 @@ namespace Pos.Desktop
 
         public event EventHandler<ProductId>? EditProductRequested;
 
+        public event EventHandler? CheckoutRequested;
+
         private void OnViewModelLogoutRequested(object? sender, EventArgs e) =>
             LogoutRequested?.Invoke(this, EventArgs.Empty);
 
@@ -48,12 +51,18 @@ namespace Pos.Desktop
         private void OnViewModelEditProductRequested(object? sender, ProductId e) =>
             EditProductRequested?.Invoke(this, e);
 
+        private void OnViewModelCheckoutRequested(object? sender, EventArgs e) =>
+            CheckoutRequested?.Invoke(this, EventArgs.Empty);
+
         // Llamado desde App.xaml.cs tras crear un producto exitosamente en CreateProductWindow.
         public void ApplyProductCreated(string sku) => _viewModel.ApplyProductCreated(sku);
 
         // Llamado desde App.xaml.cs tras cerrar EditProductWindow (edición, activar/desactivar o
         // ajuste de inventario).
         public void ApplyProductUpdated(string sku) => _viewModel.ApplyProductUpdated(sku);
+
+        // Llamado desde App.xaml.cs tras cerrar CheckoutWindow con un cobro exitoso.
+        public void ApplyCheckoutCompleted() => _viewModel.ApplyCheckoutCompleted();
 
         // Nunca permite terminar el proceso silenciosamente con una caja abierta: cierra la
         // ventana con la X requiere primero confirmar o completar el cierre de caja.
@@ -84,6 +93,7 @@ namespace Pos.Desktop
             _viewModel.CloseRegisterRequested -= OnViewModelCloseRegisterRequested;
             _viewModel.NewProductRequested -= OnViewModelNewProductRequested;
             _viewModel.EditProductRequested -= OnViewModelEditProductRequested;
+            _viewModel.CheckoutRequested -= OnViewModelCheckoutRequested;
             Closing -= OnWindowClosing;
             Closed -= OnWindowClosed;
         }

@@ -1,11 +1,11 @@
-<Window x:Class="Pos.Desktop.Products.AdjustInventoryWindow"
+<Window x:Class="Pos.Desktop.Sales.Checkout.CheckoutWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Ajustar inventario — PosPlatform"
-        Height="360" Width="420"
+        Title="Cobrar — PosPlatform"
+        Height="440" Width="440"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
     <Window.Resources>
@@ -21,7 +21,7 @@
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0"
-                    Text="Ajustar inventario"
+                    Text="Cobrar"
                     FontSize="20" FontWeight="Bold" Margin="0,0,0,16" />
 
         <Grid Grid.Row="1">
@@ -36,37 +36,43 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Label Grid.Row="0" Grid.Column="0" Content="Producto" />
+            <Label Grid.Row="0" Grid.Column="0" Content="Total" />
             <TextBlock Grid.Row="0" Grid.Column="1" Margin="0,10" VerticalAlignment="Center"
-                    Text="{Binding ProductName, Mode=OneWay}" TextWrapping="Wrap" />
+                    FontSize="16" FontWeight="Bold" Text="{Binding TotalAmountText, Mode=OneWay}" />
 
-            <Label Grid.Row="1" Grid.Column="0" Content="Existencia actual" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,10" VerticalAlignment="Center"
-                    Text="{Binding CurrentQuantity, Mode=OneWay}" />
+            <Label Grid.Row="1" Grid.Column="0" Content="Forma de pago" />
+            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,10">
+                <RadioButton x:Name="CashRadioButton" Content="Efectivo" IsChecked="True" IsEnabled="False"
+                        GroupName="PaymentMethod" Margin="0,0,16,0" />
+                <RadioButton x:Name="CardRadioButton" Content="Tarjeta" IsEnabled="False"
+                        GroupName="PaymentMethod"
+                        ToolTip="Disponible al integrar terminal Point Smart" />
+            </StackPanel>
 
-            <Label Grid.Row="2" Grid.Column="0" Content="Nueva existencia" Target="{Binding ElementName=NewQuantityTextBox}" />
-            <TextBox x:Name="NewQuantityTextBox" Grid.Row="2" Grid.Column="1"
+            <Label Grid.Row="2" Grid.Column="0" Content="Efectivo recibido"
+                    Target="{Binding ElementName=CashTenderedTextBox}" />
+            <TextBox x:Name="CashTenderedTextBox" Grid.Row="2" Grid.Column="1"
                     Margin="0,6" Padding="6,4" TabIndex="0"
-                    Text="{Binding NewQuantityText, UpdateSourceTrigger=PropertyChanged}" />
+                    Text="{Binding CashTenderedText, UpdateSourceTrigger=PropertyChanged}" />
 
-            <Label Grid.Row="3" Grid.Column="0" Content="Diferencia" />
-            <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,10" VerticalAlignment="Center" FontWeight="Bold"
-                    Text="{Binding DifferenceText, Mode=OneWay}" />
+            <Label Grid.Row="3" Grid.Column="0" Content="Cambio" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,10" VerticalAlignment="Center"
+                    FontWeight="Bold" Text="{Binding ChangeText, Mode=OneWay}" />
         </Grid>
 
         <TextBlock Grid.Row="2" Text="{Binding GeneralError}"
-                    Foreground="Red" TextWrapping="Wrap" Margin="0,12,0,0" />
+                    Foreground="Red" TextWrapping="Wrap" Margin="0,8,0,0" />
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,8,0,0"
                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}">
             <ProgressBar IsIndeterminate="True" Width="160" Height="6" VerticalAlignment="Center" />
-            <TextBlock Text="Procesando…" Margin="8,0,0,0" VerticalAlignment="Center" />
+            <TextBlock Text="Procesando cobro…" Margin="8,0,0,0" VerticalAlignment="Center" />
         </StackPanel>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <Button Content="Cancelar" Width="120" Margin="0,0,8,0" TabIndex="4"
+            <Button Content="Cancelar" Width="120" Margin="0,0,8,0" TabIndex="2"
                     Command="{Binding CancelCommand}" />
-            <Button Content="Confirmar" Width="120" TabIndex="3"
+            <Button Content="Confirmar cobro" Width="140" TabIndex="1"
                     IsDefault="True" Command="{Binding ConfirmCommand}" />
         </StackPanel>
     </Grid>

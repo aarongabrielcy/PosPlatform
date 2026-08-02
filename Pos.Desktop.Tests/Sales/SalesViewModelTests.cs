@@ -1,4 +1,5 @@
 using Pos.Application.Authentication;
+using Pos.Application.RegisterSessions;
 using Pos.Application.SalesCart;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Tests.Main;
@@ -498,13 +499,119 @@ public class SalesViewModelTests
         Assert.Equal(1, salesCartService.SearchCallCount);
     }
 
+    // ---------- Cobrar (TAREA 25A sección 16-17) ----------
+
+    [Fact]
+    public void CheckoutCommandCannotExecuteWithAnEmptyCart()
+    {
+        var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession() };
+        var viewModel = CreateViewModel(currentRegisterSession: registerSession);
+
+        Assert.False(viewModel.CheckoutCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void CheckoutCommandCannotExecuteWithoutAnOpenRegisterSession()
+    {
+        var salesCartService = new FakeSalesCartService(
+            addHandler: (_, _) => Task.FromResult(SalesCartResult.SuccessResult(CreateSnapshotWithOneLine())));
+        var viewModel = CreateViewModel(salesCartService: salesCartService);
+        viewModel.SelectedSearchResult = CreateSearchResult();
+        viewModel.AddSelectedProductCommand.Execute(null);
+
+        Assert.False(viewModel.CheckoutCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void CheckoutCommandCannotExecuteWithoutProcessSalePermission()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "USERNAME", "Ana Pérez", "Cajero", []),
+        };
+        var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession() };
+        var salesCartService = new FakeSalesCartService(
+            addHandler: (_, _) => Task.FromResult(SalesCartResult.SuccessResult(CreateSnapshotWithOneLine())));
+        var viewModel = CreateViewModel(session: session, currentRegisterSession: registerSession, salesCartService: salesCartService);
+        viewModel.SelectedSearchResult = CreateSearchResult();
+        viewModel.AddSelectedProductCommand.Execute(null);
+
+        Assert.False(viewModel.CheckoutCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void CheckoutCommandCanExecuteWithCartRegisterAndPermission()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
+        var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession() };
+        var salesCartService = new FakeSalesCartService(
+            addHandler: (_, _) => Task.FromResult(SalesCartResult.SuccessResult(CreateSnapshotWithOneLine())));
+        var viewModel = CreateViewModel(session: session, currentRegisterSession: registerSession, salesCartService: salesCartService);
+        viewModel.SelectedSearchResult = CreateSearchResult();
+        viewModel.AddSelectedProductCommand.Execute(null);
+
+        Assert.True(viewModel.CheckoutCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void CheckoutCommandRaisesCheckoutRequested()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
+        var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession() };
+        var salesCartService = new FakeSalesCartService(
+            addHandler: (_, _) => Task.FromResult(SalesCartResult.SuccessResult(CreateSnapshotWithOneLine())));
+        var viewModel = CreateViewModel(session: session, currentRegisterSession: registerSession, salesCartService: salesCartService);
+        viewModel.SelectedSearchResult = CreateSearchResult();
+        viewModel.AddSelectedProductCommand.Execute(null);
+
+        var raised = false;
+        viewModel.CheckoutRequested += (_, _) => raised = true;
+
+        viewModel.CheckoutCommand.Execute(null);
+
+        Assert.True(raised);
+    }
+
+    [Fact]
+    public void ApplyCheckoutCompletedRefreshesTheCartFromCurrentSalesCart()
+    {
+        var currentSalesCart = new FakeCurrentSalesCart();
+        currentSalesCart.SetSnapshot(CreateSnapshotWithOneLine());
+        var viewModel = CreateViewModel(currentSalesCart: currentSalesCart);
+        Assert.Single(viewModel.CartLines);
+
+        // CheckoutService ya limpió el carrito en su único commit antes de que la UI se entere.
+        currentSalesCart.Clear();
+
+        viewModel.ApplyCheckoutCompleted();
+
+        Assert.Empty(viewModel.CartLines);
+        Assert.False(viewModel.HasItems);
+    }
+
+    private static ActiveRegisterSession CreateActiveRegisterSession() =>
+        new(
+            RegisterSessionId.New(),
+            OrganizationId.New(),
+            BranchId.New(),
+            RegisterId.New(),
+            "Caja 1",
+            UserId.New(),
+            "Cajero Uno",
+            new DateTimeOffset(2026, 1, 1, 9, 0, 0, TimeSpan.Zero),
+            500m,
+            "MXN");
+
     private static SalesViewModel CreateViewModel(
         FakeCurrentUserSession? session = null,
+        FakeCurrentRegisterSession? currentRegisterSession = null,
         FakeSalesCartService? salesCartService = null,
         FakeProductManagementService? productManagementService = null,
         FakeCurrentSalesCart? currentSalesCart = null) =>
         new(
             session ?? new FakeCurrentUserSession(),
+            currentRegisterSession ?? new FakeCurrentRegisterSession(),
             salesCartService ?? new FakeSalesCartService(),
             productManagementService ?? new FakeProductManagementService(),
             currentSalesCart ?? new FakeCurrentSalesCart());

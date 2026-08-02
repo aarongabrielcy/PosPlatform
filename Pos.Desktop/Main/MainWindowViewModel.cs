@@ -81,6 +81,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         _dashboardViewModel.NavigateToProductsRequested += OnDashboardNavigateToProductsRequested;
         _salesViewModel.NewProductRequested += OnSalesNewProductRequested;
         _salesViewModel.EditProductRequested += OnSalesEditProductRequested;
+        _salesViewModel.CheckoutRequested += OnSalesCheckoutRequested;
         _productsViewModel.NewProductRequested += OnProductsNewProductRequested;
         _productsViewModel.EditProductRequested += OnProductsEditProductRequested;
         _registerViewModel.CloseRegisterRequested += OnRegisterViewCloseRegisterRequested;
@@ -105,6 +106,9 @@ public sealed class MainWindowViewModel : ViewModelBase
     public event EventHandler? NewProductRequested;
 
     public event EventHandler<ProductId>? EditProductRequested;
+
+    // Igual patrón que NewProductRequested/EditProductRequested, pero para CheckoutWindow.
+    public event EventHandler? CheckoutRequested;
 
     public ICommand LogoutCommand => _logoutCommand;
 
@@ -326,6 +330,9 @@ public sealed class MainWindowViewModel : ViewModelBase
         EditProductRequested?.Invoke(this, productId);
     }
 
+    private void OnSalesCheckoutRequested(object? sender, EventArgs e) =>
+        CheckoutRequested?.Invoke(this, EventArgs.Empty);
+
     private void OnProductsEditProductRequested(object? sender, ProductId productId)
     {
         _pendingEditProductSource = _productsViewModel;
@@ -361,4 +368,9 @@ public sealed class MainWindowViewModel : ViewModelBase
                 break;
         }
     }
+
+    // Llamado desde App.xaml.cs tras cerrar CheckoutWindow con un cobro exitoso. El checkout solo
+    // puede iniciarse desde Venta, así que siempre reenvía a _salesViewModel (sin necesidad de
+    // rastrear un origen pendiente, a diferencia de ApplyProductCreated/ApplyProductUpdated).
+    public void ApplyCheckoutCompleted() => _salesViewModel.ApplyCheckoutCompleted();
 }

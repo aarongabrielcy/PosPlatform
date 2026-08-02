@@ -322,7 +322,7 @@ public class MainWindowViewModelTests
     public void NavigatingToSalesAndBackToProductsKeepsTheSameChildViewModelInstances()
     {
         var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
-        var salesViewModel = new SalesViewModel(session, new FakeSalesCartService(), new FakeProductManagementService(), new FakeCurrentSalesCart());
+        var salesViewModel = new SalesViewModel(session, new FakeCurrentRegisterSession(), new FakeSalesCartService(), new FakeProductManagementService(), new FakeCurrentSalesCart());
         var productsViewModel = new ProductsViewModel(new FakeProductManagementService());
         var viewModel = CreateViewModel(session: session, salesViewModel: salesViewModel, productsViewModel: productsViewModel);
 
@@ -339,7 +339,7 @@ public class MainWindowViewModelTests
         var currentSalesCart = new FakeCurrentSalesCart();
         currentSalesCart.SetSnapshot(new SalesCartSnapshot(
             [new SalesCartLine(ProductId.New(), "SKU-001", "Agua 1L", 1m, 10m, 10m, "MXN", 5m, true)], "MXN"));
-        var salesViewModel = new SalesViewModel(session, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
+        var salesViewModel = new SalesViewModel(session, new FakeCurrentRegisterSession(), new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
         var productsViewModel = new ProductsViewModel(new FakeProductManagementService());
         var viewModel = CreateViewModel(
             session: session, currentSalesCart: currentSalesCart, salesViewModel: salesViewModel, productsViewModel: productsViewModel);
@@ -356,7 +356,7 @@ public class MainWindowViewModelTests
     public void SalesNewProductRequestedBubblesUpToTheShellEvent()
     {
         var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
-        var salesViewModel = new SalesViewModel(session, new FakeSalesCartService(), new FakeProductManagementService(), new FakeCurrentSalesCart());
+        var salesViewModel = new SalesViewModel(session, new FakeCurrentRegisterSession(), new FakeSalesCartService(), new FakeProductManagementService(), new FakeCurrentSalesCart());
         var viewModel = CreateViewModel(session: session, salesViewModel: salesViewModel);
 
         var raised = false;
@@ -372,7 +372,7 @@ public class MainWindowViewModelTests
     {
         var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
         var salesCartService = new FakeSalesCartService();
-        var salesViewModel = new SalesViewModel(session, salesCartService, new FakeProductManagementService(), new FakeCurrentSalesCart());
+        var salesViewModel = new SalesViewModel(session, new FakeCurrentRegisterSession(), salesCartService, new FakeProductManagementService(), new FakeCurrentSalesCart());
         var viewModel = CreateViewModel(session: session, salesViewModel: salesViewModel);
 
         salesViewModel.NewProductCommand.Execute(null);
@@ -380,6 +380,46 @@ public class MainWindowViewModelTests
 
         Assert.Equal("SKU-NEW", salesViewModel.SearchText);
         Assert.Equal(1, salesCartService.SearchCallCount);
+    }
+
+    // ---------- Cobrar reenviado desde SalesViewModel (TAREA 25A) ----------
+
+    [Fact]
+    public void SalesCheckoutRequestedBubblesUpToTheShellEvent()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
+        var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession() };
+        var currentSalesCart = new FakeCurrentSalesCart();
+        currentSalesCart.SetSnapshot(new SalesCartSnapshot(
+            [new SalesCartLine(ProductId.New(), "SKU-001", "Agua 1L", 1m, 10m, 10m, "MXN", 5m, true)], "MXN"));
+        var salesViewModel = new SalesViewModel(
+            session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
+        var viewModel = CreateViewModel(session: session, salesViewModel: salesViewModel);
+
+        var raised = false;
+        viewModel.CheckoutRequested += (_, _) => raised = true;
+
+        salesViewModel.CheckoutCommand.Execute(null);
+
+        Assert.True(raised);
+    }
+
+    [Fact]
+    public void ApplyCheckoutCompletedRoutesToTheSalesViewModel()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
+        var currentSalesCart = new FakeCurrentSalesCart();
+        currentSalesCart.SetSnapshot(new SalesCartSnapshot(
+            [new SalesCartLine(ProductId.New(), "SKU-001", "Agua 1L", 1m, 10m, 10m, "MXN", 5m, true)], "MXN"));
+        var salesViewModel = new SalesViewModel(
+            session, new FakeCurrentRegisterSession(), new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
+        var viewModel = CreateViewModel(session: session, salesViewModel: salesViewModel);
+        Assert.Single(salesViewModel.CartLines);
+
+        currentSalesCart.Clear();
+        viewModel.ApplyCheckoutCompleted();
+
+        Assert.Empty(salesViewModel.CartLines);
     }
 
     [Fact]
@@ -426,7 +466,7 @@ public class MainWindowViewModelTests
         registerSession ??= new FakeCurrentRegisterSession();
         currentSalesCart ??= new FakeCurrentSalesCart();
         dashboardViewModel ??= new DashboardViewModel(session, registerSession, currentSalesCart, new CatalogFakeProductManagementService());
-        salesViewModel ??= new SalesViewModel(session, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
+        salesViewModel ??= new SalesViewModel(session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
         productsViewModel ??= new ProductsViewModel(new CatalogFakeProductManagementService());
         var inventoryViewModel = new InventoryViewModel();
         registerViewModel ??= new RegisterViewModel(registerSession);

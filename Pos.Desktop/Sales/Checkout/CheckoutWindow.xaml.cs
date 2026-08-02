@@ -1,18 +1,18 @@
 using System.Windows;
-using Pos.Application.RegisterSessions;
+using Pos.Application.Sales.Checkout;
 
-namespace Pos.Desktop.RegisterSessions;
+namespace Pos.Desktop.Sales.Checkout;
 
-public partial class CloseRegisterSessionWindow : Window
+public partial class CheckoutWindow : Window
 {
-    private readonly CloseRegisterSessionViewModel _viewModel;
+    private readonly CheckoutViewModel _viewModel;
 
-    public CloseRegisterSessionWindow(CloseRegisterSessionViewModel viewModel)
+    public CheckoutWindow(CheckoutViewModel viewModel)
     {
         InitializeComponent();
 
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
-        _viewModel.RegisterClosed += OnRegisterClosed;
+        _viewModel.CheckoutCompleted += OnCheckoutCompleted;
         _viewModel.CancelRequested += OnCancelRequested;
 
         DataContext = _viewModel;
@@ -22,13 +22,11 @@ public partial class CloseRegisterSessionWindow : Window
 
     // Se establece únicamente cuando DialogResult es true; App.xaml.cs la usa para mostrar el
     // resumen final sin depender de que la ventana siga viva.
-    public RegisterSessionSummary? ClosedSummary { get; private set; }
+    public CheckoutSummary? CompletedSummary { get; private set; }
 
-    public Task LoadAsync() => _viewModel.LoadAsync();
-
-    private void OnRegisterClosed(object? sender, RegisterSessionSummary summary)
+    private void OnCheckoutCompleted(object? sender, CheckoutSummary summary)
     {
-        ClosedSummary = summary;
+        CompletedSummary = summary;
         DialogResult = true;
         Close();
     }
@@ -41,7 +39,7 @@ public partial class CloseRegisterSessionWindow : Window
 
     private void OnWindowClosed(object? sender, EventArgs e)
     {
-        _viewModel.RegisterClosed -= OnRegisterClosed;
+        _viewModel.CheckoutCompleted -= OnCheckoutCompleted;
         _viewModel.CancelRequested -= OnCancelRequested;
         Closed -= OnWindowClosed;
     }

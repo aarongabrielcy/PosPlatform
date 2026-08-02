@@ -191,8 +191,8 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button x:Name="CancelSaleButton" Content="Cancelar venta" Margin="0,0,8,0"
                             Style="{StaticResource SecondaryButtonStyle}" Command="{Binding CancelSaleCommand}" />
-                    <Button x:Name="CheckoutButton" Content="Cobrar" Style="{StaticResource PrimaryButtonStyle}" IsEnabled="False"
-                            ToolTip="El cobro se implementará en la siguiente fase." />
+                    <Button x:Name="CheckoutButton" Content="Cobrar" Style="{StaticResource PrimaryButtonStyle}"
+                            Command="{Binding CheckoutCommand}" />
                 </StackPanel>
             </Grid>
         </Border>
