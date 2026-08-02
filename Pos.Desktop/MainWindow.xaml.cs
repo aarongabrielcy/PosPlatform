@@ -19,7 +19,6 @@ namespace Pos.Desktop
             _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
             _viewModel.LogoutRequested += OnViewModelLogoutRequested;
             _viewModel.CloseRegisterRequested += OnViewModelCloseRegisterRequested;
-            _viewModel.CancelSaleConfirmationRequested += OnViewModelCancelSaleConfirmationRequested;
             _viewModel.NewProductRequested += OnViewModelNewProductRequested;
             _viewModel.EditProductRequested += OnViewModelEditProductRequested;
 
@@ -56,22 +55,6 @@ namespace Pos.Desktop
         // ajuste de inventario).
         public void ApplyProductUpdated(string sku) => _viewModel.ApplyProductUpdated(sku);
 
-        // El ViewModel nunca muestra ventanas ni MessageBox: solo pide confirmación. Confirmar o
-        // cancelar el diálogo es responsabilidad exclusiva del código detrás de la vista.
-        private void OnViewModelCancelSaleConfirmationRequested(object? sender, EventArgs e)
-        {
-            var result = MessageBox.Show(
-                "¿Deseas cancelar la venta actual? Se perderán los productos agregados al carrito.",
-                "PosPlatform",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-
-            if (result == MessageBoxResult.Yes)
-            {
-                _viewModel.ConfirmCancelSale();
-            }
-        }
-
         // Nunca permite terminar el proceso silenciosamente con una caja abierta: cierra la
         // ventana con la X requiere primero confirmar o completar el cierre de caja.
         private void OnWindowClosing(object? sender, CancelEventArgs e)
@@ -99,7 +82,6 @@ namespace Pos.Desktop
         {
             _viewModel.LogoutRequested -= OnViewModelLogoutRequested;
             _viewModel.CloseRegisterRequested -= OnViewModelCloseRegisterRequested;
-            _viewModel.CancelSaleConfirmationRequested -= OnViewModelCancelSaleConfirmationRequested;
             _viewModel.NewProductRequested -= OnViewModelNewProductRequested;
             _viewModel.EditProductRequested -= OnViewModelEditProductRequested;
             Closing -= OnWindowClosing;

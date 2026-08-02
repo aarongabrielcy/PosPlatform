@@ -793,6 +793,35 @@ public class DependencyInjectionTests
     }
 
     [Fact]
+    public void IProductCatalogQueryResolvesEfProductCatalogQueryWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<EfProductCatalogQuery>(scope.ServiceProvider.GetRequiredService<IProductCatalogQuery>());
+        }
+    }
+
+    [Fact]
+    public void IProductCatalogQueryProducesDifferentInstancesAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var serviceA = scopeA.ServiceProvider.GetRequiredService<IProductCatalogQuery>();
+            var serviceB = scopeB.ServiceProvider.GetRequiredService<IProductCatalogQuery>();
+
+            Assert.NotSame(serviceA, serviceB);
+        }
+    }
+
+    [Fact]
     public void BuildConnectionStringPointsToDatabasePathWithForeignKeysEnabled()
     {
         const string databasePath = @"C:\fake-root\PosPlatform\Data\pos.db";

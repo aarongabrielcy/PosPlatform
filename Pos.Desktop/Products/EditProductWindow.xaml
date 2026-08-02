@@ -42,33 +42,34 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Label Grid.Row="0" Grid.Column="0" Content="SKU" />
-            <TextBlock Grid.Row="0" Grid.Column="1" Margin="0,10" VerticalAlignment="Center"
-                    Text="{Binding Sku, Mode=OneWay}" />
+            <Label Grid.Row="0" Grid.Column="0" Content="SKU" Target="{Binding ElementName=SkuTextBox}" />
+            <TextBox x:Name="SkuTextBox" Grid.Row="0" Grid.Column="1"
+                    Margin="0,6" Padding="6,4" TabIndex="0"
+                    Text="{Binding Sku, UpdateSourceTrigger=PropertyChanged}" />
 
             <Label Grid.Row="1" Grid.Column="0" Content="Código de barras" Target="{Binding ElementName=BarcodeTextBox}" />
             <TextBox x:Name="BarcodeTextBox" Grid.Row="1" Grid.Column="1"
-                    Margin="0,6" Padding="6,4" TabIndex="0"
+                    Margin="0,6" Padding="6,4" TabIndex="1"
                     Text="{Binding Barcode, UpdateSourceTrigger=PropertyChanged}" />
 
             <Label Grid.Row="2" Grid.Column="0" Content="Nombre" Target="{Binding ElementName=NameTextBox}" />
             <TextBox x:Name="NameTextBox" Grid.Row="2" Grid.Column="1"
-                    Margin="0,6" Padding="6,4" TabIndex="1"
+                    Margin="0,6" Padding="6,4" TabIndex="2"
                     Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
 
             <Label Grid.Row="3" Grid.Column="0" Content="Descripción" Target="{Binding ElementName=DescriptionTextBox}" />
             <TextBox x:Name="DescriptionTextBox" Grid.Row="3" Grid.Column="1"
-                    Margin="0,6" Padding="6,4" TabIndex="2"
+                    Margin="0,6" Padding="6,4" TabIndex="3"
                     Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" />
 
             <Label Grid.Row="4" Grid.Column="0" Content="Precio de venta" Target="{Binding ElementName=SalePriceTextBox}" />
             <TextBox x:Name="SalePriceTextBox" Grid.Row="4" Grid.Column="1"
-                    Margin="0,6" Padding="6,4" TabIndex="3"
+                    Margin="0,6" Padding="6,4" TabIndex="4"
                     Text="{Binding SalePriceText, UpdateSourceTrigger=PropertyChanged}" />
 
             <Label Grid.Row="5" Grid.Column="0" Content="Costo" Target="{Binding ElementName=CostTextBox}" />
             <TextBox x:Name="CostTextBox" Grid.Row="5" Grid.Column="1"
-                    Margin="0,6" Padding="6,4" TabIndex="4"
+                    Margin="0,6" Padding="6,4" TabIndex="5"
                     Text="{Binding CostText, UpdateSourceTrigger=PropertyChanged}" />
 
             <Label Grid.Row="6" Grid.Column="0" Content="Controla inventario" />
@@ -83,7 +84,7 @@
 
             <Label Grid.Row="8" Grid.Column="0" Content="Punto de reorden" Target="{Binding ElementName=ReorderPointTextBox}" />
             <TextBox x:Name="ReorderPointTextBox" Grid.Row="8" Grid.Column="1"
-                    Margin="0,6" Padding="6,4" TabIndex="5"
+                    Margin="0,6" Padding="6,4" TabIndex="6"
                     IsEnabled="{Binding TracksInventory}"
                     Text="{Binding ReorderPointText, UpdateSourceTrigger=PropertyChanged}" />
 
@@ -110,20 +111,20 @@
 
             <StackPanel Grid.Column="0" Orientation="Horizontal">
                 <Button x:Name="ToggleActiveButton" Content="{Binding ToggleActiveButtonText}"
-                        MinWidth="100" Padding="12,6" Margin="0,0,8,0" TabIndex="6"
+                        MinWidth="100" Padding="12,6" Margin="0,0,8,0" TabIndex="7"
                         Command="{Binding ToggleActiveCommand}" />
                 <Button x:Name="AdjustInventoryButton" Content="Ajustar inventario"
-                        MinWidth="140" Padding="12,6" TabIndex="7"
+                        MinWidth="140" Padding="12,6" TabIndex="8"
                         IsEnabled="{Binding TracksInventory}"
                         Command="{Binding AdjustInventoryCommand}" />
             </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal">
                 <Button x:Name="CancelButton" Content="Cancelar"
-                        MinWidth="100" Padding="12,6" Margin="0,0,8,0" TabIndex="9"
+                        MinWidth="100" Padding="12,6" Margin="0,0,8,0" TabIndex="10"
                         Command="{Binding CancelCommand}" />
                 <Button x:Name="SaveButton" Content="Guardar cambios"
-                        MinWidth="130" Padding="16,6" TabIndex="8"
+                        MinWidth="130" Padding="16,6" TabIndex="9"
                         IsDefault="True" Command="{Binding SaveCommand}" />
             </StackPanel>
         </Grid>

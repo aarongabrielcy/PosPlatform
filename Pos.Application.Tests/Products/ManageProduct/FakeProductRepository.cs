@@ -12,14 +12,20 @@ internal sealed class FakeProductRepository : IProductRepository
 
     public int SearchCallCount { get; private set; }
 
+    public int GetBySkuCallCount { get; private set; }
+
     public void Add(Product product) => _products[product.Id] = product;
 
     public Task<Product?> GetByIdAsync(ProductId productId, CancellationToken cancellationToken) =>
         Task.FromResult(_products.TryGetValue(productId, out var product) ? product : null);
 
-    public Task<Product?> GetBySkuAsync(OrganizationId organizationId, Sku sku, CancellationToken cancellationToken) =>
-        Task.FromResult(_products.Values.SingleOrDefault(
+    public Task<Product?> GetBySkuAsync(OrganizationId organizationId, Sku sku, CancellationToken cancellationToken)
+    {
+        GetBySkuCallCount++;
+
+        return Task.FromResult(_products.Values.SingleOrDefault(
             p => p.OrganizationId == organizationId && p.Sku.Value == sku.Value));
+    }
 
     public Task<Product?> GetByBarcodeAsync(OrganizationId organizationId, Barcode barcode, CancellationToken cancellationToken) =>
         Task.FromResult(_products.Values.FirstOrDefault(

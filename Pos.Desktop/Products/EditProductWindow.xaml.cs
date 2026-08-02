@@ -15,6 +15,7 @@ public partial class EditProductWindow : Window
         _viewModel.Saved += OnSaved;
         _viewModel.CancelRequested += OnCancelRequested;
         _viewModel.AdjustInventoryRequested += OnAdjustInventoryRequested;
+        _viewModel.CartWarningRequested += OnCartWarningRequested;
 
         DataContext = _viewModel;
 
@@ -56,11 +57,24 @@ public partial class EditProductWindow : Window
     private void OnAdjustInventoryRequested(object? sender, EventArgs e) =>
         AdjustInventoryRequested?.Invoke(this, EventArgs.Empty);
 
+    // El ViewModel nunca muestra MessageBox: solo pide advertir que el producto sigue en la venta
+    // actual tras cambiar su SKU. Se muestra antes de que Saved cierre la ventana (TAREA 24C,
+    // sección 15); no bloquea el guardado, que ya ocurrió.
+    private void OnCartWarningRequested(object? sender, EventArgs e)
+    {
+        MessageBox.Show(
+            "El producto está en la venta actual. La línea conserva los datos con los que fue agregada.",
+            "PosPlatform",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+    }
+
     private void OnWindowClosed(object? sender, EventArgs e)
     {
         _viewModel.Saved -= OnSaved;
         _viewModel.CancelRequested -= OnCancelRequested;
         _viewModel.AdjustInventoryRequested -= OnAdjustInventoryRequested;
+        _viewModel.CartWarningRequested -= OnCartWarningRequested;
         Closed -= OnWindowClosed;
     }
 }

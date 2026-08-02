@@ -1,0 +1,200 @@
+<UserControl x:Class="Pos.Desktop.Sales.SalesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:converters="clr-namespace:Pos.Desktop.Common"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="900">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Pos.Desktop;component/Themes/AppColors.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <converters:ProductAvailabilityStatusConverter x:Key="ProductAvailabilityStatusConverter" />
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid Background="{StaticResource AppBackgroundBrush}" Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="200" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="Venta" Style="{StaticResource PageTitleStyle}" />
+            <TextBlock Text="Busca productos por SKU, código de barras o nombre y arma la venta actual."
+                       Style="{StaticResource PageSubtitleStyle}" />
+        </StackPanel>
+
+        <Grid Grid.Row="1" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox x:Name="SearchTextBox" Grid.Column="0" Padding="8" VerticalContentAlignment="Center"
+                     BorderBrush="{StaticResource BorderBrush}"
+                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
+                <TextBox.InputBindings>
+                    <KeyBinding Key="Return" Command="{Binding SearchCommand}" />
+                </TextBox.InputBindings>
+            </TextBox>
+
+            <Button x:Name="SearchButton" Grid.Column="1" Content="Buscar" Margin="8,0,0,0"
+                    Style="{StaticResource PrimaryButtonStyle}" Command="{Binding SearchCommand}" />
+        </Grid>
+
+        <TextBlock x:Name="SearchStatusText" Grid.Row="2" Margin="0,0,0,8" TextWrapping="Wrap"
+                   Foreground="{StaticResource SecondaryTextBrush}" Text="{Binding SearchStatusMessage}" />
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button x:Name="AddSelectedProductButton" Content="Agregar" Margin="0,0,8,0"
+                    Style="{StaticResource PrimaryButtonStyle}" Command="{Binding AddSelectedProductCommand}" />
+            <Button x:Name="NewProductButton" Content="Nuevo producto" Margin="0,0,8,0"
+                    Style="{StaticResource SecondaryButtonStyle}" Command="{Binding NewProductCommand}" />
+            <Button x:Name="EditProductButton" Content="Editar producto" Margin="0,0,8,0"
+                    Style="{StaticResource SecondaryButtonStyle}" Command="{Binding EditProductCommand}" />
+            <CheckBox x:Name="IncludeInactiveCheckBox" Content="Incluir inactivos" Margin="16,0,0,0"
+                    VerticalAlignment="Center" Foreground="{StaticResource PrimaryTextBrush}"
+                    Visibility="{Binding CanManageProducts, Converter={StaticResource BoolToVisibilityConverter}}"
+                    IsChecked="{Binding IncludeInactive}" />
+        </StackPanel>
+
+        <Border Grid.Row="4" Style="{StaticResource CardStyle}" Padding="0" Margin="0,0,0,16">
+            <DataGrid x:Name="SearchResultsGrid" BorderThickness="0" Background="Transparent"
+                      ItemsSource="{Binding SearchResults}" SelectedItem="{Binding SelectedSearchResult}"
+                      AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                      SelectionMode="Single" SelectionUnit="FullRow">
+                <DataGrid.InputBindings>
+                    <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding AddSelectedProductCommand}" />
+                </DataGrid.InputBindings>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120" />
+                    <DataGridTextColumn Header="Producto" Binding="{Binding Name}" Width="*" />
+                    <DataGridTextColumn Header="Precio" Width="110">
+                        <DataGridTextColumn.Binding>
+                            <MultiBinding StringFormat="{}{0:N2} {1}">
+                                <Binding Path="UnitPriceAmount" />
+                                <Binding Path="Currency" />
+                            </MultiBinding>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Existencia" Binding="{Binding AvailableQuantity}" Width="100" />
+                    <DataGridCheckBoxColumn Header="Disponible" Binding="{Binding IsAvailable, Mode=OneWay}" Width="90" />
+                    <DataGridTextColumn Header="Estado" Width="150"
+                                         Binding="{Binding Converter={StaticResource ProductAvailabilityStatusConverter}, Mode=OneWay}" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+        <TextBlock x:Name="CartErrorText" Grid.Row="5" Margin="0,0,0,8" TextWrapping="Wrap"
+                   Foreground="{StaticResource DangerBrush}" Text="{Binding GeneralError}" />
+
+        <Border Grid.Row="6" Style="{StaticResource CardStyle}" Padding="0" Margin="0,0,0,16">
+            <DataGrid x:Name="CartGrid" BorderThickness="0" Background="Transparent"
+                      ItemsSource="{Binding CartLines}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Producto" Binding="{Binding ProductName}" Width="*" />
+                    <DataGridTextColumn Header="Precio" Width="100">
+                        <DataGridTextColumn.Binding>
+                            <MultiBinding StringFormat="{}{0:N2} {1}">
+                                <Binding Path="UnitPriceAmount" />
+                                <Binding Path="Currency" />
+                            </MultiBinding>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+                    <DataGridTemplateColumn Header="Cantidad" Width="140">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <Button Content="-" Width="26"
+                                            Command="{Binding DataContext.DecreaseQuantityCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding}" />
+                                    <TextBlock Text="{Binding Quantity}" Width="40" TextAlignment="Center" VerticalAlignment="Center" />
+                                    <Button Content="+" Width="26"
+                                            Command="{Binding DataContext.IncreaseQuantityCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                            CommandParameter="{Binding}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Subtotal" Width="100">
+                        <DataGridTextColumn.Binding>
+                            <MultiBinding StringFormat="{}{0:N2} {1}">
+                                <Binding Path="LineSubtotalAmount" />
+                                <Binding Path="Currency" />
+                            </MultiBinding>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Impuesto" Width="100">
+                        <DataGridTextColumn.Binding>
+                            <MultiBinding StringFormat="{}{0:N2} {1}">
+                                <Binding Path="LineTaxAmount" />
+                                <Binding Path="Currency" />
+                            </MultiBinding>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Total" Width="100">
+                        <DataGridTextColumn.Binding>
+                            <MultiBinding StringFormat="{}{0:N2} {1}">
+                                <Binding Path="LineTotalAmount" />
+                                <Binding Path="Currency" />
+                            </MultiBinding>
+                        </DataGridTextColumn.Binding>
+                    </DataGridTextColumn>
+                    <DataGridTemplateColumn Header="Eliminar" Width="90">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="Eliminar"
+                                        Command="{Binding DataContext.RemoveLineCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+        <Border Grid.Row="7" Style="{StaticResource CardStyle}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <StackPanel Margin="0,0,24,0">
+                        <TextBlock Text="Subtotal" FontWeight="Bold" Foreground="{StaticResource SecondaryTextBrush}" />
+                        <TextBlock Text="{Binding Subtotal}" Foreground="{StaticResource PrimaryTextBrush}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,24,0">
+                        <TextBlock Text="Descuento" FontWeight="Bold" Foreground="{StaticResource SecondaryTextBrush}" />
+                        <TextBlock Text="{Binding DiscountTotal}" Foreground="{StaticResource PrimaryTextBrush}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,24,0">
+                        <TextBlock Text="Impuesto" FontWeight="Bold" Foreground="{StaticResource SecondaryTextBrush}" />
+                        <TextBlock Text="{Binding TaxTotal}" Foreground="{StaticResource PrimaryTextBrush}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,24,0">
+                        <TextBlock Text="Total" FontWeight="Bold" Foreground="{StaticResource SecondaryTextBrush}" />
+                        <TextBlock Text="{Binding GrandTotal}" FontSize="16" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="CancelSaleButton" Content="Cancelar venta" Margin="0,0,8,0"
+                            Style="{StaticResource SecondaryButtonStyle}" Command="{Binding CancelSaleCommand}" />
+                    <Button x:Name="CheckoutButton" Content="Cobrar" Style="{StaticResource PrimaryButtonStyle}" IsEnabled="False"
+                            ToolTip="El cobro se implementará en la siguiente fase." />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

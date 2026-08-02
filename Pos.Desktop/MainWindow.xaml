@@ -4,239 +4,212 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Pos.Desktop"
-        xmlns:converters="clr-namespace:Pos.Desktop.Common"
+        xmlns:common="clr-namespace:Pos.Desktop.Common"
+        xmlns:main="clr-namespace:Pos.Desktop.Main"
+        xmlns:dashboard="clr-namespace:Pos.Desktop.Dashboard"
+        xmlns:sales="clr-namespace:Pos.Desktop.Sales"
+        xmlns:catalog="clr-namespace:Pos.Desktop.Products.Catalog"
+        xmlns:inventory="clr-namespace:Pos.Desktop.Inventory"
+        xmlns:register="clr-namespace:Pos.Desktop.Register"
+        xmlns:settings="clr-namespace:Pos.Desktop.Settings"
         mc:Ignorable="d"
-        Title="PosPlatform" Height="700" Width="1100">
+        Title="PosPlatform" Height="768" Width="1366" MinHeight="720" MinWidth="1280"
+        WindowStartupLocation="CenterScreen">
     <Window.Resources>
-        <converters:ProductAvailabilityStatusConverter x:Key="ProductAvailabilityStatusConverter" />
-        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Pos.Desktop;component/Themes/AppColors.xaml" />
+                <ResourceDictionary Source="/Pos.Desktop;component/Themes/Icons.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+            <common:NavigationSectionIconConverter x:Key="NavigationSectionIconConverter" />
+
+            <DataTemplate DataType="{x:Type dashboard:DashboardViewModel}">
+                <dashboard:DashboardView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type sales:SalesViewModel}">
+                <sales:SalesView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type catalog:ProductsViewModel}">
+                <catalog:ProductsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type inventory:InventoryViewModel}">
+                <inventory:InventoryView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type register:RegisterViewModel}">
+                <register:RegisterView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type settings:SettingsViewModel}">
+                <settings:SettingsView />
+            </DataTemplate>
+
+            <!-- Ítem del sidebar: icono siempre visible + texto/ToolTip. El texto se oculta con
+                 el sidebar colapsado, el ToolTip permanece disponible siempre (sección 3). -->
+            <DataTemplate DataType="{x:Type main:NavigationItem}">
+                <Grid ToolTip="{Binding Label}" Height="24">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="36" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Path Grid.Column="0" Width="17" Height="17" Stretch="Uniform" HorizontalAlignment="Center"
+                          Fill="{StaticResource SidebarTextBrush}"
+                          Data="{Binding Section, Converter={StaticResource NavigationSectionIconConverter}}" />
+
+                    <TextBlock Grid.Column="1" Text="{Binding Label}" VerticalAlignment="Center"
+                               Foreground="{StaticResource SidebarTextBrush}"
+                               Visibility="{Binding DataContext.IsSidebarExpanded, RelativeSource={RelativeSource AncestorType=ListBox}, Converter={StaticResource BoolToVisibilityConverter}}" />
+                </Grid>
+            </DataTemplate>
+
+            <!-- Ítem seleccionado: fondo Accent + indicador lateral. Hover (SidebarHoverBrush)
+                 queda visualmente distinto del seleccionado (sección 13). -->
+            <Style x:Key="NavigationListBoxItemStyle" TargetType="ListBoxItem">
+                <Setter Property="Padding" Value="10,9" />
+                <Setter Property="Margin" Value="8,2" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListBoxItem">
+                            <Border x:Name="ItemBorder" CornerRadius="6" Padding="{TemplateBinding Padding}"
+                                    Background="Transparent" BorderThickness="3,0,0,0" BorderBrush="Transparent">
+                                <ContentPresenter />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource SidebarHoverBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource SidebarSelectedBrush}" />
+                                    <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
     </Window.Resources>
-    <DockPanel>
-        <Border DockPanel.Dock="Top" Padding="12,8" Background="#F0F0F0" BorderBrush="#D0D0D0" BorderThickness="0,0,0,1">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+    <Grid Background="{StaticResource AppBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-                <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" VerticalAlignment="Center" />
-                    <TextBlock Text=" — " VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding RoleName}" VerticalAlignment="Center" />
-                </StackPanel>
-
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button x:Name="CloseRegisterButton" Content="Cerrar caja"
-                            Padding="10,4" Margin="0,0,8,0" Command="{Binding CloseRegisterCommand}" />
-                    <Button x:Name="LogoutButton" Content="Cerrar sesión"
-                            Padding="10,4" Command="{Binding LogoutCommand}" />
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <Border DockPanel.Dock="Top" Padding="12,8" Background="#EAF6EA" BorderBrush="#C7E6C7" BorderThickness="0,0,0,1">
+        <!-- Header compacto: hamburguesa + título de sección + estado de caja. No repite
+             usuario/rol completos (ya están en el pie del sidebar). -->
+        <Border x:Name="HeaderBorder" Grid.Row="0" Padding="12,10" Background="{StaticResource CardBackgroundBrush}"
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0" Margin="0,0,24,0">
-                    <TextBlock Text="Caja" FontWeight="Bold" />
-                    <TextBlock Text="{Binding RegisterName}" />
-                </StackPanel>
-
-                <StackPanel Grid.Column="1" Margin="0,0,24,0">
-                    <TextBlock Text="Apertura" FontWeight="Bold" />
-                    <TextBlock Text="{Binding RegisterOpenedAtText}" />
-                </StackPanel>
-
-                <StackPanel Grid.Column="2" Margin="0,0,24,0">
-                    <TextBlock Text="Fondo inicial" FontWeight="Bold" />
-                    <TextBlock Text="{Binding RegisterOpeningAmountText}" />
-                </StackPanel>
-
-                <StackPanel Grid.Column="3">
-                    <TextBlock Text="Estado" FontWeight="Bold" />
-                    <TextBlock Text="{Binding RegisterStatusText}" />
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <StackPanel DockPanel.Dock="Top" Margin="12,8">
-            <TextBlock Text="{Binding LogoutBlockedMessage}" Foreground="Red" TextWrapping="Wrap" />
-            <TextBlock Text="{Binding CloseRegisterBlockedMessage}" Foreground="Red" TextWrapping="Wrap" />
-        </StackPanel>
-
-        <Grid Margin="12">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="180" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-
-            <Grid Grid.Row="0" Margin="0,0,0,8">
-                <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <TextBox x:Name="SearchTextBox" Grid.Column="0" Padding="6" VerticalContentAlignment="Center"
-                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
-                    <TextBox.InputBindings>
-                        <KeyBinding Key="Return" Command="{Binding SearchCommand}" />
-                    </TextBox.InputBindings>
-                </TextBox>
+                <Button x:Name="ToggleSidebarButton" Grid.Column="0" Width="36" Height="36" Padding="0"
+                        Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip="Expandir/colapsar menú"
+                        Command="{Binding ToggleSidebarCommand}">
+                    <Path Width="16" Height="16" Stretch="Uniform" Fill="{StaticResource PrimaryTextBrush}"
+                          Data="{StaticResource IconMenu}" />
+                </Button>
 
-                <Button x:Name="SearchButton" Grid.Column="1" Content="Buscar" Padding="14,6" Margin="8,0,0,0"
-                        Command="{Binding SearchCommand}" />
+                <TextBlock x:Name="SectionTitleText" Grid.Column="1" Text="{Binding CurrentNavigationTitle}"
+                           FontSize="18" FontWeight="Bold" VerticalAlignment="Center" Margin="12,0,0,0"
+                           Foreground="{StaticResource PrimaryTextBrush}" />
+
+                <StackPanel Grid.Column="3" Orientation="Horizontal">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,16,0" VerticalAlignment="Center"
+                                Visibility="{Binding IsRegisterOpen, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock Text="{Binding RegisterName}" FontWeight="SemiBold" VerticalAlignment="Center"
+                                   Foreground="{StaticResource PrimaryTextBrush}" Margin="0,0,8,0" />
+                        <Border Background="{StaticResource SuccessBrush}" CornerRadius="10" Padding="8,2">
+                            <TextBlock Text="{Binding RegisterStatusText}" Foreground="White" FontSize="11" />
+                        </Border>
+                    </StackPanel>
+
+                    <Button x:Name="CloseRegisterButton" Content="Cerrar caja" Style="{StaticResource SecondaryButtonStyle}"
+                            Command="{Binding CloseRegisterCommand}" />
+                </StackPanel>
             </Grid>
+        </Border>
 
-            <TextBlock x:Name="SearchStatusText" Grid.Row="1" Margin="0,0,0,8" TextWrapping="Wrap"
-                       Text="{Binding SearchStatusMessage}" />
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="{Binding SidebarWidth}" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,8">
-                <Button x:Name="AddSelectedProductButton" Content="Agregar" Padding="14,6"
-                        Command="{Binding AddSelectedProductCommand}" />
-                <Button x:Name="NewProductButton" Content="Nuevo producto" Padding="14,6" Margin="8,0,0,0"
-                        Command="{Binding NewProductCommand}" />
-                <Button x:Name="EditProductButton" Content="Editar producto" Padding="14,6" Margin="8,0,0,0"
-                        Command="{Binding EditProductCommand}" />
-                <CheckBox x:Name="IncludeInactiveCheckBox" Content="Incluir inactivos" Margin="16,0,0,0"
-                        VerticalAlignment="Center"
-                        Visibility="{Binding CanManageProducts, Converter={StaticResource BoolToVisibilityConverter}}"
-                        IsChecked="{Binding IncludeInactive}" />
-            </StackPanel>
+            <!-- Sidebar colapsable: expandido ~240px, colapsado ~68px (sección 3). -->
+            <Border Grid.Column="0" Background="{StaticResource SidebarBackgroundBrush}">
+                <DockPanel>
+                    <!-- Branding: isotipo simple hecho en XAML, sin binarios (sección 6). El
+                         nombre se oculta con el sidebar colapsado; el isotipo permanece. -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="16,18,16,22">
+                        <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource AccentBrush}">
+                            <TextBlock Text="P" Foreground="White" FontWeight="Bold" FontSize="16"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock x:Name="BrandNameText" Text="POSPlatform" FontWeight="Bold" FontSize="16"
+                                   VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource SidebarTextBrush}"
+                                   Visibility="{Binding IsSidebarExpanded, Converter={StaticResource BoolToVisibilityConverter}}" />
+                    </StackPanel>
 
-            <DataGrid x:Name="SearchResultsGrid" Grid.Row="3" Margin="0,0,0,8"
-                      ItemsSource="{Binding SearchResults}" SelectedItem="{Binding SelectedSearchResult}"
-                      AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
-                      SelectionMode="Single" SelectionUnit="FullRow">
-                <DataGrid.InputBindings>
-                    <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding AddSelectedProductCommand}" />
-                </DataGrid.InputBindings>
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120" />
-                    <DataGridTextColumn Header="Producto" Binding="{Binding Name}" Width="*" />
-                    <DataGridTextColumn Header="Precio" Width="110">
-                        <DataGridTextColumn.Binding>
-                            <MultiBinding StringFormat="{}{0:N2} {1}">
-                                <Binding Path="UnitPriceAmount" />
-                                <Binding Path="Currency" />
-                            </MultiBinding>
-                        </DataGridTextColumn.Binding>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Header="Existencia" Binding="{Binding AvailableQuantity}" Width="100" />
-                    <DataGridCheckBoxColumn Header="Disponible" Binding="{Binding IsAvailable, Mode=OneWay}" Width="90" />
-                    <DataGridTextColumn Header="Estado" Width="150"
-                                         Binding="{Binding Converter={StaticResource ProductAvailabilityStatusConverter}, Mode=OneWay}" />
-                </DataGrid.Columns>
-            </DataGrid>
-
-            <TextBlock x:Name="CartErrorText" Grid.Row="4" Margin="0,0,0,8" TextWrapping="Wrap"
-                       Foreground="Red" Text="{Binding GeneralError}" />
-
-            <DataGrid x:Name="CartGrid" Grid.Row="5" Margin="0,0,0,8"
-                      ItemsSource="{Binding CartLines}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Producto" Binding="{Binding ProductName}" Width="*" />
-                    <DataGridTextColumn Header="Precio" Width="100">
-                        <DataGridTextColumn.Binding>
-                            <MultiBinding StringFormat="{}{0:N2} {1}">
-                                <Binding Path="UnitPriceAmount" />
-                                <Binding Path="Currency" />
-                            </MultiBinding>
-                        </DataGridTextColumn.Binding>
-                    </DataGridTextColumn>
-                    <DataGridTemplateColumn Header="Cantidad" Width="140">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                    <Button Content="-" Width="26"
-                                            Command="{Binding DataContext.DecreaseQuantityCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                            CommandParameter="{Binding}" />
-                                    <TextBlock Text="{Binding Quantity}" Width="40" TextAlignment="Center" VerticalAlignment="Center" />
-                                    <Button Content="+" Width="26"
-                                            Command="{Binding DataContext.IncreaseQuantityCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                            CommandParameter="{Binding}" />
+                    <!-- Usuario/rol + cerrar sesión, en la parte inferior (sección 8). -->
+                    <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource SidebarHoverBrush}" BorderThickness="0,1,0,0" Padding="14,14">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Width="30" Height="30" CornerRadius="15" Background="{StaticResource SidebarHoverBrush}">
+                                    <Path Width="15" Height="15" Stretch="Uniform" Fill="{StaticResource SidebarTextBrush}"
+                                          Data="{StaticResource IconUser}" />
+                                </Border>
+                                <StackPanel Margin="10,0,0,0" VerticalAlignment="Center"
+                                            Visibility="{Binding IsSidebarExpanded, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <TextBlock x:Name="DisplayNameText" Text="{Binding DisplayName}"
+                                               Foreground="{StaticResource SidebarTextBrush}" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="RoleNameText" Text="{Binding RoleName}"
+                                               Foreground="{StaticResource SidebarSecondaryTextBrush}" FontSize="11" />
                                 </StackPanel>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="Subtotal" Width="100">
-                        <DataGridTextColumn.Binding>
-                            <MultiBinding StringFormat="{}{0:N2} {1}">
-                                <Binding Path="LineSubtotalAmount" />
-                                <Binding Path="Currency" />
-                            </MultiBinding>
-                        </DataGridTextColumn.Binding>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Header="Impuesto" Width="100">
-                        <DataGridTextColumn.Binding>
-                            <MultiBinding StringFormat="{}{0:N2} {1}">
-                                <Binding Path="LineTaxAmount" />
-                                <Binding Path="Currency" />
-                            </MultiBinding>
-                        </DataGridTextColumn.Binding>
-                    </DataGridTextColumn>
-                    <DataGridTextColumn Header="Total" Width="100">
-                        <DataGridTextColumn.Binding>
-                            <MultiBinding StringFormat="{}{0:N2} {1}">
-                                <Binding Path="LineTotalAmount" />
-                                <Binding Path="Currency" />
-                            </MultiBinding>
-                        </DataGridTextColumn.Binding>
-                    </DataGridTextColumn>
-                    <DataGridTemplateColumn Header="Eliminar" Width="90">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <Button Content="Eliminar"
-                                        Command="{Binding DataContext.RemoveLineCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                        CommandParameter="{Binding}" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                </DataGrid.Columns>
-            </DataGrid>
+                            </StackPanel>
 
-            <Grid Grid.Row="6" Margin="0,8,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+                            <Button x:Name="LogoutButton" Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                    HorizontalContentAlignment="Left" Padding="0" Margin="0,12,0,0"
+                                    ToolTip="Cerrar sesión" Command="{Binding LogoutCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Width="15" Height="15" Stretch="Uniform" Fill="{StaticResource SidebarTextBrush}"
+                                          Data="{StaticResource IconLogout}" />
+                                    <TextBlock Text="Cerrar sesión" Foreground="{StaticResource SidebarTextBrush}" Margin="10,0,0,0"
+                                               Visibility="{Binding IsSidebarExpanded, Converter={StaticResource BoolToVisibilityConverter}}" />
+                                </StackPanel>
+                            </Button>
 
-                <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <StackPanel Margin="0,0,24,0">
-                        <TextBlock Text="Subtotal" FontWeight="Bold" />
-                        <TextBlock Text="{Binding Subtotal}" />
-                    </StackPanel>
-                    <StackPanel Margin="0,0,24,0">
-                        <TextBlock Text="Descuento" FontWeight="Bold" />
-                        <TextBlock Text="{Binding DiscountTotal}" />
-                    </StackPanel>
-                    <StackPanel Margin="0,0,24,0">
-                        <TextBlock Text="Impuesto" FontWeight="Bold" />
-                        <TextBlock Text="{Binding TaxTotal}" />
-                    </StackPanel>
-                    <StackPanel Margin="0,0,24,0">
-                        <TextBlock Text="Total" FontWeight="Bold" />
-                        <TextBlock Text="{Binding GrandTotal}" FontSize="16" FontWeight="Bold" />
-                    </StackPanel>
-                </StackPanel>
+                            <TextBlock Text="{Binding LogoutBlockedMessage}" Foreground="{StaticResource DangerBrush}"
+                                       TextWrapping="Wrap" Margin="0,8,0,0" FontSize="11"
+                                       Visibility="{Binding IsSidebarExpanded, Converter={StaticResource BoolToVisibilityConverter}}" />
+                        </StackPanel>
+                    </Border>
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button x:Name="CancelSaleButton" Content="Cancelar venta" Padding="12,6" Margin="0,0,8,0"
-                            Command="{Binding CancelSaleCommand}" />
-                    <Button x:Name="CheckoutButton" Content="Cobrar" Padding="12,6" IsEnabled="False"
-                            ToolTip="El cobro se implementará en la siguiente fase." />
-                </StackPanel>
+                    <ListBox x:Name="NavigationListBox" Margin="0,4" Background="Transparent" BorderThickness="0"
+                             ItemsSource="{Binding NavigationItems}" SelectedItem="{Binding SelectedNavigationItem}"
+                             ItemContainerStyle="{StaticResource NavigationListBoxItemStyle}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
+                </DockPanel>
+            </Border>
+
+            <!-- Contenido central: star sizing, sin anchos rígidos (sección 3). -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="{Binding CloseRegisterBlockedMessage}" Foreground="{StaticResource DangerBrush}"
+                           TextWrapping="Wrap" Margin="16,10,16,0" />
+
+                <ContentControl x:Name="ShellContentControl" Grid.Row="1" Content="{Binding CurrentViewModel}" />
             </Grid>
         </Grid>
-    </DockPanel>
+    </Grid>
 </Window>

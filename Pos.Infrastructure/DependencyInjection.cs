@@ -51,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<IBranchRepository, EfBranchRepository>();
         services.AddScoped<IRegisterRepository, EfRegisterRepository>();
         services.AddScoped<IProductRepository, EfProductRepository>();
+        services.AddScoped<IProductCatalogQuery, EfProductCatalogQuery>();
         services.AddScoped<IRoleRepository, EfRoleRepository>();
         services.AddScoped<IUserRepository, EfUserRepository>();
         services.AddScoped<IRegisterSessionRepository, EfRegisterSessionRepository>();

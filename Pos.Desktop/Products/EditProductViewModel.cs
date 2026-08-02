@@ -1,7 +1,9 @@
 using System.Globalization;
+using System.Linq;
 using System.Windows.Input;
 using Microsoft.Extensions.Logging;
 using Pos.Application.Products.ManageProduct;
+using Pos.Application.SalesCart;
 using Pos.Desktop.Common;
 using Pos.Domain.Common.Identifiers;
 
@@ -10,6 +12,7 @@ namespace Pos.Desktop.Products;
 public sealed partial class EditProductViewModel : ViewModelBase
 {
     private readonly IProductManagementService _productManagementService;
+    private readonly ICurrentSalesCart _currentSalesCart;
     private readonly ILogger<EditProductViewModel> _logger;
     private readonly AsyncRelayCommand _saveCommand;
     private readonly AsyncRelayCommand _toggleActiveCommand;
@@ -18,6 +21,7 @@ public sealed partial class EditProductViewModel : ViewModelBase
 
     private ProductId _productId;
     private bool _isLoaded;
+    private string _loadedSku = string.Empty;
     private string _sku = string.Empty;
     private string _barcode = string.Empty;
     private string _name = string.Empty;
@@ -33,9 +37,11 @@ public sealed partial class EditProductViewModel : ViewModelBase
 
     public EditProductViewModel(
         IProductManagementService productManagementService,
+        ICurrentSalesCart currentSalesCart,
         ILogger<EditProductViewModel> logger)
     {
         _productManagementService = productManagementService ?? throw new ArgumentNullException(nameof(productManagementService));
+        _currentSalesCart = currentSalesCart ?? throw new ArgumentNullException(nameof(currentSalesCart));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _saveCommand = new AsyncRelayCommand(ExecuteSaveAsync, () => !IsBusy && _isLoaded, HandleUnexpectedError);
@@ -54,6 +60,11 @@ public sealed partial class EditProductViewModel : ViewModelBase
     // de EditProductWindow reenvía el evento hasta App.xaml.cs, igual que NewProductRequested.
     public event EventHandler? AdjustInventoryRequested;
 
+    // El ViewModel nunca muestra MessageBox: solo pide mostrar la advertencia (mismo patrón que
+    // CancelSaleConfirmationRequested en MainWindowViewModel). Se dispara cuando el SKU cambió y el
+    // producto sigue en el carrito actual (TAREA 24C, sección 15).
+    public event EventHandler? CartWarningRequested;
+
     public CancellationToken CancellationToken { get; set; }
 
     public ICommand SaveCommand => _saveCommand;
@@ -66,12 +77,12 @@ public sealed partial class EditProductViewModel : ViewModelBase
 
     public ProductId ProductId => _productId;
 
-    // SKU: read-only. Product.ChangeSku existe en Domain, pero esta fase deliberadamente no lo
-    // expone (ver inspección de TAREA 24B): no forma parte de UpdateProductRequest.
+    // SKU editable desde TAREA 24C (Product.ChangeSku ya existía en Domain sin usar). ProductId
+    // nunca cambia; ventas históricas y líneas de carrito existentes conservan su snapshot.
     public string Sku
     {
         get => _sku;
-        private set => SetProperty(ref _sku, value);
+        set => SetProperty(ref _sku, value);
     }
 
     public string Barcode
@@ -212,6 +223,7 @@ public sealed partial class EditProductViewModel : ViewModelBase
     private void ApplyDetails(ProductDetails details)
     {
         _productId = details.ProductId;
+        _loadedSku = details.Sku;
         Sku = details.Sku;
         Barcode = details.Barcode ?? string.Empty;
         Name = details.Name;
@@ -229,6 +241,14 @@ public sealed partial class EditProductViewModel : ViewModelBase
     private async Task ExecuteSaveAsync()
     {
         GeneralError = null;
+
+        var trimmedSku = Sku.Trim();
+
+        if (string.IsNullOrWhiteSpace(trimmedSku))
+        {
+            GeneralError = "El SKU es obligatorio.";
+            return;
+        }
 
         var trimmedName = Name.Trim();
 
@@ -296,13 +316,23 @@ public sealed partial class EditProductViewModel : ViewModelBase
         try
         {
             var request = new UpdateProductRequest(
-                _productId, barcode, trimmedName, description, salePrice, cost, reorderPoint);
+                _productId, trimmedSku, barcode, trimmedName, description, salePrice, cost, reorderPoint);
 
             var result = await _productManagementService.UpdateAsync(request, CancellationToken);
 
             if (result.Success)
             {
+                var previousSku = _loadedSku;
                 ApplyDetails(result.Product!);
+
+                var skuChanged = !string.Equals(previousSku, result.Product!.Sku, StringComparison.Ordinal);
+                var isInCurrentCart = _currentSalesCart.Snapshot.Lines.Any(line => line.ProductId == _productId);
+
+                if (skuChanged && isInCurrentCart)
+                {
+                    CartWarningRequested?.Invoke(this, EventArgs.Empty);
+                }
+
                 Saved?.Invoke(this, EventArgs.Empty);
                 return;
             }
@@ -400,10 +430,12 @@ public sealed partial class EditProductViewModel : ViewModelBase
         UpdateProductResultStatus.NotAuthorized => "No tiene permiso para editar productos.",
         UpdateProductResultStatus.ProductNotFound => "El producto ya no existe.",
         UpdateProductResultStatus.InvalidName => "El nombre no es válido.",
+        UpdateProductResultStatus.InvalidSku => "El SKU no es válido.",
         UpdateProductResultStatus.InvalidBarcode => "El código de barras no es válido.",
         UpdateProductResultStatus.InvalidSalePrice => "El precio de venta no es válido.",
         UpdateProductResultStatus.InvalidCost => "El costo no es válido.",
         UpdateProductResultStatus.InvalidReorderPoint => "El punto de reorden no es válido.",
+        UpdateProductResultStatus.DuplicateSku => "Ya existe otro producto con ese SKU.",
         UpdateProductResultStatus.DuplicateBarcode => "Ya existe otro producto con ese código de barras.",
         _ => "Ocurrió un error inesperado. Intente nuevamente.",
     };

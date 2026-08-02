@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using Microsoft.Extensions.Logging.Abstractions;
 using Pos.Desktop.Products;
+using Pos.Desktop.Tests.Main;
 
 namespace Pos.Desktop.Tests.Products;
 
@@ -36,12 +37,28 @@ public class EditProductWindowTests
     }
 
     private static EditProductViewModel CreateViewModel(FakeProductManagementService service) =>
-        new(service, NullLogger<EditProductViewModel>.Instance);
+        new(service, new FakeCurrentSalesCart(), NullLogger<EditProductViewModel>.Instance);
 
     // TAREA 24B (corrección de layout): verifica que los cuatro botones del área inferior sigan
     // presentes y cableados a sus comandos tras reorganizar el StackPanel en un Grid con zonas
     // izquierda/derecha. La ventana nunca se muestra (Show()), así que WPF no evalúa los bindings;
     // se inspecciona la expresión declarada en XAML igual que en MainWindowTests.
+    // TAREA 24C: SKU pasa de read-only a editable; verifica que el TextBox esté enlazado en modo
+    // que permita escribir (TwoWay, valor por defecto de Binding sobre TextBox.Text).
+    [Fact]
+    public void SkuTextBoxIsBoundToTheSkuPropertyForEditing() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(new FakeProductManagementService());
+            var window = new EditProductWindow(viewModel);
+
+            var binding = BindingOperations.GetBinding(window.SkuTextBox, TextBox.TextProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(nameof(EditProductViewModel.Sku), binding.Path.Path);
+            Assert.NotEqual(BindingMode.OneWay, binding.Mode);
+        });
+
     [Fact]
     public void ToggleActiveButtonIsBoundToTheToggleActiveCommandProperty() =>
         RunOnStaThread(() =>
