@@ -208,6 +208,37 @@ public class ProductManagementSqliteIntegrationTests
         Assert.Equal(0, await context.Set<SaleRecord>().CountAsync());
     }
 
+    // TAREA 25A-FIX defecto 2: reproduce el caso real que el usuario no pudo lograr manualmente
+    // (llevar una existencia positiva a exactamente 0) contra SQLite real, verificando que el
+    // movimiento y la existencia final quedan persistidos en un único commit.
+    [Fact]
+    public async Task AdjustInventoryAsyncDecreasingToExactlyZeroPersistsInSqlite()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        var (context, managementService, _, graph) = await CreateAuthenticatedServicesAsync(connection);
+        await using var contextDisposable = context;
+
+        var productId = await CreateProductAsync(context, graph, initialQuantity: 2m);
+
+        var result = await managementService.AdjustInventoryAsync(
+            new AdjustProductInventoryRequest(productId, InventoryAdjustmentType.Decrease, 2m));
+
+        Assert.True(result.Success);
+        Assert.Equal(0m, result.NewQuantity);
+
+        var itemRecord = await context.Set<InventoryItemRecord>().AsNoTracking()
+            .SingleAsync(r => r.ProductId == productId.Value);
+        Assert.Equal(0m, itemRecord.Quantity);
+
+        var movementRecord = await context.Set<InventoryMovementRecord>().AsNoTracking()
+            .SingleAsync(r => r.ProductId == productId.Value);
+        Assert.Equal(InventoryMovementType.ManualDecrease, movementRecord.Type);
+        Assert.Equal(2m, movementRecord.QuantityBefore);
+        Assert.Equal(0m, movementRecord.QuantityAfter);
+    }
+
     [Fact]
     public async Task DeactivateThenReactivateRoundTripsThroughSearchWithoutDeletingTheProduct()
     {

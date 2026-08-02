@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Cierre de caja — PosPlatform"
-        Height="480" Width="480"
+        Height="520" Width="480"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
     <Window.Resources>
@@ -40,6 +40,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Label Grid.Row="0" Grid.Column="0" Content="Caja" />
@@ -61,16 +62,23 @@
                 <Run Text="{Binding Currency, Mode=OneWay}" />
             </TextBlock>
 
-            <Label Grid.Row="4" Grid.Column="0" Content="Monto esperado" />
+            <Label Grid.Row="4" Grid.Column="0" Content="Ventas en efectivo" />
             <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,8" VerticalAlignment="Center">
+                <Run Text="{Binding CashSalesAmountText, Mode=OneWay}" />
+                <Run Text=" " />
+                <Run Text="{Binding Currency, Mode=OneWay}" />
+            </TextBlock>
+
+            <Label Grid.Row="5" Grid.Column="0" Content="Efectivo esperado" />
+            <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,8" VerticalAlignment="Center" FontWeight="Bold">
                 <Run Text="{Binding ExpectedAmountText, Mode=OneWay}" />
                 <Run Text=" " />
                 <Run Text="{Binding Currency, Mode=OneWay}" />
             </TextBlock>
 
-            <Label Grid.Row="5" Grid.Column="0" Content="Monto contado"
+            <Label Grid.Row="6" Grid.Column="0" Content="Efectivo contado"
                     Target="{Binding ElementName=ClosingAmountTextBox}" />
-            <TextBox x:Name="ClosingAmountTextBox" Grid.Row="5" Grid.Column="1"
+            <TextBox x:Name="ClosingAmountTextBox" Grid.Row="6" Grid.Column="1"
                     Margin="0,6" Padding="6,4" TabIndex="0"
                     Text="{Binding ClosingAmountText, UpdateSourceTrigger=PropertyChanged}" />
         </Grid>

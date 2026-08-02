@@ -27,6 +27,31 @@ public sealed class EfSaleRepository : ISaleRepository
         return record is null ? null : SaleMapper.ToDomain(record);
     }
 
+    public async Task AddAsync(Sale sale, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sale);
+
+        var record = SaleMapper.ToRecord(sale);
+
+        await _context.Sales.AddAsync(record, cancellationToken);
+    }
+
+    public async Task<decimal> GetCompletedCashTotalByRegisterSessionAsync(
+        RegisterSessionId registerSessionId, CancellationToken cancellationToken)
+    {
+        // SQLite no soporta SUM sobre columnas decimal en el servidor (EF Core lo rechaza en
+        // tiempo de traducción): se trae la lista de importes y se suma en memoria. El volumen de
+        // pagos en efectivo de una sola RegisterSession es acotado, así que no representa un
+        // problema de rendimiento.
+        var amounts = await _context.Sales
+            .Where(r => r.RegisterSessionId == registerSessionId.Value && r.Status == SaleStatus.Completed)
+            .SelectMany(r => r.Payments.Where(p => p.Method == PaymentMethod.Cash))
+            .Select(p => p.Amount)
+            .ToListAsync(cancellationToken);
+
+        return amounts.Sum();
+    }
+
     public async Task UpdateAsync(Sale sale, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sale);

@@ -229,6 +229,18 @@ public class SalesViewTests
         });
 
     [Fact]
+    public void CheckoutButtonIsBoundToTheCheckoutCommandProperty() =>
+        RunOnStaThread(() =>
+        {
+            var view = new SalesView();
+
+            var binding = BindingOperations.GetBinding(view.CheckoutButton, Button.CommandProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(nameof(SalesViewModel.CheckoutCommand), binding.Path.Path);
+        });
+
+    [Fact]
     public void CartRemoveTemplateKeepsButtonBoundToRemoveLineCommand() =>
         RunOnStaThread(() =>
         {

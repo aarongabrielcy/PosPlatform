@@ -144,7 +144,7 @@ public class MainWindowTests
             currentSalesCart.SetSnapshot(new Pos.Application.SalesCart.SalesCartSnapshot(
                 [new Pos.Application.SalesCart.SalesCartLine(ProductId.New(), "SKU-001", "Agua 1L", 1m, 10m, 10m, "MXN", 5m, true)], "MXN"));
             var dashboardViewModel = new DashboardViewModel(session, registerSession, currentSalesCart, new FakeProductManagementService());
-            var salesViewModel = new SalesViewModel(session, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
+            var salesViewModel = new SalesViewModel(session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
             var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
             var viewModel = new MainWindowViewModel(
                 session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
@@ -251,7 +251,7 @@ public class MainWindowTests
         {
             var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
             var salesCartService = new FakeSalesCartService();
-            var salesViewModel = new SalesViewModel(session, salesCartService, new FakeProductManagementService(), new FakeCurrentSalesCart());
+            var salesViewModel = new SalesViewModel(session, new FakeCurrentRegisterSession(), salesCartService, new FakeProductManagementService(), new FakeCurrentSalesCart());
             var dashboardViewModel = new DashboardViewModel(
                 session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), new FakeProductManagementService());
             var viewModel = new MainWindowViewModel(
@@ -278,7 +278,7 @@ public class MainWindowTests
         var dashboardViewModel = new DashboardViewModel(
             session, registerSession, currentSalesCart, new FakeProductManagementService());
         var salesViewModel = new SalesViewModel(
-            session, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
+            session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
         var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
         var inventoryViewModel = new InventoryViewModel();
         var registerViewModel = new RegisterViewModel(registerSession);

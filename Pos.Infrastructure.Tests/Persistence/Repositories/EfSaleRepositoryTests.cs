@@ -149,6 +149,201 @@ public class EfSaleRepositoryTests
             () => repository.GetByIdAsync(SaleId.New(), cancelledSource.Token));
     }
 
+    // ---------- AddAsync (TAREA 25A: CheckoutService crea la Sale, no la busca por Id) ----------
+
+    [Fact]
+    public async Task AddAsyncPersistsANewCompletedSaleWithLinesAndPayments()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, CreatedAtUtc);
+
+        var sale = new Sale(
+            SaleId.New(), new OrganizationId(graph.OrganizationId), new BranchId(graph.BranchId),
+            new RegisterSessionId(graph.RegisterSessionId), new UserId(graph.UserId), "MXN", CreatedAtUtc);
+        sale.AddLine(
+            SaleLineId.New(), new ProductId(graph.ProductId), new Sku("SKU-001"), "Producto de prueba", 2m,
+            new Money(10m, "MXN"));
+        sale.AddPayment(PaymentId.New(), PaymentMethod.Cash, new Money(20m, "MXN"), CreatedAtUtc);
+        sale.Complete(CompletedAtUtc);
+
+        var repository = new EfSaleRepository(context);
+        await repository.AddAsync(sale, CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var reloaded = await context.Set<SaleRecord>()
+            .Include(r => r.Lines)
+            .Include(r => r.Payments)
+            .SingleAsync(r => r.Id == sale.Id.Value);
+
+        Assert.Equal(SaleStatus.Completed, reloaded.Status);
+        Assert.Equal(CompletedAtUtc, reloaded.CompletedAtUtc);
+        var line = Assert.Single(reloaded.Lines);
+        Assert.Equal(graph.ProductId, line.ProductId);
+        Assert.Equal(2m, line.Quantity);
+        var payment = Assert.Single(reloaded.Payments);
+        Assert.Equal(PaymentMethod.Cash, payment.Method);
+        Assert.Equal(20m, payment.Amount);
+    }
+
+    [Fact]
+    public async Task AddAsyncDoesNotSaveAutomatically()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, CreatedAtUtc);
+
+        var sale = new Sale(
+            SaleId.New(), new OrganizationId(graph.OrganizationId), new BranchId(graph.BranchId),
+            new RegisterSessionId(graph.RegisterSessionId), new UserId(graph.UserId), "MXN", CreatedAtUtc);
+        sale.AddLine(
+            SaleLineId.New(), new ProductId(graph.ProductId), new Sku("SKU-001"), "Producto de prueba", 1m,
+            new Money(10m, "MXN"));
+
+        var repository = new EfSaleRepository(context);
+        await repository.AddAsync(sale, CancellationToken.None);
+
+        Assert.Equal(0, await context.Set<SaleRecord>().CountAsync());
+
+        var trackedEntry = context.ChangeTracker.Entries<SaleRecord>().Single(e => e.Entity.Id == sale.Id.Value);
+        Assert.Equal(EntityState.Added, trackedEntry.State);
+    }
+
+    [Fact]
+    public async Task AddAsyncRejectsNullSale()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var repository = new EfSaleRepository(context);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => repository.AddAsync(null!, CancellationToken.None));
+    }
+
+    // ---------- GetCompletedCashTotalByRegisterSessionAsync (TAREA 25A sección 23) ----------
+
+    [Fact]
+    public async Task GetCompletedCashTotalByRegisterSessionAsyncReturnsZeroWhenNoSalesExist()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, CreatedAtUtc);
+
+        var repository = new EfSaleRepository(context);
+        var total = await repository.GetCompletedCashTotalByRegisterSessionAsync(
+            new RegisterSessionId(graph.RegisterSessionId), CancellationToken.None);
+
+        Assert.Equal(0m, total);
+    }
+
+    [Fact]
+    public async Task GetCompletedCashTotalByRegisterSessionAsyncSumsOnlyCompletedCashSalesOfThatSession()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context, CreatedAtUtc);
+
+        // Cuenta: Completed + Cash de la misma sesión.
+        await SqliteSeedHelper.SeedSaleAsync(
+            context, graph.OrganizationId, graph.BranchId, graph.RegisterSessionId, graph.UserId, graph.ProductId,
+            saleId: Guid.NewGuid(), saleLineId: Guid.NewGuid(), paymentId: Guid.NewGuid(),
+            paymentAmount: 20m, status: SaleStatus.Completed, completedAtUtc: CompletedAtUtc);
+
+        // No cuenta: Draft, aunque sea Cash y de la misma sesión.
+        await SqliteSeedHelper.SeedSaleAsync(
+            context, graph.OrganizationId, graph.BranchId, graph.RegisterSessionId, graph.UserId, graph.ProductId,
+            saleId: Guid.NewGuid(), saleLineId: Guid.NewGuid(), paymentId: Guid.NewGuid(),
+            paymentAmount: 15m, status: SaleStatus.Draft);
+
+        // No cuenta: pago Card, aunque la Sale esté Completed y sea de la misma sesión.
+        var cardSaleId = Guid.NewGuid();
+        var cardSaleRecord = new SaleRecord
+        {
+            Id = cardSaleId,
+            OrganizationId = graph.OrganizationId,
+            BranchId = graph.BranchId,
+            RegisterSessionId = graph.RegisterSessionId,
+            CreatedByUserId = graph.UserId,
+            Currency = "MXN",
+            Status = SaleStatus.Completed,
+            CreatedAtUtc = CreatedAtUtc,
+            CompletedAtUtc = CompletedAtUtc,
+        };
+        cardSaleRecord.Lines.Add(new SaleLineRecord
+        {
+            Id = Guid.NewGuid(),
+            SaleId = cardSaleId,
+            ProductId = graph.ProductId,
+            ProductSku = "SKU-001",
+            ProductName = "Producto de prueba",
+            Quantity = 1m,
+            UnitPriceAmount = 999m,
+            Currency = "MXN",
+            Sale = cardSaleRecord,
+        });
+        cardSaleRecord.Payments.Add(new PaymentRecord
+        {
+            Id = Guid.NewGuid(),
+            SaleId = cardSaleId,
+            Method = PaymentMethod.Card,
+            Amount = 999m,
+            Currency = "MXN",
+            PaidAtUtc = CreatedAtUtc,
+            Sale = cardSaleRecord,
+        });
+        context.Add(cardSaleRecord);
+        await context.CommitAsync(CancellationToken.None);
+
+        // No cuenta: Completed + Cash, pero de otra RegisterSession.
+        var otherRegisterSessionId = Guid.NewGuid();
+        context.Add(new RegisterSessionRecord
+        {
+            Id = otherRegisterSessionId,
+            RegisterId = graph.RegisterId,
+            OpenedByUserId = graph.UserId,
+            OpeningFloatAmount = 100m,
+            OpeningFloatCurrency = "MXN",
+            Status = Pos.Domain.RegisterSessions.RegisterSessionStatus.Closed,
+            OpenedAtUtc = CreatedAtUtc,
+            ClosedByUserId = graph.UserId,
+            ExpectedCashAmount = 100m,
+            ExpectedCashCurrency = "MXN",
+            CountedCashAmount = 100m,
+            CountedCashCurrency = "MXN",
+            CashDifferenceAmount = 0m,
+            CashDifferenceCurrency = "MXN",
+            ClosedAtUtc = CompletedAtUtc,
+        });
+        await context.CommitAsync(CancellationToken.None);
+        await SqliteSeedHelper.SeedSaleAsync(
+            context, graph.OrganizationId, graph.BranchId, otherRegisterSessionId, graph.UserId, graph.ProductId,
+            saleId: Guid.NewGuid(), saleLineId: Guid.NewGuid(), paymentId: Guid.NewGuid(),
+            paymentAmount: 999m, status: SaleStatus.Completed, completedAtUtc: CompletedAtUtc);
+
+        context.ChangeTracker.Clear();
+
+        var repository = new EfSaleRepository(context);
+        var total = await repository.GetCompletedCashTotalByRegisterSessionAsync(
+            new RegisterSessionId(graph.RegisterSessionId), CancellationToken.None);
+
+        Assert.Equal(20m, total);
+    }
+
     // ---------- UpdateAsync ----------
 
     [Fact]

@@ -17,15 +17,32 @@ internal sealed class FakeSaleRepository : ISaleRepository
 
     public int GetByIdCallCount { get; private set; }
 
+    public int AddCallCount { get; private set; }
+
     public int UpdateCallCount { get; private set; }
 
     public Sale? UpdatedSale { get; private set; }
+
+    public Sale? AddedSale { get; private set; }
+
+    public decimal CompletedCashTotalToReturn { get; set; }
+
+    public RegisterSessionId? LastQueriedCashTotalRegisterSessionId { get; private set; }
 
     public Task<Sale?> GetByIdAsync(SaleId saleId, CancellationToken cancellationToken)
     {
         GetByIdCallCount++;
 
         return Task.FromResult(_sale is not null && _sale.Id == saleId ? _sale : null);
+    }
+
+    public Task AddAsync(Sale sale, CancellationToken cancellationToken)
+    {
+        AddCallCount++;
+        AddedSale = sale;
+        _operationLog?.Add("Sale.Add");
+
+        return Task.CompletedTask;
     }
 
     public Task UpdateAsync(Sale sale, CancellationToken cancellationToken)
@@ -35,5 +52,13 @@ internal sealed class FakeSaleRepository : ISaleRepository
         _operationLog?.Add("Sale.Update");
 
         return Task.CompletedTask;
+    }
+
+    public Task<decimal> GetCompletedCashTotalByRegisterSessionAsync(
+        RegisterSessionId registerSessionId, CancellationToken cancellationToken)
+    {
+        LastQueriedCashTotalRegisterSessionId = registerSessionId;
+
+        return Task.FromResult(CompletedCashTotalToReturn);
     }
 }

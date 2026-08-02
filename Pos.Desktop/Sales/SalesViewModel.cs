@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Windows.Input;
 using Pos.Application.Authentication;
 using Pos.Application.Products.ManageProduct;
+using Pos.Application.RegisterSessions;
 using Pos.Application.SalesCart;
 using Pos.Desktop.Common;
 using Pos.Domain.Common.Identifiers;
@@ -12,10 +13,12 @@ namespace Pos.Desktop.Sales;
 
 // Extraído de MainWindowViewModel en TAREA 24C: toda la presentación de venta (búsqueda, carrito,
 // atajos de Nuevo/Editar producto). El estado global del shell (sesión, caja, logout/cerrar caja)
-// permanece en MainWindowViewModel.
+// permanece en MainWindowViewModel. TAREA 25A agrega el botón Cobrar (CheckoutCommand), que solo
+// solicita abrir CheckoutWindow: el checkout en sí vive en ICheckoutService/CheckoutViewModel.
 public sealed class SalesViewModel : ViewModelBase
 {
     private readonly ICurrentUserSession _session;
+    private readonly ICurrentRegisterSession _currentRegisterSession;
     private readonly ISalesCartService _salesCartService;
     private readonly IProductManagementService _productManagementService;
     private readonly ICurrentSalesCart _currentSalesCart;
@@ -27,6 +30,7 @@ public sealed class SalesViewModel : ViewModelBase
     private readonly AsyncRelayCommand _cancelSaleCommand;
     private readonly AsyncRelayCommand _newProductCommand;
     private readonly AsyncRelayCommand _editProductCommand;
+    private readonly AsyncRelayCommand _checkoutCommand;
 
     private string _searchText = string.Empty;
     private string? _searchStatusMessage;
@@ -43,11 +47,13 @@ public sealed class SalesViewModel : ViewModelBase
 
     public SalesViewModel(
         ICurrentUserSession session,
+        ICurrentRegisterSession currentRegisterSession,
         ISalesCartService salesCartService,
         IProductManagementService productManagementService,
         ICurrentSalesCart currentSalesCart)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
+        _currentRegisterSession = currentRegisterSession ?? throw new ArgumentNullException(nameof(currentRegisterSession));
         _salesCartService = salesCartService ?? throw new ArgumentNullException(nameof(salesCartService));
         _productManagementService = productManagementService ?? throw new ArgumentNullException(nameof(productManagementService));
         _currentSalesCart = currentSalesCart ?? throw new ArgumentNullException(nameof(currentSalesCart));
@@ -63,6 +69,7 @@ public sealed class SalesViewModel : ViewModelBase
         _newProductCommand = new AsyncRelayCommand(ExecuteNewProductAsync);
         _editProductCommand = new AsyncRelayCommand(
             ExecuteEditProductAsync, () => SelectedSearchResult is not null && CanManageProducts && !IsBusy, HandleUnexpectedError);
+        _checkoutCommand = new AsyncRelayCommand(ExecuteCheckoutAsync, () => CanCheckout);
 
         CartLines = new ObservableCollection<SalesCartLine>();
         SearchResults = new ObservableCollection<ProductSearchResult>();
@@ -80,6 +87,11 @@ public sealed class SalesViewModel : ViewModelBase
     // Igual patrón que NewProductRequested, pero para EditProductWindow.
     public event EventHandler<ProductId>? EditProductRequested;
 
+    // Igual patrón que NewProductRequested/EditProductRequested: el ViewModel nunca abre
+    // CheckoutWindow directamente, solo pide abrirla. El checkout en sí (crear Sale, descontar
+    // inventario, etc.) vive por completo en ICheckoutService, nunca aquí.
+    public event EventHandler? CheckoutRequested;
+
     public ICommand SearchCommand => _searchCommand;
 
     public ICommand AddSelectedProductCommand => _addSelectedProductCommand;
@@ -96,9 +108,20 @@ public sealed class SalesViewModel : ViewModelBase
 
     public ICommand EditProductCommand => _editProductCommand;
 
+    public ICommand CheckoutCommand => _checkoutCommand;
+
     // Gobierna la visibilidad/habilitación del botón "Editar producto" y del checkbox "Incluir
     // inactivos": ambos son funcionalidad administrativa, no disponible para cualquier cajero.
     public bool CanManageProducts => _session.CurrentUser?.HasPermission(Permission.ManageProducts) ?? false;
+
+    // Gobierna la habilitación del botón "Cobrar" (TAREA 25A sección 16): requiere carrito con
+    // líneas, caja abierta y permiso ProcessSale. La revalidación real y autoritativa ocurre de
+    // todas formas dentro de ICheckoutService: esto solo evita habilitar el botón en un estado
+    // obviamente inválido.
+    public bool CanCheckout =>
+        HasItems
+        && _currentRegisterSession.IsOpen
+        && (_session.CurrentUser?.HasPermission(Permission.ProcessSale) ?? false);
 
     public string SearchText
     {
@@ -202,7 +225,14 @@ public sealed class SalesViewModel : ViewModelBase
     public bool HasItems
     {
         get => _hasItems;
-        private set => SetProperty(ref _hasItems, value);
+        private set
+        {
+            if (SetProperty(ref _hasItems, value))
+            {
+                OnPropertyChanged(nameof(CanCheckout));
+                _checkoutCommand.RaiseCanExecuteChanged();
+            }
+        }
     }
 
     // Llamado desde el código detrás de SalesView tras confirmar el diálogo. Cancelar solo limpia
@@ -230,6 +260,11 @@ public sealed class SalesViewModel : ViewModelBase
     // refresca el buscador con el SKU del producto editado, igual que ApplyProductCreated. Si el
     // producto quedó inactivo y no se incluyen inactivos, desaparece del grid como se espera.
     public void ApplyProductUpdated(string sku) => ApplyProductCreated(sku);
+
+    // Llamado tras cerrar CheckoutWindow con un cobro exitoso: CheckoutService ya limpió
+    // CurrentSalesCart dentro de su único commit, así que aquí solo se refleja ese estado (carrito
+    // vacío, totales en cero) en la UI, igual que ConfirmCancelSale.
+    public void ApplyCheckoutCompleted() => ApplySnapshot(_currentSalesCart.Snapshot);
 
     private async Task ExecuteSearchAsync()
     {
@@ -369,6 +404,13 @@ public sealed class SalesViewModel : ViewModelBase
     private Task ExecuteNewProductAsync()
     {
         NewProductRequested?.Invoke(this, EventArgs.Empty);
+
+        return Task.CompletedTask;
+    }
+
+    private Task ExecuteCheckoutAsync()
+    {
+        CheckoutRequested?.Invoke(this, EventArgs.Empty);
 
         return Task.CompletedTask;
     }

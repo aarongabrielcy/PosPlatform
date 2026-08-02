@@ -15,6 +15,7 @@ using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Registers;
 using Pos.Application.Sales;
+using Pos.Application.Sales.Checkout;
 using Pos.Application.SalesCart;
 using Pos.Application.Security;
 using Pos.Application.Users;
@@ -73,6 +74,7 @@ public static class DependencyInjection
         services.AddSingleton<InMemoryCurrentSalesCart>();
         services.AddSingleton<ICurrentSalesCart>(sp => sp.GetRequiredService<InMemoryCurrentSalesCart>());
         services.AddScoped<ISalesCartService, SalesCartService>();
+        services.AddScoped<ICheckoutService, CheckoutService>();
 
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IClock, SystemClock>();

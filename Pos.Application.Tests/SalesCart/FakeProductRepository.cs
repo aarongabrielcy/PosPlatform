@@ -14,6 +14,8 @@ internal sealed class FakeProductRepository : IProductRepository
 
     public void Add(Product product) => _products[product.Id] = product;
 
+    public void Remove(ProductId productId) => _products.Remove(productId);
+
     public Task<Product?> GetByIdAsync(ProductId productId, CancellationToken cancellationToken)
     {
         GetByIdCallCount++;

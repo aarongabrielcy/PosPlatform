@@ -4,6 +4,7 @@ using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
 using Pos.Application.Organizations;
 using Pos.Application.Registers;
+using Pos.Application.Sales;
 using Pos.Application.Users;
 using Pos.Domain.Branches;
 using Pos.Domain.Common.Exceptions;
@@ -30,6 +31,7 @@ public sealed class RegisterSessionService : IRegisterSessionService
     private readonly IRegisterRepository _registerRepository;
     private readonly IRegisterSessionRepository _registerSessionRepository;
     private readonly IUserRepository _userRepository;
+    private readonly ISaleRepository _saleRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
@@ -41,6 +43,7 @@ public sealed class RegisterSessionService : IRegisterSessionService
         IRegisterRepository registerRepository,
         IRegisterSessionRepository registerSessionRepository,
         IUserRepository userRepository,
+        ISaleRepository saleRepository,
         IUnitOfWork unitOfWork,
         IClock clock)
     {
@@ -51,6 +54,7 @@ public sealed class RegisterSessionService : IRegisterSessionService
         _registerRepository = registerRepository ?? throw new ArgumentNullException(nameof(registerRepository));
         _registerSessionRepository = registerSessionRepository ?? throw new ArgumentNullException(nameof(registerSessionRepository));
         _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
+        _saleRepository = saleRepository ?? throw new ArgumentNullException(nameof(saleRepository));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
@@ -309,7 +313,13 @@ public sealed class RegisterSessionService : IRegisterSessionService
         }
 
         var now = _clock.UtcNow;
-        var expectedCash = session.OpeningFloat;
+
+        // ExpectedCash = OpeningFloat + ventas en efectivo completadas durante esta sesión de
+        // caja. No existe todavía un ledger de movimientos de caja (entradas/salidas manuales):
+        // solo se suman las ventas Cash ya persistidas, tal como exige TAREA 25A sección 23.
+        var cashSalesTotal = await _saleRepository.GetCompletedCashTotalByRegisterSessionAsync(
+            session.Id, cancellationToken);
+        var expectedCash = new Money(session.OpeningFloat.Amount + cashSalesTotal, session.OpeningFloat.Currency);
 
         try
         {
@@ -339,6 +349,57 @@ public sealed class RegisterSessionService : IRegisterSessionService
             session.OpeningFloat.Currency);
 
         return RegisterSessionResult.CloseSuccess(summary);
+    }
+
+    public async Task<RegisterClosingSummaryResult> GetClosingSummaryAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var user = _currentUserSession.CurrentUser;
+
+        if (user is null)
+        {
+            return RegisterClosingSummaryResult.Failure(RegisterSessionResultStatus.NotAuthenticated);
+        }
+
+        if (!user.HasPermission(Permission.CloseRegisterSession))
+        {
+            return RegisterClosingSummaryResult.Failure(RegisterSessionResultStatus.NotAuthorized);
+        }
+
+        var current = _currentRegisterSession.Current;
+
+        if (current is null)
+        {
+            return RegisterClosingSummaryResult.Failure(RegisterSessionResultStatus.SessionNotFound);
+        }
+
+        if (current.OrganizationId != user.OrganizationId)
+        {
+            return RegisterClosingSummaryResult.Failure(RegisterSessionResultStatus.SessionBelongsToAnotherOrganization);
+        }
+
+        var session = await _registerSessionRepository.GetByIdAsync(current.RegisterSessionId, cancellationToken);
+
+        if (session is null)
+        {
+            return RegisterClosingSummaryResult.Failure(RegisterSessionResultStatus.SessionNotFound);
+        }
+
+        if (session.Status != DomainRegisterSessionStatus.Open)
+        {
+            return RegisterClosingSummaryResult.Failure(RegisterSessionResultStatus.SessionAlreadyClosed);
+        }
+
+        var cashSalesTotal = await _saleRepository.GetCompletedCashTotalByRegisterSessionAsync(
+            session.Id, cancellationToken);
+
+        var summary = new RegisterClosingSummary(
+            session.OpeningFloat.Amount,
+            cashSalesTotal,
+            session.OpeningFloat.Amount + cashSalesTotal,
+            session.OpeningFloat.Currency);
+
+        return RegisterClosingSummaryResult.SuccessResult(summary);
     }
 
     private async Task<bool> IsSingleValidOrganizationAsync(

@@ -2,6 +2,7 @@ using Pos.Application.Authentication;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Tests.Bootstrap;
 using Pos.Application.Tests.Common.Time;
+using FakeSaleRepository = Pos.Application.Tests.Sales.CompleteSale.FakeSaleRepository;
 using Pos.Domain.Branches;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Common.ValueObjects;
@@ -438,6 +439,55 @@ public class RegisterSessionServiceTests
         Assert.Equal(-10m, result.Summary!.Difference);
     }
 
+    // ---------- CloseAsync: ExpectedCash incluye ventas en efectivo (TAREA 25A sección 23) ----------
+
+    [Fact]
+    public async Task CloseAddsCompletedCashSalesTotalToExpectedCash()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.SeedOpenCurrentSession(openingAmount: 500m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 125.50m;
+        var service = fixture.BuildService();
+
+        var result = await service.CloseAsync(new CloseRegisterSessionRequest(625.50m));
+
+        Assert.True(result.Success);
+        Assert.Equal(625.50m, result.Summary!.ExpectedAmount);
+        Assert.Equal(0m, result.Summary.Difference);
+    }
+
+    [Fact]
+    public async Task CloseQueriesCashTotalForTheCurrentRegisterSessionId()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        var session = new RegisterSession(
+            RegisterSessionId.New(), fixture.Register.Id, fixture.User.Id, new Money(100m, "MXN"), FixedNow);
+        fixture.RegisterSessionRepository = new FakeRegisterSessionRepository([session]);
+        fixture.CurrentRegisterSession.SetActiveSession(fixture.ToActiveRegisterSession(session));
+        var service = fixture.BuildService();
+
+        await service.CloseAsync(new CloseRegisterSessionRequest(100m));
+
+        Assert.Equal(session.Id, fixture.SaleRepository.LastQueriedCashTotalRegisterSessionId);
+    }
+
+    [Fact]
+    public async Task CloseWithoutCashSalesKeepsExpectedCashEqualToOpeningFloat()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.SeedOpenCurrentSession(openingAmount: 100m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 0m;
+        var service = fixture.BuildService();
+
+        var result = await service.CloseAsync(new CloseRegisterSessionRequest(100m));
+
+        Assert.True(result.Success);
+        Assert.Equal(100m, result.Summary!.ExpectedAmount);
+    }
+
     [Fact]
     public async Task CloseReturnsNotAuthenticatedWhenNoUserIsLoggedIn()
     {
@@ -604,6 +654,145 @@ public class RegisterSessionServiceTests
         Assert.Equal(0, fixture.CurrentUserSession.ClearCallCount);
     }
 
+    // ---------- GetClosingSummaryAsync (TAREA 25A-FIX sección 5) ----------
+
+    [Fact]
+    public async Task GetClosingSummaryReturnsOpeningFloatPlusCashSalesAsExpectedCash()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.SeedOpenCurrentSession(openingAmount: 500m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 129m;
+        var service = fixture.BuildService();
+
+        var result = await service.GetClosingSummaryAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(500m, result.Summary!.OpeningFloat);
+        Assert.Equal(129m, result.Summary.CompletedCashSales);
+        Assert.Equal(629m, result.Summary.ExpectedCash);
+        Assert.Equal("MXN", result.Summary.Currency);
+    }
+
+    [Fact]
+    public async Task GetClosingSummaryWithoutCashSalesEqualsOpeningFloat()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.SeedOpenCurrentSession(openingAmount: 500m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 0m;
+        var service = fixture.BuildService();
+
+        var result = await service.GetClosingSummaryAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(500m, result.Summary!.ExpectedCash);
+    }
+
+    [Fact]
+    public async Task GetClosingSummaryQueriesCashTotalForTheCurrentRegisterSessionId()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        var session = new RegisterSession(
+            RegisterSessionId.New(), fixture.Register.Id, fixture.User.Id, new Money(100m, "MXN"), FixedNow);
+        fixture.RegisterSessionRepository = new FakeRegisterSessionRepository([session]);
+        fixture.CurrentRegisterSession.SetActiveSession(fixture.ToActiveRegisterSession(session));
+        var service = fixture.BuildService();
+
+        await service.GetClosingSummaryAsync();
+
+        Assert.Equal(session.Id, fixture.SaleRepository.LastQueriedCashTotalRegisterSessionId);
+    }
+
+    [Fact]
+    public async Task GetClosingSummaryDoesNotWriteOrCommit()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.SeedOpenCurrentSession(openingAmount: 100m);
+        var service = fixture.BuildService();
+
+        await service.GetClosingSummaryAsync();
+
+        Assert.Equal(0, fixture.RegisterSessionRepository.UpdateCallCount);
+        Assert.Equal(0, fixture.UnitOfWork.CommitCallCount);
+    }
+
+    [Fact]
+    public async Task GetClosingSummaryReturnsNotAuthenticatedWhenNoUserIsLoggedIn()
+    {
+        var fixture = new Fixture();
+        fixture.SeedOpenCurrentSession(openingAmount: 100m);
+        var service = fixture.BuildService();
+
+        var result = await service.GetClosingSummaryAsync();
+
+        Assert.Equal(RegisterSessionResultStatus.NotAuthenticated, result.Status);
+    }
+
+    [Fact]
+    public async Task GetClosingSummaryReturnsNotAuthorizedWhenUserLacksPermission()
+    {
+        var fixture = new Fixture();
+        var roleWithoutPermission = new Role(RoleId.New(), fixture.Organization.Id, "Cajero", FixedNow, []);
+        var userWithoutPermission = new User(
+            UserId.New(), fixture.Organization.Id, roleWithoutPermission.Id, "SINPERMISO", "Sin Permiso",
+            new PasswordHash(SyntheticPasswordHash), FixedNow);
+        fixture.AuthenticateAs(userWithoutPermission, roleWithoutPermission);
+        fixture.SeedOpenCurrentSession(openingAmount: 100m);
+        var service = fixture.BuildService();
+
+        var result = await service.GetClosingSummaryAsync();
+
+        Assert.Equal(RegisterSessionResultStatus.NotAuthorized, result.Status);
+    }
+
+    [Fact]
+    public async Task GetClosingSummaryReturnsSessionNotFoundWhenThereIsNoCurrentRegisterSession()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        var service = fixture.BuildService();
+
+        var result = await service.GetClosingSummaryAsync();
+
+        Assert.Equal(RegisterSessionResultStatus.SessionNotFound, result.Status);
+    }
+
+    [Fact]
+    public async Task GetClosingSummaryReturnsSessionAlreadyClosedWhenItWasClosedElsewhere()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        var session = fixture.OpenSessionOn(fixture.Register, fixture.User.Id);
+        fixture.CurrentRegisterSession.SetActiveSession(fixture.ToActiveRegisterSession(session));
+        session.Close(fixture.User.Id, session.OpeningFloat, session.OpeningFloat, FixedNow.AddHours(8));
+        fixture.RegisterSessionRepository = new FakeRegisterSessionRepository([session]);
+        var service = fixture.BuildService();
+
+        var result = await service.GetClosingSummaryAsync();
+
+        Assert.Equal(RegisterSessionResultStatus.SessionAlreadyClosed, result.Status);
+    }
+
+    [Fact]
+    public async Task GetClosingSummaryReturnsSessionBelongsToAnotherOrganizationWhenOrganizationMismatches()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        var session = fixture.OpenSessionOn(fixture.Register, fixture.User.Id);
+        fixture.RegisterSessionRepository = new FakeRegisterSessionRepository([session]);
+        fixture.CurrentRegisterSession.SetActiveSession(new ActiveRegisterSession(
+            session.Id, OrganizationId.New(), fixture.Branch.Id, fixture.Register.Id, fixture.Register.Name,
+            fixture.User.Id, fixture.User.DisplayName, session.OpenedAtUtc, 100m, "MXN"));
+        var service = fixture.BuildService();
+
+        var result = await service.GetClosingSummaryAsync();
+
+        Assert.Equal(RegisterSessionResultStatus.SessionBelongsToAnotherOrganization, result.Status);
+    }
+
     // ---------- Fixture ----------
 
     private sealed class Fixture
@@ -627,6 +816,7 @@ public class RegisterSessionServiceTests
             RegisterSessionRepository = new FakeRegisterSessionRepository();
             CurrentUserSession = new FakeCurrentUserSession();
             CurrentRegisterSession = new FakeCurrentRegisterSession();
+            SaleRepository = new FakeSaleRepository(null);
             UnitOfWork = new FakeUnitOfWork();
             Clock = new FakeClock(FixedNow.AddHours(1));
         }
@@ -654,6 +844,8 @@ public class RegisterSessionServiceTests
         public FakeCurrentUserSession CurrentUserSession { get; }
 
         public FakeCurrentRegisterSession CurrentRegisterSession { get; }
+
+        public FakeSaleRepository SaleRepository { get; set; }
 
         public FakeUnitOfWork UnitOfWork { get; }
 
@@ -694,6 +886,7 @@ public class RegisterSessionServiceTests
                 RegisterRepository,
                 RegisterSessionRepository,
                 UserRepository,
+                SaleRepository,
                 UnitOfWork,
                 Clock);
     }

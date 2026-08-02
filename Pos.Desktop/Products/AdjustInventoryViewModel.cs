@@ -8,6 +8,11 @@ using Pos.Domain.Inventory;
 
 namespace Pos.Desktop.Products;
 
+// TAREA 25A-FIX defecto 2: el campo de entrada es la existencia FINAL deseada ("Nueva
+// existencia"), no una magnitud de ajuste con dirección. El usuario ya no necesita calcular
+// mentalmente cuánto disminuir para llegar a una existencia objetivo (p. ej. 2 -> 0): el
+// ViewModel calcula la diferencia y decide Increase/Decrease antes de llamar al servicio, que
+// sigue recibiendo exactamente lo mismo que antes (AdjustmentType + magnitud positiva).
 public sealed partial class AdjustInventoryViewModel : ViewModelBase
 {
     private readonly IProductManagementService _productManagementService;
@@ -18,8 +23,7 @@ public sealed partial class AdjustInventoryViewModel : ViewModelBase
     private ProductId _productId;
     private string _productName = string.Empty;
     private decimal _currentQuantity;
-    private bool _isIncreaseSelected = true;
-    private string _quantityText = string.Empty;
+    private string _newQuantityText = string.Empty;
     private bool _isBusy;
     private string? _generalError;
     private decimal? _confirmedNewQuantity;
@@ -58,57 +62,38 @@ public sealed partial class AdjustInventoryViewModel : ViewModelBase
         {
             if (SetProperty(ref _currentQuantity, value))
             {
-                OnPropertyChanged(nameof(ResultingQuantityText));
+                OnPropertyChanged(nameof(DifferenceText));
             }
         }
     }
 
-    public bool IsIncreaseSelected
+    public string NewQuantityText
     {
-        get => _isIncreaseSelected;
+        get => _newQuantityText;
         set
         {
-            if (SetProperty(ref _isIncreaseSelected, value))
+            if (SetProperty(ref _newQuantityText, value))
             {
-                OnPropertyChanged(nameof(IsDecreaseSelected));
-                OnPropertyChanged(nameof(ResultingQuantityText));
-            }
-        }
-    }
-
-    // Espejo de IsIncreaseSelected para el RadioButton "Disminuir": evita depender de un
-    // convertidor de negación booleana en XAML solo para este par mutuamente excluyente.
-    public bool IsDecreaseSelected
-    {
-        get => !_isIncreaseSelected;
-        set => IsIncreaseSelected = !value;
-    }
-
-    public string QuantityText
-    {
-        get => _quantityText;
-        set
-        {
-            if (SetProperty(ref _quantityText, value))
-            {
-                OnPropertyChanged(nameof(ResultingQuantityText));
+                OnPropertyChanged(nameof(DifferenceText));
             }
         }
     }
 
     // Solo vista previa: no valida ni persiste nada, ConfirmCommand vuelve a validar por completo.
-    public string ResultingQuantityText
+    public string DifferenceText
     {
         get
         {
-            if (!decimal.TryParse(QuantityText, NumberStyles.Number, CultureInfo.CurrentCulture, out var quantity) || quantity <= 0m)
+            if (!decimal.TryParse(NewQuantityText, NumberStyles.Number, CultureInfo.CurrentCulture, out var newQuantity))
             {
                 return "—";
             }
 
-            var resulting = IsIncreaseSelected ? CurrentQuantity + quantity : CurrentQuantity - quantity;
+            var difference = newQuantity - CurrentQuantity;
 
-            return resulting.ToString(CultureInfo.CurrentCulture);
+            return difference > 0
+                ? $"+{difference.ToString(CultureInfo.CurrentCulture)}"
+                : difference.ToString(CultureInfo.CurrentCulture);
         }
     }
 
@@ -149,25 +134,34 @@ public sealed partial class AdjustInventoryViewModel : ViewModelBase
     {
         GeneralError = null;
 
-        if (!decimal.TryParse(QuantityText, NumberStyles.Number, CultureInfo.CurrentCulture, out var quantity) || quantity <= 0m)
+        if (!decimal.TryParse(NewQuantityText, NumberStyles.Number, CultureInfo.CurrentCulture, out var newQuantity))
         {
-            GeneralError = "La cantidad debe ser un número mayor que cero.";
+            GeneralError = "La nueva existencia debe ser un número.";
             return;
         }
 
-        var adjustmentType = IsIncreaseSelected ? InventoryAdjustmentType.Increase : InventoryAdjustmentType.Decrease;
-
-        if (adjustmentType == InventoryAdjustmentType.Decrease && quantity > CurrentQuantity)
+        if (newQuantity < 0m)
         {
-            GeneralError = "La existencia resultante no puede ser negativa.";
+            GeneralError = "La nueva existencia no puede ser negativa.";
             return;
         }
+
+        var difference = newQuantity - CurrentQuantity;
+
+        if (difference == 0m)
+        {
+            GeneralError = "La nueva existencia debe ser diferente a la actual.";
+            return;
+        }
+
+        var adjustmentType = difference > 0m ? InventoryAdjustmentType.Increase : InventoryAdjustmentType.Decrease;
+        var magnitude = Math.Abs(difference);
 
         IsBusy = true;
 
         try
         {
-            var request = new AdjustProductInventoryRequest(_productId, adjustmentType, quantity);
+            var request = new AdjustProductInventoryRequest(_productId, adjustmentType, magnitude);
             var result = await _productManagementService.AdjustInventoryAsync(request, CancellationToken);
 
             if (result.Success)

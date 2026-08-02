@@ -13,7 +13,7 @@ public class CloseRegisterSessionViewModelTests
     private static readonly DateTimeOffset ClosedAtUtc = new(2026, 1, 1, 18, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void LoadsTheSummaryPreviewFromTheCurrentRegisterSession()
+    public void HeaderFieldsComeFromTheCurrentRegisterSessionBeforeLoading()
     {
         var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession() };
         var viewModel = CreateViewModel(new FakeRegisterSessionService(), registerSession);
@@ -21,8 +21,59 @@ public class CloseRegisterSessionViewModelTests
         Assert.Equal("Caja 1", viewModel.RegisterName);
         Assert.Equal("Ana Pérez", viewModel.OpenedByDisplayName);
         Assert.Equal("MXN", viewModel.Currency);
-        Assert.Contains("100", viewModel.OpeningAmountText);
-        Assert.Contains("100", viewModel.ExpectedAmountText);
+    }
+
+    // TAREA 25A-FIX defecto 1: antes de este cambio, ExpectedAmountText mostraba
+    // ICurrentRegisterSession.OpeningAmount (siempre igual al fondo inicial). Ahora proviene del
+    // summary real calculado por GetClosingSummaryAsync, que sí incluye las ventas en efectivo.
+    [Fact]
+    public async Task LoadAsyncPopulatesOpeningCashSalesAndExpectedAmountsFromTheRealSummary()
+    {
+        var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession() };
+        var summary = new RegisterClosingSummary(500m, 129m, 629m, "MXN");
+        var service = new FakeRegisterSessionService(
+            getClosingSummaryHandler: _ => Task.FromResult(RegisterClosingSummaryResult.SuccessResult(summary)));
+        var viewModel = CreateViewModel(service, registerSession);
+
+        await viewModel.LoadAsync();
+
+        Assert.Equal(1, service.GetClosingSummaryCallCount);
+        Assert.Contains("500", viewModel.OpeningAmountText);
+        Assert.Contains("129", viewModel.CashSalesAmountText);
+        Assert.Contains("629", viewModel.ExpectedAmountText);
+    }
+
+    [Fact]
+    public async Task LoadAsyncShowsAnErrorAndLeavesAmountsEmptyWhenTheSummaryFails()
+    {
+        var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession() };
+        var service = new FakeRegisterSessionService(
+            getClosingSummaryHandler: _ => Task.FromResult(
+                RegisterClosingSummaryResult.Failure(RegisterSessionResultStatus.SessionAlreadyClosed)));
+        var viewModel = CreateViewModel(service, registerSession);
+
+        await viewModel.LoadAsync();
+
+        Assert.Equal("La caja ya fue cerrada.", viewModel.GeneralError);
+        Assert.Equal(string.Empty, viewModel.ExpectedAmountText);
+    }
+
+    [Fact]
+    public async Task LoadAsyncSetsIsBusyDuringExecutionAndClearsItAfterwards()
+    {
+        var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession() };
+        var gate = new TaskCompletionSource<RegisterClosingSummaryResult>();
+        var service = new FakeRegisterSessionService(getClosingSummaryHandler: _ => gate.Task);
+        var viewModel = CreateViewModel(service, registerSession);
+
+        var loadTask = viewModel.LoadAsync();
+
+        Assert.True(viewModel.IsBusy);
+
+        gate.SetResult(RegisterClosingSummaryResult.SuccessResult(new RegisterClosingSummary(100m, 0m, 100m, "MXN")));
+        await loadTask;
+
+        Assert.False(viewModel.IsBusy);
     }
 
     [Fact]
@@ -54,14 +105,31 @@ public class CloseRegisterSessionViewModelTests
     }
 
     [Fact]
-    public void DifferenceTextReflectsTheEnteredClosingAmount()
+    public void DifferenceTextIsEmptyBeforeTheSummaryHasLoaded()
     {
         var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession(openingAmount: 100m) };
         var viewModel = CreateViewModel(new FakeRegisterSessionService(), registerSession);
 
         viewModel.ClosingAmountText = "120";
 
-        Assert.Contains("20", viewModel.DifferenceText);
+        Assert.Equal(string.Empty, viewModel.DifferenceText);
+    }
+
+    // Diferencia = Efectivo contado - Efectivo esperado (misma fórmula que RegisterSession.Close
+    // en Domain), nunca contado - fondo inicial: con ventas en efectivo esos dos valores difieren.
+    [Fact]
+    public async Task DifferenceTextReflectsTheEnteredClosingAmountAgainstExpectedCash()
+    {
+        var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession(openingAmount: 100m) };
+        var summary = new RegisterClosingSummary(100m, 129m, 229m, "MXN");
+        var service = new FakeRegisterSessionService(
+            getClosingSummaryHandler: _ => Task.FromResult(RegisterClosingSummaryResult.SuccessResult(summary)));
+        var viewModel = CreateViewModel(service, registerSession);
+        await viewModel.LoadAsync();
+
+        viewModel.ClosingAmountText = "230";
+
+        Assert.Equal("1.00 MXN", viewModel.DifferenceText);
     }
 
     [Fact]

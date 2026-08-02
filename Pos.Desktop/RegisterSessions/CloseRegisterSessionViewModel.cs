@@ -19,6 +19,7 @@ public sealed partial class CloseRegisterSessionViewModel : ViewModelBase
     private string _closingAmountText = string.Empty;
     private bool _isBusy;
     private string? _generalError;
+    private RegisterClosingSummary? _summary;
 
     public CloseRegisterSessionViewModel(
         IRegisterSessionService registerSessionService,
@@ -53,11 +54,15 @@ public sealed partial class CloseRegisterSessionViewModel : ViewModelBase
 
     public string Currency => _currentRegisterSession.Current?.Currency ?? string.Empty;
 
-    // Sin ventas ni movimientos en esta fase, el monto esperado siempre coincide con el fondo
-    // inicial (ver RegisterSessionService.CloseAsync, que aplica la misma regla en Domain).
-    public string OpeningAmountText => FormatAmount(_currentRegisterSession.Current?.OpeningAmount);
+    // OpeningAmountText/CashSalesAmountText/ExpectedAmountText provienen del summary cargado por
+    // LoadAsync (RegisterSessionService.GetClosingSummaryAsync), nunca del OpeningAmount en caché
+    // de ICurrentRegisterSession: ese valor nunca refleja las ventas realizadas durante la sesión
+    // (TAREA 25A-FIX, defecto 1).
+    public string OpeningAmountText => FormatAmount(_summary?.OpeningFloat);
 
-    public string ExpectedAmountText => FormatAmount(_currentRegisterSession.Current?.OpeningAmount);
+    public string CashSalesAmountText => FormatAmount(_summary?.CompletedCashSales);
+
+    public string ExpectedAmountText => FormatAmount(_summary?.ExpectedCash);
 
     public string ClosingAmountText
     {
@@ -71,11 +76,14 @@ public sealed partial class CloseRegisterSessionViewModel : ViewModelBase
         }
     }
 
+    // Misma fórmula que RegisterSession.Close (Domain): CashDifference = CountedCash - ExpectedCash,
+    // nunca CountedCash - OpeningFloat. Antes de que LoadAsync termine no hay summary y se muestra
+    // vacío, igual que cuando el monto contado todavía no es un decimal válido.
     public string DifferenceText
     {
         get
         {
-            if (_currentRegisterSession.Current is not { } current)
+            if (_summary is not { } summary)
             {
                 return string.Empty;
             }
@@ -85,9 +93,9 @@ public sealed partial class CloseRegisterSessionViewModel : ViewModelBase
                 return string.Empty;
             }
 
-            var difference = closingAmount - current.OpeningAmount;
+            var difference = closingAmount - summary.ExpectedCash;
 
-            return $"{difference.ToString("N2", CultureInfo.CurrentCulture)} {current.Currency}";
+            return $"{difference.ToString("N2", CultureInfo.CurrentCulture)} {summary.Currency}";
         }
     }
 
@@ -113,6 +121,41 @@ public sealed partial class CloseRegisterSessionViewModel : ViewModelBase
         private set => SetProperty(ref _generalError, value);
     }
 
+    // Llamado desde el código detrás antes de mostrar la ventana (mismo patrón que
+    // EditProductWindow.LoadAsync): el summary debe estar disponible desde el primer frame, nunca
+    // mostrar $0.00/fondo inicial como placeholder de "sin ventas".
+    public async Task LoadAsync()
+    {
+        GeneralError = null;
+        IsBusy = true;
+
+        try
+        {
+            var result = await _registerSessionService.GetClosingSummaryAsync(CancellationToken);
+
+            if (result.Success)
+            {
+                _summary = result.Summary;
+            }
+            else
+            {
+                GeneralError = ToErrorMessage(result.Status);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Ventana cerrada mientras la operación estaba en curso: no queda UI que actualizar.
+        }
+        finally
+        {
+            OnPropertyChanged(nameof(OpeningAmountText));
+            OnPropertyChanged(nameof(CashSalesAmountText));
+            OnPropertyChanged(nameof(ExpectedAmountText));
+            OnPropertyChanged(nameof(DifferenceText));
+            IsBusy = false;
+        }
+    }
+
     private async Task ExecuteConfirmAsync()
     {
         GeneralError = null;
@@ -136,16 +179,7 @@ public sealed partial class CloseRegisterSessionViewModel : ViewModelBase
                 return;
             }
 
-            GeneralError = result.Status switch
-            {
-                RegisterSessionResultStatus.NotAuthenticated => "La sesión no está disponible. Inicie sesión nuevamente.",
-                RegisterSessionResultStatus.NotAuthorized => "No tiene permiso para cerrar la caja.",
-                RegisterSessionResultStatus.SessionNotFound => "No se encontró una caja abierta para cerrar.",
-                RegisterSessionResultStatus.SessionAlreadyClosed => "La caja ya fue cerrada.",
-                RegisterSessionResultStatus.SessionBelongsToAnotherOrganization => "La caja no pertenece a esta instalación.",
-                RegisterSessionResultStatus.InvalidAmount => "El monto contado no es válido.",
-                _ => "Ocurrió un error inesperado. Intente nuevamente.",
-            };
+            GeneralError = ToErrorMessage(result.Status);
         }
         catch (OperationCanceledException)
         {
@@ -203,6 +237,17 @@ public sealed partial class CloseRegisterSessionViewModel : ViewModelBase
         amount = Math.Round(amount, 2, MidpointRounding.AwayFromZero);
         return true;
     }
+
+    private static string ToErrorMessage(RegisterSessionResultStatus status) => status switch
+    {
+        RegisterSessionResultStatus.NotAuthenticated => "La sesión no está disponible. Inicie sesión nuevamente.",
+        RegisterSessionResultStatus.NotAuthorized => "No tiene permiso para cerrar la caja.",
+        RegisterSessionResultStatus.SessionNotFound => "No se encontró una caja abierta para cerrar.",
+        RegisterSessionResultStatus.SessionAlreadyClosed => "La caja ya fue cerrada.",
+        RegisterSessionResultStatus.SessionBelongsToAnotherOrganization => "La caja no pertenece a esta instalación.",
+        RegisterSessionResultStatus.InvalidAmount => "El monto contado no es válido.",
+        _ => "Ocurrió un error inesperado. Intente nuevamente.",
+    };
 
     private static string FormatAmount(decimal? amount) =>
         amount is { } value ? value.ToString("N2", CultureInfo.CurrentCulture) : string.Empty;
