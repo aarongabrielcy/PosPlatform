@@ -82,10 +82,12 @@
                     IsEnabled="{Binding TracksInventory}"
                     Text="{Binding InitialQuantityText, UpdateSourceTrigger=PropertyChanged}" />
 
-            <Label Grid.Row="8" Grid.Column="0" Content="Punto de reorden" Target="{Binding ElementName=ReorderPointTextBox}" />
+            <Label Grid.Row="8" Grid.Column="0" Content="Stock mínimo" Target="{Binding ElementName=ReorderPointTextBox}"
+                    ToolTip="Cuando la existencia llegue a este nivel, el producto se marcará como stock bajo." />
             <TextBox x:Name="ReorderPointTextBox" Grid.Row="8" Grid.Column="1"
                     Margin="0,6" Padding="6,4" TabIndex="8"
                     IsEnabled="{Binding TracksInventory}"
+                    ToolTip="Cuando la existencia llegue a este nivel, el producto se marcará como stock bajo."
                     Text="{Binding ReorderPointText, UpdateSourceTrigger=PropertyChanged}" />
         </Grid>
 

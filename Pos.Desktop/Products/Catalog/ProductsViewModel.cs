@@ -22,6 +22,7 @@ public sealed class ProductsViewModel : ViewModelBase
     private readonly AsyncRelayCommand _newProductCommand;
     private readonly AsyncRelayCommand<ProductCatalogItem> _editProductCommand;
     private readonly AsyncRelayCommand<ProductCatalogItem> _viewAuditDetailCommand;
+    private readonly TimeSpan _searchDebounceDelay;
 
     private string _searchText = string.Empty;
     private ProductCatalogStatusFilter _selectedFilter = ProductCatalogStatusFilter.All;
@@ -31,17 +32,19 @@ public sealed class ProductsViewModel : ViewModelBase
     private string? _statusMessage;
     private int _currentPage = 1;
     private bool _canGoNext;
+    private CancellationTokenSource? _searchCts;
 
-    public ProductsViewModel(IProductManagementService productManagementService)
+    public ProductsViewModel(IProductManagementService productManagementService, TimeSpan? searchDebounceDelay = null)
     {
         _productManagementService = productManagementService ?? throw new ArgumentNullException(nameof(productManagementService));
+        _searchDebounceDelay = searchDebounceDelay ?? TimeSpan.FromMilliseconds(250);
 
-        // LoadCommand y SearchCommand ejecutan la misma carga (página 1 con el filtro/término
-        // actuales): LoadCommand es el punto seguro (con manejo de errores propio de
-        // AsyncRelayCommand) que usa el shell al navegar a Productos, sin depender de que el
-        // usuario presione "Buscar".
-        _loadCommand = new AsyncRelayCommand(() => LoadPageAsync(resetToFirstPage: true), onError: HandleUnexpectedError);
-        _searchCommand = new AsyncRelayCommand(() => LoadPageAsync(resetToFirstPage: true), onError: HandleUnexpectedError);
+        // LoadCommand y SearchCommand ejecutan la misma carga inmediata (página 1 con el
+        // filtro/término actuales), cancelando cualquier debounce pendiente: LoadCommand es el
+        // punto seguro (con manejo de errores propio de AsyncRelayCommand) que usa el shell al
+        // navegar a Productos, sin depender de que el usuario presione "Buscar".
+        _loadCommand = new AsyncRelayCommand(() => ExecuteImmediateSearchAsync(resetToFirstPage: true), onError: HandleUnexpectedError);
+        _searchCommand = new AsyncRelayCommand(() => ExecuteImmediateSearchAsync(resetToFirstPage: true), onError: HandleUnexpectedError);
         _nextPageCommand = new AsyncRelayCommand(ExecuteNextPageAsync, () => CanGoNext && !IsBusy, HandleUnexpectedError);
         _previousPageCommand = new AsyncRelayCommand(ExecutePreviousPageAsync, () => CanGoPrevious && !IsBusy, HandleUnexpectedError);
         _newProductCommand = new AsyncRelayCommand(ExecuteNewProductAsync);
@@ -83,8 +86,19 @@ public sealed class ProductsViewModel : ViewModelBase
     public string SearchText
     {
         get => _searchText;
-        set => SetProperty(ref _searchText, value);
+        set
+        {
+            if (SetProperty(ref _searchText, value))
+            {
+                ScheduleDebouncedSearch();
+            }
+        }
     }
+
+    // Expone la búsqueda en curso (inmediata o con debounce) para que las pruebas puedan esperar
+    // de forma determinista sin depender de Thread.Sleep/delays reales (TAREA 24F, sección 27).
+    // No tiene otro consumidor: la UI no la observa.
+    internal Task PendingSearchTask { get; private set; } = Task.CompletedTask;
 
     public ProductCatalogStatusFilter SelectedFilter
     {
@@ -168,7 +182,7 @@ public sealed class ProductsViewModel : ViewModelBase
 
     // Llamado al construir el shell y cada vez que se navega a Productos (ver
     // MainWindowViewModel): no exige una búsqueda manual previa (TAREA 24C, sección 9).
-    public Task RefreshAsync() => LoadPageAsync(resetToFirstPage: true);
+    public Task RefreshAsync() => ExecuteImmediateSearchAsync(resetToFirstPage: true);
 
     // Llamado tras cerrar CreateProductWindow con éxito: refresca el catálogo con el SKU recién
     // creado como término de búsqueda para localizarlo y, si la búsqueda resulta en un único
@@ -187,7 +201,56 @@ public sealed class ProductsViewModel : ViewModelBase
     // mismo refresco que ApplyProductCreated.
     public void ApplyProductUpdated(string sku) => ApplyProductCreated(sku);
 
-    private async Task LoadPageAsync(bool resetToFirstPage)
+    // Búsqueda con debounce (TAREA 24F sección 16-17): se dispara desde el setter de SearchText.
+    // A diferencia de Venta, un término vacío en Productos sí debe recargar el catálogo completo
+    // (ProductsView soporta listado sin búsqueda), así que aquí no hay atajo de "vacío = limpiar".
+    private void ScheduleDebouncedSearch()
+    {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+
+        var cts = new CancellationTokenSource();
+        _searchCts = cts;
+        PendingSearchTask = RunDebouncedSearchAsync(cts.Token);
+    }
+
+    private async Task RunDebouncedSearchAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(_searchDebounceDelay, cancellationToken);
+            await LoadPageAsync(resetToFirstPage: true, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Un nuevo carácter escrito canceló este debounce: comportamiento esperado, no un error.
+        }
+    }
+
+    // Búsqueda/paginación inmediata (LoadCommand, SearchCommand, filtro, paginar, refrescar tras
+    // crear/editar): cancela cualquier debounce pendiente para que un término viejo nunca
+    // sobrescriba el resultado de una acción explícita más reciente (TAREA 24F sección 4/7).
+    private async Task ExecuteImmediateSearchAsync(bool resetToFirstPage)
+    {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+
+        var cts = new CancellationTokenSource();
+        _searchCts = cts;
+        var task = LoadPageAsync(resetToFirstPage, cts.Token);
+        PendingSearchTask = task;
+
+        try
+        {
+            await task;
+        }
+        catch (OperationCanceledException)
+        {
+            // Una carga más reciente reemplazó a esta: no es un error que deba mostrarse.
+        }
+    }
+
+    private async Task LoadPageAsync(bool resetToFirstPage, CancellationToken cancellationToken)
     {
         if (resetToFirstPage)
         {
@@ -199,7 +262,15 @@ public sealed class ProductsViewModel : ViewModelBase
         try
         {
             var skip = (CurrentPage - 1) * PageSize;
-            var result = await _productManagementService.GetCatalogPageAsync(SearchText, SelectedFilter, skip, PageSize);
+            var result = await _productManagementService.GetCatalogPageAsync(
+                SearchText, SelectedFilter, skip, PageSize, cancellationToken);
+
+            // Se revalida después de esperar la consulta porque los fakes/servicios no siempre
+            // observan el CancellationToken: así una respuesta tardía de un término viejo nunca
+            // reemplaza los resultados de una búsqueda más nueva (TAREA 24F sección 4).
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var previouslySelectedId = SelectedProduct?.ProductId;
 
             Products.Clear();
 
@@ -217,33 +288,40 @@ public sealed class ProductsViewModel : ViewModelBase
                 _ => $"{Products.Count} productos mostrados.",
             };
 
-            // Selección automática cuando la búsqueda resulta en un único producto: cubre tanto
-            // "buscar por SKU exacto" como el refresco tras crear/editar un producto.
-            SelectedProduct = Products.Count == 1 ? Products[0] : null;
+            // Conserva la selección anterior si el producto sigue en la página actual (TAREA 24F
+            // sección 19, p.ej. tras editar sin que cambie el filtro/búsqueda). Si ya no aparece,
+            // se limpia sin caer en el criterio de "único resultado": ese criterio es solo para
+            // cuando no había una selección previa que ya no corresponde (p.ej. nueva búsqueda).
+            SelectedProduct = previouslySelectedId is { } id
+                ? Products.FirstOrDefault(p => p.ProductId == id)
+                : Products.Count == 1 ? Products[0] : null;
 
             GeneralError = null;
         }
         finally
         {
-            IsBusy = false;
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                IsBusy = false;
+            }
         }
     }
 
-    private async Task ExecuteNextPageAsync()
+    private Task ExecuteNextPageAsync()
     {
         CurrentPage++;
-        await LoadPageAsync(resetToFirstPage: false);
+        return ExecuteImmediateSearchAsync(resetToFirstPage: false);
     }
 
-    private async Task ExecutePreviousPageAsync()
+    private Task ExecutePreviousPageAsync()
     {
         if (CurrentPage <= 1)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         CurrentPage--;
-        await LoadPageAsync(resetToFirstPage: false);
+        return ExecuteImmediateSearchAsync(resetToFirstPage: false);
     }
 
     private Task ExecuteNewProductAsync()

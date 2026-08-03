@@ -51,6 +51,7 @@
 
             <TextBox x:Name="SearchTextBox" Grid.Column="0" Padding="8" VerticalContentAlignment="Center"
                      BorderBrush="{StaticResource BorderBrush}"
+                     ToolTip="Buscar por nombre, SKU o código de barras"
                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
                 <TextBox.InputBindings>
                     <KeyBinding Key="Return" Command="{Binding SearchCommand}" />
@@ -97,7 +98,7 @@
                     </DataGridTextColumn>
                     <DataGridTextColumn Header="Existencia" Width="100"
                                          Binding="{Binding Converter={StaticResource QuantityTextConverter}, ConverterParameter=Quantity, Mode=OneWay}" />
-                    <DataGridTextColumn Header="Punto reorden" Width="110"
+                    <DataGridTextColumn Header="Stock mínimo" Width="110"
                                          Binding="{Binding Converter={StaticResource QuantityTextConverter}, ConverterParameter=ReorderPoint, Mode=OneWay}" />
                     <DataGridTextColumn Header="Inventario" Width="150"
                                          Binding="{Binding Converter={StaticResource InventoryStatusConverter}, Mode=OneWay}" />

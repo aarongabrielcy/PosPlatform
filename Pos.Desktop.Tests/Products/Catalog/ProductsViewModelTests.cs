@@ -91,6 +91,75 @@ public class ProductsViewModelTests
         Assert.Equal(string.Empty, service.LastSearchTerm);
     }
 
+    // ---------- Search-as-you-type / debounce / race conditions (TAREA 24F) ----------
+
+    [Fact]
+    public async Task SettingSearchTextSchedulesADebouncedSearchThatReloadsTheCatalog()
+    {
+        var item = CreateItem();
+        var service = new FakeProductManagementService(
+            (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([item], false)));
+        var viewModel = new ProductsViewModel(service, searchDebounceDelay: TimeSpan.Zero);
+
+        viewModel.SearchText = "agua";
+        await viewModel.PendingSearchTask;
+
+        Assert.Single(viewModel.Products);
+        Assert.Equal("agua", service.LastSearchTerm);
+    }
+
+    [Fact]
+    public async Task ChangingSearchTextResetsToTheFirstPage()
+    {
+        var service = new FakeProductManagementService(
+            (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([CreateItem()], true)));
+        var viewModel = new ProductsViewModel(service, searchDebounceDelay: TimeSpan.Zero);
+        viewModel.LoadCommand.Execute(null);
+        await Task.Yield();
+        viewModel.NextPageCommand.Execute(null);
+        await Task.Yield();
+        Assert.Equal(2, viewModel.CurrentPage);
+
+        viewModel.SearchText = "agua";
+        await viewModel.PendingSearchTask;
+
+        Assert.Equal(1, viewModel.CurrentPage);
+        Assert.Equal(0, service.LastSkip);
+    }
+
+    [Fact]
+    public async Task ANewerSearchDiscardsAStaleCatalogResponseThatFinishesLater()
+    {
+        var oldQueryStarted = new TaskCompletionSource();
+        var oldQueryResult = new TaskCompletionSource<ProductCatalogPageResult>();
+        var service = new FakeProductManagementService((term, _, _, _, _) =>
+        {
+            if (term == "a")
+            {
+                oldQueryStarted.TrySetResult();
+                return oldQueryResult.Task;
+            }
+
+            return Task.FromResult(new ProductCatalogPageResult([CreateItem("SKU-AG")], false));
+        });
+        var viewModel = new ProductsViewModel(service, searchDebounceDelay: TimeSpan.Zero);
+
+        viewModel.SearchText = "a";
+        var staleTask = viewModel.PendingSearchTask;
+        await oldQueryStarted.Task;
+
+        viewModel.SearchText = "ag";
+        await viewModel.PendingSearchTask;
+
+        Assert.Equal("SKU-AG", viewModel.Products.Single().Sku);
+
+        // La respuesta de "a" llega después de que "ag" ya se aplicó: no debe reemplazar nada.
+        oldQueryResult.SetResult(new ProductCatalogPageResult([CreateItem("SKU-OLD-A")], false));
+        await staleTask;
+
+        Assert.Equal("SKU-AG", viewModel.Products.Single().Sku);
+    }
+
     // ---------- Filtros (sección 11) ----------
 
     [Theory]
@@ -199,6 +268,63 @@ public class ProductsViewModelTests
         await Task.Yield();
 
         Assert.Equal(item, viewModel.SelectedProduct);
+    }
+
+    [Fact]
+    public async Task RefreshingKeepsTheSelectionWhenTheProductStillMatchesAfterEditing()
+    {
+        var editedId = ProductId.New();
+        var service = new FakeProductManagementService((_, _, _, _, _) =>
+        {
+            var edited = new ProductCatalogItem(
+                editedId, "SKU-EDITED", "7501234567890", "Coca-Cola 600ml", 10m, "MXN", true, 10m, 2m, true);
+            var other = CreateItem("SKU-OTHER");
+
+            return Task.FromResult(new ProductCatalogPageResult([edited, other], false));
+        });
+        var viewModel = new ProductsViewModel(service);
+        viewModel.LoadCommand.Execute(null);
+        await Task.Yield();
+        // LoadPageAsync solo auto-selecciona con un único resultado; con dos, se elige manualmente
+        // como haría el usuario antes de editar.
+        viewModel.SelectedProduct = viewModel.Products.Single(p => p.ProductId == editedId);
+
+        viewModel.SearchCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Equal(editedId, viewModel.SelectedProduct?.ProductId);
+    }
+
+    [Fact]
+    public async Task RefreshingClearsTheSelectionWhenTheProductNoLongerMatchesTheFilter()
+    {
+        var productId = ProductId.New();
+        var callCount = 0;
+        var service = new FakeProductManagementService((_, _, _, _, _) =>
+        {
+            callCount++;
+
+            if (callCount == 1)
+            {
+                var item = new ProductCatalogItem(productId, "SKU-1", null, "Producto", 10m, "MXN", true, 10m, 2m, true);
+                var other = CreateItem("SKU-OTHER");
+
+                return Task.FromResult(new ProductCatalogPageResult([item, other], false));
+            }
+
+            // Segunda carga: el producto seleccionado ya no aparece (p.ej. la edición lo sacó del
+            // filtro/búsqueda actual).
+            return Task.FromResult(new ProductCatalogPageResult([CreateItem("SKU-OTHER")], false));
+        });
+        var viewModel = new ProductsViewModel(service);
+        viewModel.LoadCommand.Execute(null);
+        await Task.Yield();
+        viewModel.SelectedProduct = viewModel.Products.Single(p => p.ProductId == productId);
+
+        viewModel.SearchCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Null(viewModel.SelectedProduct);
     }
 
     [Fact]

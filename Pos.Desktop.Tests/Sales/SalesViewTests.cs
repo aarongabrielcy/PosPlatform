@@ -4,10 +4,14 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Input;
+using Pos.Application.Authentication;
 using Pos.Application.SalesCart;
 using Pos.Desktop.Common;
 using Pos.Desktop.Sales;
+using Pos.Desktop.Tests.Main;
 using Pos.Domain.Common.Identifiers;
+using Pos.Domain.Security;
 
 namespace Pos.Desktop.Tests.Sales;
 
@@ -284,13 +288,130 @@ public class SalesViewTests
         Assert.Equal(expectedPath, binding.Path.Path);
     }
 
-    private static ProductSearchResult CreateSearchResult(bool isAvailable) =>
+    private static ProductSearchResult CreateSearchResult(bool isAvailable, string sku = "SKU-1") =>
         new(
             ProductId.New(),
-            "SKU-1",
+            sku,
             "Producto de prueba",
             10m,
             "MXN",
             availableQuantity: isAvailable ? 5m : 0m,
             tracksInventory: true);
+
+    private static SalesViewModel CreateViewModel(FakeSalesCartService? salesCartService = null) =>
+        new(
+            new FakeCurrentUserSession(),
+            new FakeCurrentRegisterSession(),
+            salesCartService ?? new FakeSalesCartService(),
+            new FakeProductManagementService(),
+            new FakeCurrentSalesCart());
+
+    // ---------- Navegación por teclado / foco (TAREA 24F, sección 10, 13, 28) ----------
+
+    [Fact]
+    public void ArrowDownSelectsTheFirstResultThenMovesToTheNext() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel();
+            var first = CreateSearchResult(true, sku: "SKU-1");
+            var second = CreateSearchResult(true, sku: "SKU-2");
+            viewModel.SearchResults.Add(first);
+            viewModel.SearchResults.Add(second);
+            var view = new SalesView { DataContext = viewModel };
+
+            view.HandleSearchKeyDown(Key.Down);
+            Assert.Equal(first, viewModel.SelectedSearchResult);
+
+            view.HandleSearchKeyDown(Key.Down);
+            Assert.Equal(second, viewModel.SelectedSearchResult);
+
+            // No hay un tercer resultado: se mantiene en el último (clamp, no wrap).
+            view.HandleSearchKeyDown(Key.Down);
+            Assert.Equal(second, viewModel.SelectedSearchResult);
+        });
+
+    [Fact]
+    public void ArrowUpMovesSelectionBackToThePreviousResult() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel();
+            var first = CreateSearchResult(true, sku: "SKU-1");
+            var second = CreateSearchResult(true, sku: "SKU-2");
+            viewModel.SearchResults.Add(first);
+            viewModel.SearchResults.Add(second);
+            viewModel.SelectedSearchResult = second;
+            var view = new SalesView { DataContext = viewModel };
+
+            view.HandleSearchKeyDown(Key.Up);
+
+            Assert.Equal(first, viewModel.SelectedSearchResult);
+        });
+
+    [Fact]
+    public void EnterWithASelectedResultAddsItUsingTheExistingAddCommand() =>
+        RunOnStaThread(() =>
+        {
+            var salesCartService = new FakeSalesCartService(
+                addHandler: (_, _) => Task.FromResult(SalesCartResult.SuccessResult(SalesCartSnapshot.Empty("MXN"))));
+            var viewModel = CreateViewModel(salesCartService);
+            var result = CreateSearchResult(true);
+            viewModel.SearchResults.Add(result);
+            viewModel.SelectedSearchResult = result;
+            var view = new SalesView { DataContext = viewModel };
+
+            view.HandleSearchKeyDown(Key.Enter);
+
+            Assert.Equal(1, salesCartService.AddCallCount);
+        });
+
+    [Fact]
+    public void EnterWithoutASelectionForcesTheSearchCommand() =>
+        RunOnStaThread(() =>
+        {
+            var salesCartService = new FakeSalesCartService(
+                searchHandler: (_, _) => Task.FromResult<IReadOnlyList<ProductSearchResult>>([CreateSearchResult(true)]));
+            var viewModel = CreateViewModel(salesCartService);
+            viewModel.SearchText = "agua";
+            var view = new SalesView { DataContext = viewModel };
+
+            view.HandleSearchKeyDown(Key.Enter);
+
+            Assert.Equal(1, salesCartService.SearchCallCount);
+        });
+
+    [Fact]
+    public void EscapeClearsSearchTextResultsAndSelection() =>
+        RunOnStaThread(() =>
+        {
+            var salesCartService = new FakeSalesCartService(
+                searchHandler: (_, _) => Task.FromResult<IReadOnlyList<ProductSearchResult>>([CreateSearchResult(true)]));
+            var viewModel = CreateViewModel(salesCartService);
+            viewModel.SearchText = "agua";
+            viewModel.SearchCommand.Execute(null);
+            var view = new SalesView { DataContext = viewModel };
+
+            view.HandleSearchKeyDown(Key.Escape);
+
+            Assert.Equal(string.Empty, viewModel.SearchText);
+            Assert.Empty(viewModel.SearchResults);
+            Assert.Null(viewModel.SelectedSearchResult);
+        });
+
+    [Fact]
+    public void AddingAProductSuccessfullyRequestsFocusOnTheSearchTextBoxWithoutThrowing() =>
+        RunOnStaThread(() =>
+        {
+            var salesCartService = new FakeSalesCartService(
+                addHandler: (_, _) => Task.FromResult(SalesCartResult.SuccessResult(SalesCartSnapshot.Empty("MXN"))));
+            var viewModel = CreateViewModel(salesCartService);
+            var result = CreateSearchResult(true);
+            viewModel.SearchResults.Add(result);
+            viewModel.SelectedSearchResult = result;
+            _ = new SalesView { DataContext = viewModel };
+
+            var exception = Record.Exception(() => viewModel.AddSelectedProductCommand.Execute(null));
+
+            Assert.Null(exception);
+            Assert.Equal(string.Empty, viewModel.SearchText);
+        });
 }

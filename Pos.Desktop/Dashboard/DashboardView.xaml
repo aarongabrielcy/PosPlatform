@@ -95,7 +95,7 @@
                         <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120" />
                         <DataGridTextColumn Header="Producto" Binding="{Binding Name}" Width="*" />
                         <DataGridTextColumn Header="Existencia" Binding="{Binding Quantity}" Width="100" />
-                        <DataGridTextColumn Header="Punto de reorden" Binding="{Binding ReorderPoint}" Width="130" />
+                        <DataGridTextColumn Header="Stock mínimo" Binding="{Binding ReorderPoint}" Width="130" />
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>
