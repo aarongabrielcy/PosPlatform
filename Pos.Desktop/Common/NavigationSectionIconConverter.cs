@@ -27,6 +27,9 @@ public sealed class NavigationSectionIconConverter : IValueConverter
 
     private static readonly Geometry SettingsIcon = Geometry.Parse("M8,1 A7,7 0 1,0 8.001,1 Z M8,5 A3,3 0 1,0 8.001,5 Z");
 
+    private static readonly Geometry AuditIcon = Geometry.Parse(
+        "M3,1 H10 L13,4 V15 H3 Z M10,1 V4 H13 Z M5,7 H11 V8 H5 Z M5,10 H11 V11 H5 Z M5,4 H8 V5 H5 Z");
+
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not NavigationSection section)
@@ -42,6 +45,7 @@ public sealed class NavigationSectionIconConverter : IValueConverter
             NavigationSection.Inventory => InventoryIcon,
             NavigationSection.Register => RegisterIcon,
             NavigationSection.Settings => SettingsIcon,
+            NavigationSection.Audit or NavigationSection.AuditProducts => AuditIcon,
             _ => DashboardIcon,
         };
     }

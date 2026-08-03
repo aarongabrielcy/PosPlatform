@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using Pos.Application.Authentication;
+using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
 using Pos.Desktop.Inventory;
 using Pos.Desktop.Main;
@@ -165,7 +166,8 @@ public class MainWindowTests
             var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
             var viewModel = new MainWindowViewModel(
                 session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
-                new InventoryViewModel(), new RegisterViewModel(registerSession), new SettingsViewModel());
+                new InventoryViewModel(), new RegisterViewModel(registerSession), new SettingsViewModel(),
+                new ProductAuditViewModel(new FakeProductAuditService()));
             _ = new MainWindow(viewModel);
 
             viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
@@ -274,7 +276,8 @@ public class MainWindowTests
             var viewModel = new MainWindowViewModel(
                 session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), dashboardViewModel, salesViewModel,
                 new ProductsViewModel(new CatalogFakeProductManagementService()), new InventoryViewModel(),
-                new RegisterViewModel(new FakeCurrentRegisterSession()), new SettingsViewModel());
+                new RegisterViewModel(new FakeCurrentRegisterSession()), new SettingsViewModel(),
+                new ProductAuditViewModel(new FakeProductAuditService()));
             var window = new MainWindow(viewModel);
 
             salesViewModel.SelectedSearchResult = new Pos.Application.SalesCart.ProductSearchResult(
@@ -300,10 +303,11 @@ public class MainWindowTests
         var inventoryViewModel = new InventoryViewModel();
         var registerViewModel = new RegisterViewModel(registerSession);
         var settingsViewModel = new SettingsViewModel();
+        var productAuditViewModel = new ProductAuditViewModel(new FakeProductAuditService());
 
         return new MainWindowViewModel(
             session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
-            inventoryViewModel, registerViewModel, settingsViewModel);
+            inventoryViewModel, registerViewModel, settingsViewModel, productAuditViewModel);
     }
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>

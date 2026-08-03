@@ -2,6 +2,7 @@ using Pos.Application.Authentication;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
 using Pos.Application.Inventory;
+using Pos.Application.ProductAudit;
 using Pos.Application.RegisterSessions;
 using Pos.Application.SalesCart;
 using Pos.Domain.Common.Exceptions;
@@ -9,6 +10,7 @@ using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Common.ValueObjects;
 using Pos.Domain.Inventory;
 using Pos.Domain.Products;
+using Pos.Domain.ProductAudit;
 using Pos.Domain.Security;
 
 namespace Pos.Application.Products.ManageProduct;
@@ -17,12 +19,17 @@ public sealed class ProductManagementService : IProductManagementService
 {
     private const int MaxSearchResults = 20;
 
+    // "Reciente" V1 (TAREA 24D, sección 29): últimas 24 horas.
+    private static readonly TimeSpan RecentActivityWindow = TimeSpan.FromHours(24);
+
     private readonly ICurrentUserSession _currentUserSession;
     private readonly ICurrentRegisterSession _currentRegisterSession;
     private readonly IProductRepository _productRepository;
     private readonly IInventoryItemRepository _inventoryItemRepository;
     private readonly IInventoryMovementRepository _inventoryMovementRepository;
     private readonly IProductCatalogQuery _productCatalogQuery;
+    private readonly IProductAuditRepository _productAuditRepository;
+    private readonly IProductAuditQuery _productAuditQuery;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
@@ -33,6 +40,8 @@ public sealed class ProductManagementService : IProductManagementService
         IInventoryItemRepository inventoryItemRepository,
         IInventoryMovementRepository inventoryMovementRepository,
         IProductCatalogQuery productCatalogQuery,
+        IProductAuditRepository productAuditRepository,
+        IProductAuditQuery productAuditQuery,
         IUnitOfWork unitOfWork,
         IClock clock)
     {
@@ -42,6 +51,8 @@ public sealed class ProductManagementService : IProductManagementService
         _inventoryItemRepository = inventoryItemRepository ?? throw new ArgumentNullException(nameof(inventoryItemRepository));
         _inventoryMovementRepository = inventoryMovementRepository ?? throw new ArgumentNullException(nameof(inventoryMovementRepository));
         _productCatalogQuery = productCatalogQuery ?? throw new ArgumentNullException(nameof(productCatalogQuery));
+        _productAuditRepository = productAuditRepository ?? throw new ArgumentNullException(nameof(productAuditRepository));
+        _productAuditQuery = productAuditQuery ?? throw new ArgumentNullException(nameof(productAuditQuery));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
@@ -124,8 +135,36 @@ public sealed class ProductManagementService : IProductManagementService
             return ProductCatalogPageResult.Empty;
         }
 
-        return await _productCatalogQuery.SearchPageAsync(
+        var page = await _productCatalogQuery.SearchPageAsync(
             user.OrganizationId, registerSession.BranchId, searchTerm, filter, skip, take, cancellationToken);
+
+        // El indicador de actividad reciente se oculta por completo sin ViewProductAudit (TAREA
+        // 24D, sección 34): ni siquiera se consulta la auditoría en ese caso.
+        if (!user.HasPermission(Permission.ViewProductAudit) || page.Items.Count == 0)
+        {
+            return page;
+        }
+
+        var productIds = page.Items.Select(item => item.ProductId).ToList();
+        var sinceUtc = _clock.UtcNow - RecentActivityWindow;
+
+        var recentActivity = await _productAuditQuery.GetRecentActivityAsync(
+            user.OrganizationId, productIds, sinceUtc, cancellationToken);
+
+        if (recentActivity.Count == 0)
+        {
+            return page;
+        }
+
+        var itemsWithActivity = page.Items
+            .Select(item => recentActivity.TryGetValue(item.ProductId, out var activity)
+                ? new ProductCatalogItem(
+                    item.ProductId, item.Sku, item.Barcode, item.Name, item.SalePriceAmount, item.Currency,
+                    item.TracksInventory, item.Quantity, item.ReorderPoint, item.IsActive, activity)
+                : item)
+            .ToList();
+
+        return new ProductCatalogPageResult(itemsWithActivity, page.HasNextPage);
     }
 
     public async Task<ProductCatalogSummary> GetDashboardSummaryAsync(CancellationToken cancellationToken = default)
@@ -262,6 +301,15 @@ public sealed class ProductManagementService : IProductManagementService
             }
         }
 
+        // Estado "antes" capturado justo antes de mutar Domain (TAREA 24D, sección 11): permite
+        // diferenciar campo por campo después de aplicar los mutadores.
+        var beforeSku = product.Sku.Value;
+        var beforeBarcode = product.Barcode?.Value;
+        var beforeName = product.Name;
+        var beforeDescription = product.Description;
+        var beforeSalePrice = product.SalePrice;
+        var beforeCost = product.Cost;
+
         try
         {
             product.ChangeSku(sku);
@@ -275,6 +323,21 @@ public sealed class ProductManagementService : IProductManagementService
         {
             return UpdateProductResult.Failure(UpdateProductResultStatus.InvalidName);
         }
+
+        var changes = new List<(ProductAuditField FieldName, string? OldValue, string? NewValue)>();
+
+        AddIfChanged(changes, ProductAuditField.Sku, beforeSku, product.Sku.Value);
+        AddIfChanged(changes, ProductAuditField.Barcode, beforeBarcode, product.Barcode?.Value);
+        AddIfChanged(changes, ProductAuditField.Name, beforeName, product.Name);
+        AddIfChanged(changes, ProductAuditField.Description, beforeDescription, product.Description);
+        AddIfChanged(
+            changes, ProductAuditField.SalePrice,
+            ProductAuditValueFormatter.FormatMoney(beforeSalePrice.Amount, beforeSalePrice.Currency),
+            ProductAuditValueFormatter.FormatMoney(product.SalePrice.Amount, product.SalePrice.Currency));
+        AddIfChanged(
+            changes, ProductAuditField.Cost,
+            beforeCost is null ? null : ProductAuditValueFormatter.FormatMoney(beforeCost.Amount, beforeCost.Currency),
+            product.Cost is null ? null : ProductAuditValueFormatter.FormatMoney(product.Cost.Amount, product.Cost.Currency));
 
         await _productRepository.UpdateAsync(product, cancellationToken);
 
@@ -291,10 +354,35 @@ public sealed class ProductManagementService : IProductManagementService
 
             if (inventoryItem is not null)
             {
+                var beforeReorderPoint = inventoryItem.ReorderPoint;
                 inventoryItem.ChangeReorderPoint(reorderPoint, _clock.UtcNow);
                 await _inventoryItemRepository.UpdateAsync(inventoryItem, cancellationToken);
                 updatedInventoryItem = inventoryItem;
+
+                AddIfChanged(
+                    changes, ProductAuditField.ReorderPoint,
+                    ProductAuditValueFormatter.FormatDecimal(beforeReorderPoint),
+                    ProductAuditValueFormatter.FormatDecimal(inventoryItem.ReorderPoint));
             }
+        }
+
+        // Solo se crea auditoría si hubo al menos un cambio real: evita un evento Updated vacío
+        // (TAREA 24D, sección 11).
+        if (changes.Count > 0)
+        {
+            var auditEvent = ProductAuditEvent.CreateUpdated(
+                ProductAuditEventId.New(),
+                user.OrganizationId,
+                product.Id,
+                user.UserId,
+                user.Username,
+                user.DisplayName,
+                product.Sku.Value,
+                product.Name,
+                _clock.UtcNow,
+                changes);
+
+            await _productAuditRepository.AddAsync(auditEvent, cancellationToken);
         }
 
         await _unitOfWork.CommitAsync(cancellationToken);
@@ -303,6 +391,18 @@ public sealed class ProductManagementService : IProductManagementService
             product, _currentRegisterSession.Current, cancellationToken, updatedInventoryItem);
 
         return UpdateProductResult.SuccessResult(details);
+    }
+
+    private static void AddIfChanged(
+        List<(ProductAuditField FieldName, string? OldValue, string? NewValue)> changes,
+        ProductAuditField fieldName,
+        string? oldValue,
+        string? newValue)
+    {
+        if (oldValue != newValue)
+        {
+            changes.Add((fieldName, oldValue, newValue));
+        }
     }
 
     public async Task<UpdateProductResult> SetActiveAsync(
@@ -327,6 +427,10 @@ public sealed class ProductManagementService : IProductManagementService
             return UpdateProductResult.Failure(UpdateProductResultStatus.ProductNotFound);
         }
 
+        // Sin transición real no se crea auditoría falsa (TAREA 24D, sección 12): activar un
+        // producto ya activo (o desactivar uno ya inactivo) sigue siendo un no-op auditable-mente.
+        var wasActive = product.IsActive;
+
         if (isActive)
         {
             product.Activate();
@@ -337,6 +441,22 @@ public sealed class ProductManagementService : IProductManagementService
         }
 
         await _productRepository.UpdateAsync(product, cancellationToken);
+
+        if (wasActive != isActive)
+        {
+            var now = _clock.UtcNow;
+
+            var auditEvent = isActive
+                ? ProductAuditEvent.CreateActivated(
+                    ProductAuditEventId.New(), user.OrganizationId, product.Id, user.UserId,
+                    user.Username, user.DisplayName, product.Sku.Value, product.Name, now)
+                : ProductAuditEvent.CreateDeactivated(
+                    ProductAuditEventId.New(), user.OrganizationId, product.Id, user.UserId,
+                    user.Username, user.DisplayName, product.Sku.Value, product.Name, now);
+
+            await _productAuditRepository.AddAsync(auditEvent, cancellationToken);
+        }
+
         await _unitOfWork.CommitAsync(cancellationToken);
 
         var details = await BuildProductDetailsAsync(product, _currentRegisterSession.Current, cancellationToken);
@@ -426,8 +546,25 @@ public sealed class ProductManagementService : IProductManagementService
 
         inventoryItem.ApplyMovement(movement);
 
+        // ProductAudit (quién/contexto administrativo) y InventoryMovement (qué movimiento sufrió
+        // el inventario) son responsabilidades distintas, pero deben quedar en el mismo commit
+        // (TAREA 24D, sección 13).
+        var auditEvent = ProductAuditEvent.CreateInventoryAdjusted(
+            ProductAuditEventId.New(),
+            user.OrganizationId,
+            product.Id,
+            user.UserId,
+            user.Username,
+            user.DisplayName,
+            product.Sku.Value,
+            product.Name,
+            now,
+            ProductAuditValueFormatter.FormatDecimal(movement.QuantityBefore),
+            ProductAuditValueFormatter.FormatDecimal(movement.QuantityAfter));
+
         await _inventoryMovementRepository.AddAsync(movement, cancellationToken);
         await _inventoryItemRepository.UpdateAsync(inventoryItem, cancellationToken);
+        await _productAuditRepository.AddAsync(auditEvent, cancellationToken);
         await _unitOfWork.CommitAsync(cancellationToken);
 
         return AdjustProductInventoryResult.SuccessResult(product.Id, inventoryItem.Quantity);

@@ -1630,6 +1630,10 @@ public class PosDbContextModelTests
         (typeof(RolePermissionRecord), typeof(RoleRecord)),
         (typeof(SaleLineRecord), typeof(SaleRecord)),
         (typeof(PaymentRecord), typeof(SaleRecord)),
+        // Composición estructural Event -> Changes (TAREA 24D, sección 17): las filas hijas no
+        // tienen sentido sin su ProductAuditEvent padre. No expone ninguna API de Delete a nivel
+        // de repositorio; distinto de un Cascade histórico desde Product/User/Organization.
+        (typeof(ProductAuditChangeRecord), typeof(ProductAuditEventRecord)),
     ];
 
     [Fact]

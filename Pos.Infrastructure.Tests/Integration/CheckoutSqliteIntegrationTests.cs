@@ -186,6 +186,8 @@ public class CheckoutSqliteIntegrationTests
             new EfInventoryItemRepository(context),
             new EfInventoryMovementRepository(context),
             new EfProductCatalogQuery(context),
+            new EfProductAuditRepository(context),
+            new EfProductAuditQuery(context),
             context,
             new SystemClock());
 

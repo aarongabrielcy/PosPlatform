@@ -244,6 +244,106 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.ToTable("payments", (string)null);
                 });
 
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.ProductAuditChangeRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("FieldName")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("field_name");
+
+                    b.Property<string>("NewValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("new_value");
+
+                    b.Property<string>("OldValue")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("old_value");
+
+                    b.Property<Guid>("ProductAuditEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("product_audit_event_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductAuditEventId");
+
+                    b.ToTable("product_audit_changes", (string)null);
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.ProductAuditEventRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("action");
+
+                    b.Property<string>("ActorDisplayNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_display_name_snapshot");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<string>("ActorUsernameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("actor_username_snapshot");
+
+                    b.Property<long>("OccurredAtUtc")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("occurred_at_utc_ticks");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("organization_id");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("ProductNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("product_name_snapshot");
+
+                    b.Property<string>("ProductSkuSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("product_sku_snapshot");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Action", "OccurredAtUtc");
+
+                    b.HasIndex("ActorUserId", "OccurredAtUtc");
+
+                    b.HasIndex("OrganizationId", "OccurredAtUtc");
+
+                    b.HasIndex("ProductId", "OccurredAtUtc");
+
+                    b.ToTable("product_audit_events", (string)null);
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.ProductRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -726,6 +826,38 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.Navigation("Sale");
                 });
 
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.ProductAuditChangeRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.Records.ProductAuditEventRecord", "ProductAuditEvent")
+                        .WithMany("Changes")
+                        .HasForeignKey("ProductAuditEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ProductAuditEvent");
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.ProductAuditEventRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Pos.Infrastructure.Persistence.Records.OrganizationRecord", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Pos.Infrastructure.Persistence.Records.ProductRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.ProductRecord", b =>
                 {
                     b.HasOne("Pos.Infrastructure.Persistence.Records.OrganizationRecord", null)
@@ -841,6 +973,11 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.ProductAuditEventRecord", b =>
+                {
+                    b.Navigation("Changes");
                 });
 
             modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.RoleRecord", b =>

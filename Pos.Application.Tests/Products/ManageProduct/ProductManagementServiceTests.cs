@@ -23,6 +23,8 @@ public class ProductManagementServiceTests
         FakeInventoryItemRepository InventoryItemRepository,
         FakeInventoryMovementRepository InventoryMovementRepository,
         FakeProductCatalogQuery ProductCatalogQuery,
+        FakeProductAuditRepository ProductAuditRepository,
+        FakeProductAuditQuery ProductAuditQuery,
         FakeUnitOfWork UnitOfWork,
         OrganizationId OrganizationId,
         BranchId BranchId);
@@ -30,7 +32,9 @@ public class ProductManagementServiceTests
     private static Fixture CreateFixture(
         bool authenticated = true,
         bool registerOpen = true,
-        IEnumerable<Permission>? permissions = null)
+        IEnumerable<Permission>? permissions = null,
+        FakeProductAuditQuery? productAuditQuery = null,
+        FakeProductCatalogQuery? productCatalogQuery = null)
     {
         var organizationId = OrganizationId.New();
         var branchId = BranchId.New();
@@ -69,17 +73,21 @@ public class ProductManagementServiceTests
         var productRepository = new FakeProductRepository();
         var inventoryItemRepository = new FakeInventoryItemRepository();
         var inventoryMovementRepository = new FakeInventoryMovementRepository();
-        var productCatalogQuery = new FakeProductCatalogQuery();
+        productCatalogQuery ??= new FakeProductCatalogQuery();
+        var productAuditRepository = new FakeProductAuditRepository();
+        productAuditQuery ??= new FakeProductAuditQuery();
         var unitOfWork = new FakeUnitOfWork();
         var clock = new FakeClock(UtcNow);
 
         var service = new ProductManagementService(
             userSession, registerSession, productRepository, inventoryItemRepository,
-            inventoryMovementRepository, productCatalogQuery, unitOfWork, clock);
+            inventoryMovementRepository, productCatalogQuery, productAuditRepository, productAuditQuery,
+            unitOfWork, clock);
 
         return new Fixture(
             service, userSession, registerSession, productRepository, inventoryItemRepository,
-            inventoryMovementRepository, productCatalogQuery, unitOfWork, organizationId, branchId);
+            inventoryMovementRepository, productCatalogQuery, productAuditRepository, productAuditQuery,
+            unitOfWork, organizationId, branchId);
     }
 
     private static Product CreateProduct(
@@ -808,5 +816,180 @@ public class ProductManagementServiceTests
         Assert.Equal(1, fixture.ProductCatalogQuery.GetSummaryCallCount);
         Assert.Equal(fixture.OrganizationId, fixture.ProductCatalogQuery.LastOrganizationId);
         Assert.Equal(fixture.BranchId, fixture.ProductCatalogQuery.LastBranchId);
+    }
+
+    // ---------- Product audit (TAREA 24D) ----------
+
+    [Fact]
+    public async Task UpdateAsyncCreatesASingleUpdatedAuditEventWithOneChangePerModifiedField()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, sku: "SKU-EDIT");
+        fixture.ProductRepository.Add(product);
+
+        var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
+            product.Id, product.Sku.Value, null, "Agua Natural", product.Description, 27.50m, null, null));
+
+        Assert.True(result.Success);
+        Assert.Equal(1, fixture.ProductAuditRepository.AddCallCount);
+
+        var auditEvent = Assert.Single(fixture.ProductAuditRepository.AddedEvents);
+        Assert.Equal(Pos.Domain.ProductAudit.ProductAuditAction.Updated, auditEvent.Action);
+
+        var nameChange = Assert.Single(
+            auditEvent.Changes, change => change.FieldName == Pos.Domain.ProductAudit.ProductAuditField.Name);
+        Assert.Equal("Producto de prueba", nameChange.OldValue);
+        Assert.Equal("Agua Natural", nameChange.NewValue);
+
+        var priceChange = Assert.Single(
+            auditEvent.Changes, change => change.FieldName == Pos.Domain.ProductAudit.ProductAuditField.SalePrice);
+        Assert.Equal("MXN 10.00", priceChange.OldValue);
+        Assert.Equal("MXN 27.50", priceChange.NewValue);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncDoesNotCreateAnAuditEventWhenNothingActuallyChanged()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, sku: "SKU-NOCHANGE");
+        fixture.ProductRepository.Add(product);
+
+        var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
+            product.Id, product.Sku.Value, product.Barcode?.Value, product.Name, product.Description,
+            product.SalePrice.Amount, product.Cost?.Amount, null));
+
+        Assert.True(result.Success);
+        Assert.Equal(0, fixture.ProductAuditRepository.AddCallCount);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncIncludesReorderPointChangeInTheSameAuditEvent()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, tracksInventory: true);
+        fixture.ProductRepository.Add(product);
+        fixture.InventoryItemRepository.Add(CreateInventoryItem(fixture.BranchId, product.Id, reorderPoint: 2m));
+
+        await fixture.Service.UpdateAsync(new UpdateProductRequest(
+            product.Id, product.Sku.Value, null, product.Name, product.Description, 10m, null, 6m));
+
+        Assert.Equal(1, fixture.ProductAuditRepository.AddCallCount);
+        var auditEvent = Assert.Single(fixture.ProductAuditRepository.AddedEvents);
+        var reorderChange = Assert.Single(
+            auditEvent.Changes, change => change.FieldName == Pos.Domain.ProductAudit.ProductAuditField.ReorderPoint);
+        Assert.Equal("2", reorderChange.OldValue);
+        Assert.Equal("6", reorderChange.NewValue);
+    }
+
+    [Fact]
+    public async Task SetActiveAsyncCreatesADeactivatedAuditEvent()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, isActive: true);
+        fixture.ProductRepository.Add(product);
+
+        await fixture.Service.SetActiveAsync(product.Id, false);
+
+        Assert.Equal(1, fixture.ProductAuditRepository.AddCallCount);
+        var auditEvent = Assert.Single(fixture.ProductAuditRepository.AddedEvents);
+        Assert.Equal(Pos.Domain.ProductAudit.ProductAuditAction.Deactivated, auditEvent.Action);
+    }
+
+    [Fact]
+    public async Task SetActiveAsyncCreatesAnActivatedAuditEvent()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, isActive: false);
+        fixture.ProductRepository.Add(product);
+
+        await fixture.Service.SetActiveAsync(product.Id, true);
+
+        var auditEvent = Assert.Single(fixture.ProductAuditRepository.AddedEvents);
+        Assert.Equal(Pos.Domain.ProductAudit.ProductAuditAction.Activated, auditEvent.Action);
+    }
+
+    [Fact]
+    public async Task SetActiveAsyncDoesNotCreateAnAuditEventWithoutARealTransition()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, isActive: true);
+        fixture.ProductRepository.Add(product);
+
+        var result = await fixture.Service.SetActiveAsync(product.Id, true);
+
+        Assert.True(result.Success);
+        Assert.Equal(0, fixture.ProductAuditRepository.AddCallCount);
+    }
+
+    [Fact]
+    public async Task AdjustInventoryAsyncCreatesAnInventoryAdjustedAuditEventInTheSameCommit()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, tracksInventory: true);
+        fixture.ProductRepository.Add(product);
+        fixture.InventoryItemRepository.Add(CreateInventoryItem(fixture.BranchId, product.Id, quantity: 2m));
+
+        await fixture.Service.AdjustInventoryAsync(
+            new AdjustProductInventoryRequest(product.Id, InventoryAdjustmentType.Decrease, 2m));
+
+        Assert.Equal(1, fixture.ProductAuditRepository.AddCallCount);
+        Assert.Equal(1, fixture.UnitOfWork.CommitCallCount);
+
+        var auditEvent = Assert.Single(fixture.ProductAuditRepository.AddedEvents);
+        Assert.Equal(Pos.Domain.ProductAudit.ProductAuditAction.InventoryAdjusted, auditEvent.Action);
+        var change = Assert.Single(auditEvent.Changes);
+        Assert.Equal(Pos.Domain.ProductAudit.ProductAuditField.InventoryQuantity, change.FieldName);
+        Assert.Equal("2", change.OldValue);
+        Assert.Equal("0", change.NewValue);
+    }
+
+    [Fact]
+    public async Task GetCatalogPageAsyncMergesRecentActivityWhenUserHasViewProductAuditPermission()
+    {
+        var productId = ProductId.New();
+        var catalogItem = new ProductCatalogItem(
+            productId, "SKU-001", null, "Agua 1L", 10m, "MXN", false, 0m, 0m, true);
+        var catalogQuery = new FakeProductCatalogQuery(new ProductCatalogPageResult([catalogItem], false));
+
+        var recentActivity = new Pos.Application.ProductAudit.ProductRecentActivity(
+            productId,
+            Pos.Domain.Common.Identifiers.ProductAuditEventId.New(),
+            Pos.Domain.ProductAudit.ProductAuditAction.Updated,
+            UtcNow,
+            "Cajero 02",
+            [],
+            1);
+
+        var auditQuery = new FakeProductAuditQuery(
+            new Dictionary<ProductId, Pos.Application.ProductAudit.ProductRecentActivity> { [productId] = recentActivity });
+
+        var fixture = CreateFixture(
+            permissions: [Permission.ManageProducts, Permission.ViewProductAudit],
+            productAuditQuery: auditQuery,
+            productCatalogQuery: catalogQuery);
+
+        var page = await fixture.Service.GetCatalogPageAsync(null, ProductCatalogStatusFilter.All, 0, 50);
+
+        Assert.Equal(1, auditQuery.GetRecentActivityCallCount);
+        Assert.Single(page.Items);
+        Assert.True(page.Items[0].HasRecentActivity);
+        Assert.Equal("Cajero 02", page.Items[0].RecentActivity!.ActorDisplayName);
+    }
+
+    [Fact]
+    public async Task GetCatalogPageAsyncDoesNotQueryRecentActivityWithoutViewProductAuditPermission()
+    {
+        var productId = ProductId.New();
+        var catalogItem = new ProductCatalogItem(
+            productId, "SKU-001", null, "Agua 1L", 10m, "MXN", false, 0m, 0m, true);
+        var catalogQuery = new FakeProductCatalogQuery(new ProductCatalogPageResult([catalogItem], false));
+
+        var auditQuery = new FakeProductAuditQuery();
+        var fixture = CreateFixture(productAuditQuery: auditQuery, productCatalogQuery: catalogQuery);
+
+        var page = await fixture.Service.GetCatalogPageAsync(null, ProductCatalogStatusFilter.All, 0, 50);
+
+        Assert.Equal(0, auditQuery.GetRecentActivityCallCount);
+        Assert.False(page.Items[0].HasRecentActivity);
     }
 }

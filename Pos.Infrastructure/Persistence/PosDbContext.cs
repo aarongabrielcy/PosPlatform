@@ -38,6 +38,10 @@ public sealed class PosDbContext : DbContext, IUnitOfWork
 
     internal DbSet<RegisterSessionRecord> RegisterSessions => Set<RegisterSessionRecord>();
 
+    internal DbSet<ProductAuditEventRecord> ProductAuditEvents => Set<ProductAuditEventRecord>();
+
+    internal DbSet<ProductAuditChangeRecord> ProductAuditChanges => Set<ProductAuditChangeRecord>();
+
     public Task CommitAsync(CancellationToken cancellationToken) => SaveChangesAsync(cancellationToken);
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -55,5 +59,7 @@ public sealed class PosDbContext : DbContext, IUnitOfWork
         modelBuilder.ApplyConfiguration(new RolePermissionRecordConfiguration());
         modelBuilder.ApplyConfiguration(new UserRecordConfiguration());
         modelBuilder.ApplyConfiguration(new RegisterSessionRecordConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductAuditEventRecordConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductAuditChangeRecordConfiguration());
     }
 }

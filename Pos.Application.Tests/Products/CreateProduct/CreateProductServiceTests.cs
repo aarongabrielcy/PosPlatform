@@ -16,6 +16,7 @@ public class CreateProductServiceTests
         FakeCurrentRegisterSession RegisterSession,
         FakeProductRepository ProductRepository,
         FakeInventoryItemRepository InventoryItemRepository,
+        FakeProductAuditRepository ProductAuditRepository,
         FakeUnitOfWork UnitOfWork,
         OrganizationId OrganizationId,
         BranchId BranchId);
@@ -58,15 +59,17 @@ public class CreateProductServiceTests
 
         var productRepository = new FakeProductRepository();
         var inventoryItemRepository = new FakeInventoryItemRepository();
+        var productAuditRepository = new FakeProductAuditRepository();
         var unitOfWork = new FakeUnitOfWork();
         var clock = new FakeClock(UtcNow);
 
         var service = new CreateProductService(
-            userSession, registerSession, productRepository, inventoryItemRepository, unitOfWork, clock);
+            userSession, registerSession, productRepository, inventoryItemRepository, productAuditRepository,
+            unitOfWork, clock);
 
         return new Fixture(
-            service, userSession, registerSession, productRepository, inventoryItemRepository, unitOfWork,
-            organizationId, branchId);
+            service, userSession, registerSession, productRepository, inventoryItemRepository,
+            productAuditRepository, unitOfWork, organizationId, branchId);
     }
 
     private static CreateProductRequest ValidRequestWithoutInventory() =>
@@ -276,5 +279,75 @@ public class CreateProductServiceTests
 
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => fixture.Service.CreateAsync(null!, CancellationToken.None));
+    }
+
+    // ---------- Product audit (TAREA 24D) ----------
+
+    [Fact]
+    public async Task CreateAsyncCreatesASingleCreatedAuditEventWithActorAndProductSnapshots()
+    {
+        var fixture = CreateFixture();
+
+        var result = await fixture.Service.CreateAsync(ValidRequestWithoutInventory(), CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(1, fixture.ProductAuditRepository.AddCallCount);
+
+        var auditEvent = Assert.Single(fixture.ProductAuditRepository.AddedEvents);
+        Assert.Equal(Pos.Domain.ProductAudit.ProductAuditAction.Created, auditEvent.Action);
+        Assert.Equal(result.ProductId!.Value, auditEvent.ProductId);
+        Assert.Equal(fixture.OrganizationId, auditEvent.OrganizationId);
+        Assert.Equal("JPEREZ", auditEvent.ActorUsernameSnapshot);
+        Assert.Equal("Juan Pérez", auditEvent.ActorDisplayNameSnapshot);
+        Assert.Equal("SKU-001", auditEvent.ProductSkuSnapshot);
+        Assert.Equal("Producto de prueba", auditEvent.ProductNameSnapshot);
+    }
+
+    [Fact]
+    public async Task CreateAsyncCreatedAuditEventIncludesInventoryFieldsWhenTracksInventoryIsTrue()
+    {
+        var fixture = CreateFixture();
+
+        await fixture.Service.CreateAsync(ValidRequestWithInventory(), CancellationToken.None);
+
+        var auditEvent = Assert.Single(fixture.ProductAuditRepository.AddedEvents);
+        var reorderPointChange = Assert.Single(
+            auditEvent.Changes, change => change.FieldName == Pos.Domain.ProductAudit.ProductAuditField.ReorderPoint);
+        Assert.Null(reorderPointChange.OldValue);
+        Assert.Equal("2", reorderPointChange.NewValue);
+
+        var quantityChange = Assert.Single(
+            auditEvent.Changes, change => change.FieldName == Pos.Domain.ProductAudit.ProductAuditField.InventoryQuantity);
+        Assert.Null(quantityChange.OldValue);
+        Assert.Equal("8", quantityChange.NewValue);
+    }
+
+    [Fact]
+    public async Task CreateAsyncCreatedAuditEventOmitsBarcodeCostAndInventoryFieldsWhenAbsent()
+    {
+        var fixture = CreateFixture();
+
+        await fixture.Service.CreateAsync(ValidRequestWithoutInventory(), CancellationToken.None);
+
+        var auditEvent = Assert.Single(fixture.ProductAuditRepository.AddedEvents);
+        Assert.DoesNotContain(auditEvent.Changes, change => change.FieldName == Pos.Domain.ProductAudit.ProductAuditField.Barcode);
+        Assert.DoesNotContain(auditEvent.Changes, change => change.FieldName == Pos.Domain.ProductAudit.ProductAuditField.Cost);
+        Assert.DoesNotContain(
+            auditEvent.Changes, change => change.FieldName == Pos.Domain.ProductAudit.ProductAuditField.ReorderPoint);
+        Assert.DoesNotContain(
+            auditEvent.Changes, change => change.FieldName == Pos.Domain.ProductAudit.ProductAuditField.InventoryQuantity);
+    }
+
+    [Fact]
+    public async Task CreateAsyncPersistsProductInventoryAndAuditInASingleCommit()
+    {
+        var fixture = CreateFixture();
+
+        await fixture.Service.CreateAsync(ValidRequestWithInventory(), CancellationToken.None);
+
+        Assert.Equal(1, fixture.ProductRepository.AddCallCount);
+        Assert.Equal(1, fixture.InventoryItemRepository.AddCallCount);
+        Assert.Equal(1, fixture.ProductAuditRepository.AddCallCount);
+        Assert.Equal(1, fixture.UnitOfWork.CommitCallCount);
     }
 }

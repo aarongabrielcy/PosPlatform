@@ -15,4 +15,5 @@ public enum Permission
     ViewReports,
     ManageUsers,
     ManageRoles,
+    ViewProductAudit,
 }

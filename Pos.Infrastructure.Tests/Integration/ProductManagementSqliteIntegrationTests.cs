@@ -72,11 +72,14 @@ public class ProductManagementSqliteIntegrationTests
         var inventoryItemRepository = new EfInventoryItemRepository(context);
         var inventoryMovementRepository = new EfInventoryMovementRepository(context);
         var productCatalogQuery = new EfProductCatalogQuery(context);
+        var productAuditRepository = new EfProductAuditRepository(context);
+        var productAuditQuery = new EfProductAuditQuery(context);
         var clock = new SystemClock();
 
         var managementService = new ProductManagementService(
             userSession, registerSession, productRepository, inventoryItemRepository,
-            inventoryMovementRepository, productCatalogQuery, context, clock);
+            inventoryMovementRepository, productCatalogQuery, productAuditRepository, productAuditQuery,
+            context, clock);
 
         var cartService = new SalesCartService(
             userSession, registerSession, new InMemoryCurrentSalesCart(), productRepository, inventoryItemRepository);
@@ -120,7 +123,8 @@ public class ProductManagementSqliteIntegrationTests
             "MXN"));
 
         var createService = new Pos.Application.Products.CreateProduct.CreateProductService(
-            userSession, registerSession, productRepository, inventoryItemRepository, context, new SystemClock());
+            userSession, registerSession, productRepository, inventoryItemRepository,
+            new EfProductAuditRepository(context), context, new SystemClock());
 
         var request = new Pos.Application.Products.CreateProduct.CreateProductRequest(
             sku, barcode, "Producto editable", "Descripción original", 10m, 5m,

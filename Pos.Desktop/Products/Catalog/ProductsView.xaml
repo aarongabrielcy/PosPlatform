@@ -15,6 +15,7 @@
             <converters:ProductCatalogInventoryStatusConverter x:Key="InventoryStatusConverter" />
             <converters:ProductCatalogQuantityTextConverter x:Key="QuantityTextConverter" />
             <converters:BooleanToActiveStatusTextConverter x:Key="IsActiveTextConverter" />
+            <converters:ProductRecentActivityTooltipConverter x:Key="RecentActivityTooltipConverter" />
             <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         </ResourceDictionary>
     </UserControl.Resources>
@@ -102,6 +103,23 @@
                                          Binding="{Binding Converter={StaticResource InventoryStatusConverter}, Mode=OneWay}" />
                     <DataGridTextColumn Header="Estado" Width="90"
                                          Binding="{Binding IsActive, Converter={StaticResource IsActiveTextConverter}, Mode=OneWay}" />
+                    <!-- Indicador de actividad reciente (TAREA 24D, sección 29): oculto por completo
+                         cuando RecentActivity es null (sin actividad reciente o sin permiso
+                         ViewProductAudit, sección 34). Hover muestra el resumen corto; clic navega a
+                         Auditoría > Productos filtrado por este producto (sección 32), sin abrir
+                         ninguna ventana de historial. -->
+                    <DataGridTemplateColumn Header="Actividad" Width="70">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="●" Padding="6,0" Background="Transparent" BorderThickness="0"
+                                        Foreground="{StaticResource AccentBrush}" Cursor="Hand"
+                                        Visibility="{Binding HasRecentActivity, Converter={StaticResource BoolToVisibilityConverter}}"
+                                        ToolTip="{Binding RecentActivity, Converter={StaticResource RecentActivityTooltipConverter}}"
+                                        Command="{Binding DataContext.ViewAuditDetailCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTemplateColumn Header="Acciones" Width="90">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>

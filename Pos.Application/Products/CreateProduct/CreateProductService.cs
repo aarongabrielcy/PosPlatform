@@ -2,12 +2,14 @@ using Pos.Application.Authentication;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
 using Pos.Application.Inventory;
+using Pos.Application.ProductAudit;
 using Pos.Application.RegisterSessions;
 using Pos.Domain.Common.Exceptions;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Common.ValueObjects;
 using Pos.Domain.Inventory;
 using Pos.Domain.Products;
+using Pos.Domain.ProductAudit;
 using Pos.Domain.Security;
 
 namespace Pos.Application.Products.CreateProduct;
@@ -18,6 +20,7 @@ public sealed class CreateProductService : ICreateProductService
     private readonly ICurrentRegisterSession _currentRegisterSession;
     private readonly IProductRepository _productRepository;
     private readonly IInventoryItemRepository _inventoryItemRepository;
+    private readonly IProductAuditRepository _productAuditRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
@@ -26,6 +29,7 @@ public sealed class CreateProductService : ICreateProductService
         ICurrentRegisterSession currentRegisterSession,
         IProductRepository productRepository,
         IInventoryItemRepository inventoryItemRepository,
+        IProductAuditRepository productAuditRepository,
         IUnitOfWork unitOfWork,
         IClock clock)
     {
@@ -33,6 +37,7 @@ public sealed class CreateProductService : ICreateProductService
         _currentRegisterSession = currentRegisterSession ?? throw new ArgumentNullException(nameof(currentRegisterSession));
         _productRepository = productRepository ?? throw new ArgumentNullException(nameof(productRepository));
         _inventoryItemRepository = inventoryItemRepository ?? throw new ArgumentNullException(nameof(inventoryItemRepository));
+        _productAuditRepository = productAuditRepository ?? throw new ArgumentNullException(nameof(productAuditRepository));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
@@ -201,6 +206,8 @@ public sealed class CreateProductService : ICreateProductService
             }
         }
 
+        var auditEvent = BuildCreatedAuditEvent(user, product, inventoryItem, now);
+
         await _productRepository.AddAsync(product, cancellationToken);
 
         if (inventoryItem is not null)
@@ -208,8 +215,66 @@ public sealed class CreateProductService : ICreateProductService
             await _inventoryItemRepository.AddAsync(inventoryItem, cancellationToken);
         }
 
+        await _productAuditRepository.AddAsync(auditEvent, cancellationToken);
+
         await _unitOfWork.CommitAsync(cancellationToken);
 
         return CreateProductResult.SuccessResult(product.Id, product.Sku.Value);
+    }
+
+    // Un solo ProductAuditEvent.Created por creación, con un ProductAuditChange por campo
+    // inicial presente (TAREA 24D, sección 10). Barcode/Description/Cost solo se agregan si el
+    // producto los trae; ReorderPoint/InventoryQuantity solo si se creó InventoryItem.
+    private static ProductAuditEvent BuildCreatedAuditEvent(
+        AuthenticatedUser user, Product product, InventoryItem? inventoryItem, DateTimeOffset now)
+    {
+        var changes = new List<(ProductAuditField FieldName, string? OldValue, string? NewValue)>
+        {
+            (ProductAuditField.Sku, null, product.Sku.Value),
+        };
+
+        if (product.Barcode is { } barcode)
+        {
+            changes.Add((ProductAuditField.Barcode, null, barcode.Value));
+        }
+
+        changes.Add((ProductAuditField.Name, null, product.Name));
+
+        if (product.Description is not null)
+        {
+            changes.Add((ProductAuditField.Description, null, product.Description));
+        }
+
+        changes.Add((
+            ProductAuditField.SalePrice,
+            null,
+            ProductAuditValueFormatter.FormatMoney(product.SalePrice.Amount, product.SalePrice.Currency)));
+
+        if (product.Cost is { } cost)
+        {
+            changes.Add((ProductAuditField.Cost, null, ProductAuditValueFormatter.FormatMoney(cost.Amount, cost.Currency)));
+        }
+
+        changes.Add((ProductAuditField.TracksInventory, null, ProductAuditValueFormatter.FormatBool(product.TracksInventory)));
+
+        if (inventoryItem is not null)
+        {
+            changes.Add((
+                ProductAuditField.ReorderPoint, null, ProductAuditValueFormatter.FormatDecimal(inventoryItem.ReorderPoint)));
+            changes.Add((
+                ProductAuditField.InventoryQuantity, null, ProductAuditValueFormatter.FormatDecimal(inventoryItem.Quantity)));
+        }
+
+        return ProductAuditEvent.CreateCreated(
+            ProductAuditEventId.New(),
+            user.OrganizationId,
+            product.Id,
+            user.UserId,
+            user.Username,
+            user.DisplayName,
+            product.Sku.Value,
+            product.Name,
+            now,
+            changes);
     }
 }

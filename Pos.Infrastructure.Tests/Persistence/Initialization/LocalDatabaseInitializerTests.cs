@@ -61,7 +61,28 @@ public sealed class LocalDatabaseInitializerTests : IDisposable
             .Where(name => !name.StartsWith("sqlite_", StringComparison.Ordinal) && name != "__EFMigrationsHistory")
             .ToList();
 
-        Assert.Equal(13, domainTables.Count);
+        var expectedDomainTables = new[]
+        {
+            "branches",
+            "inventory_items",
+            "inventory_movements",
+            "organizations",
+            "payments",
+            "product_audit_changes",
+            "product_audit_events",
+            "products",
+            "register_sessions",
+            "registers",
+            "role_permissions",
+            "roles",
+            "sale_lines",
+            "sales",
+            "users",
+        };
+
+        Assert.Equal(
+            expectedDomainTables.OrderBy(name => name, StringComparer.Ordinal),
+            domainTables.OrderBy(name => name, StringComparer.Ordinal));
         Assert.Contains("__EFMigrationsHistory", tableNames);
 
         Assert.Equal("ok", await RunIntegrityCheckAsync(_pathProvider.DatabasePath));

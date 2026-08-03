@@ -1,3 +1,4 @@
+using Pos.Application.ProductAudit;
 using Pos.Domain.Common.Identifiers;
 
 namespace Pos.Application.Products.ManageProduct;
@@ -28,6 +29,14 @@ public sealed class ProductCatalogItem
 
     public bool IsActive { get; }
 
+    // Indicador de actividad reciente (TAREA 24D, sección 29): null cuando el producto no tuvo
+    // actividad auditable reciente, o cuando el usuario actual no tiene Permission.ViewProductAudit
+    // (ProductManagementService.GetCatalogPageAsync no la resuelve en ese caso: se oculta por
+    // completo, ver sección 34).
+    public ProductRecentActivity? RecentActivity { get; }
+
+    public bool HasRecentActivity => RecentActivity is not null;
+
     public ProductCatalogItem(
         ProductId productId,
         string sku,
@@ -38,7 +47,8 @@ public sealed class ProductCatalogItem
         bool tracksInventory,
         decimal quantity,
         decimal reorderPoint,
-        bool isActive)
+        bool isActive,
+        ProductRecentActivity? recentActivity = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sku);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -54,5 +64,6 @@ public sealed class ProductCatalogItem
         Quantity = quantity;
         ReorderPoint = reorderPoint;
         IsActive = isActive;
+        RecentActivity = recentActivity;
     }
 }

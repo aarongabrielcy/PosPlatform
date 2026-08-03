@@ -21,6 +21,7 @@ public sealed class ProductsViewModel : ViewModelBase
     private readonly AsyncRelayCommand _previousPageCommand;
     private readonly AsyncRelayCommand _newProductCommand;
     private readonly AsyncRelayCommand<ProductCatalogItem> _editProductCommand;
+    private readonly AsyncRelayCommand<ProductCatalogItem> _viewAuditDetailCommand;
 
     private string _searchText = string.Empty;
     private ProductCatalogStatusFilter _selectedFilter = ProductCatalogStatusFilter.All;
@@ -46,6 +47,8 @@ public sealed class ProductsViewModel : ViewModelBase
         _newProductCommand = new AsyncRelayCommand(ExecuteNewProductAsync);
         _editProductCommand = new AsyncRelayCommand<ProductCatalogItem>(
             ExecuteEditProductAsync, item => item is not null && !IsBusy, HandleUnexpectedError);
+        _viewAuditDetailCommand = new AsyncRelayCommand<ProductCatalogItem>(
+            ExecuteViewAuditDetailAsync, item => item is not null && !IsBusy, HandleUnexpectedError);
 
         Products = new ObservableCollection<ProductCatalogItem>();
     }
@@ -55,6 +58,11 @@ public sealed class ProductsViewModel : ViewModelBase
     public event EventHandler? NewProductRequested;
 
     public event EventHandler<ProductId>? EditProductRequested;
+
+    // "Ver detalle" desde el indicador de actividad reciente (TAREA 24D, sección 32/33): el shell
+    // navega a Auditoría > Productos preaplicando el filtro por ProductId, sin abrir ninguna
+    // ventana nueva (no hay ProductHistoryWindow).
+    public event EventHandler<ProductCatalogItem>? AuditRequested;
 
     public ICommand LoadCommand => _loadCommand;
 
@@ -67,6 +75,8 @@ public sealed class ProductsViewModel : ViewModelBase
     public ICommand NewProductCommand => _newProductCommand;
 
     public ICommand EditProductCommand => _editProductCommand;
+
+    public ICommand ViewAuditDetailCommand => _viewAuditDetailCommand;
 
     public ObservableCollection<ProductCatalogItem> Products { get; }
 
@@ -248,6 +258,16 @@ public sealed class ProductsViewModel : ViewModelBase
         if (item is not null)
         {
             EditProductRequested?.Invoke(this, item.ProductId);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private Task ExecuteViewAuditDetailAsync(ProductCatalogItem? item)
+    {
+        if (item is not null)
+        {
+            AuditRequested?.Invoke(this, item);
         }
 
         return Task.CompletedTask;

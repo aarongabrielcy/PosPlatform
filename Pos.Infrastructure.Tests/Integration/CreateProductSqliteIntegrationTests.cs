@@ -68,10 +68,12 @@ public class CreateProductSqliteIntegrationTests
 
         var productRepository = new EfProductRepository(context);
         var inventoryItemRepository = new EfInventoryItemRepository(context);
+        var productAuditRepository = new EfProductAuditRepository(context);
         var clock = new SystemClock();
 
         var createProductService = new CreateProductService(
-            userSession, registerSession, productRepository, inventoryItemRepository, context, clock);
+            userSession, registerSession, productRepository, inventoryItemRepository, productAuditRepository,
+            context, clock);
 
         var cartService = new SalesCartService(
             userSession, registerSession, new InMemoryCurrentSalesCart(), productRepository, inventoryItemRepository);

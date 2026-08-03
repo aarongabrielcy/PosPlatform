@@ -8,4 +8,6 @@ public enum NavigationSection
     Inventory,
     Register,
     Settings,
+    Audit,
+    AuditProducts,
 }

@@ -3,6 +3,7 @@ using Pos.Application.Authentication;
 using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.SalesCart;
+using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
 using Pos.Desktop.Inventory;
 using Pos.Desktop.Main;
@@ -306,6 +307,73 @@ public class MainWindowViewModelTests
         Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.Register);
     }
 
+    // ---------- Auditoría (TAREA 24D, sección 16/23) ----------
+
+    [Fact]
+    public void NavigationItemsIncludeAuditWithProductsChildForAUserWithViewProductAudit()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewProductAuditUser() };
+        var viewModel = CreateViewModel(session: session);
+
+        var auditItem = Assert.Single(viewModel.NavigationItems, i => i.Section == NavigationSection.Audit);
+        Assert.True(auditItem.HasChildren);
+        Assert.Contains(auditItem.Children!, child => child.Section == NavigationSection.AuditProducts);
+    }
+
+    [Fact]
+    public void NavigationItemsExcludeAuditWithoutViewProductAuditPermission()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.DoesNotContain(viewModel.NavigationItems, i => i.Section == NavigationSection.Audit);
+    }
+
+    [Fact]
+    public void SelectingTheAuditParentItemExpandsItsChildWithoutChangingCurrentViewModel()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewProductAuditUser() };
+        var viewModel = CreateViewModel(session: session);
+        var previousViewModel = viewModel.CurrentViewModel;
+        var auditItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Audit);
+
+        viewModel.SelectedNavigationItem = auditItem;
+
+        Assert.Same(previousViewModel, viewModel.CurrentViewModel);
+        Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.AuditProducts);
+    }
+
+    [Fact]
+    public void SelectingTheAuditProductsChildNavigatesToTheProductAuditViewModel()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewProductAuditUser() };
+        var viewModel = CreateViewModel(session: session);
+        var auditItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Audit);
+        viewModel.SelectedNavigationItem = auditItem;
+        var auditProductsItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.AuditProducts);
+
+        viewModel.SelectedNavigationItem = auditProductsItem;
+
+        Assert.IsType<ProductAuditViewModel>(viewModel.CurrentViewModel);
+    }
+
+    [Fact]
+    public void ViewAuditDetailFromProductsAppliesTheProductFilterAndNavigatesToAuditProducts()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewProductAuditUser() };
+        var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
+        var viewModel = CreateViewModel(session: session, productsViewModel: productsViewModel);
+        var item = new ProductCatalogItem(
+            ProductId.New(), "SKU-001", null, "Agua 1L", 10m, "MXN", true, 5m, 2m, true);
+
+        productsViewModel.ViewAuditDetailCommand.Execute(item);
+
+        var auditViewModel = Assert.IsType<ProductAuditViewModel>(viewModel.CurrentViewModel);
+        Assert.True(auditViewModel.HasProductFilter);
+        Assert.Equal("Producto: SKU-001", auditViewModel.ProductFilterLabel);
+        Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.AuditProducts);
+    }
+
     [Fact]
     public void SelectingProductsChangesCurrentViewModelToTheProductsViewModel()
     {
@@ -471,10 +539,11 @@ public class MainWindowViewModelTests
         var inventoryViewModel = new InventoryViewModel();
         registerViewModel ??= new RegisterViewModel(registerSession);
         var settingsViewModel = new SettingsViewModel();
+        var productAuditViewModel = new ProductAuditViewModel(new FakeProductAuditService());
 
         return new MainWindowViewModel(
             session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
-            inventoryViewModel, registerViewModel, settingsViewModel);
+            inventoryViewModel, registerViewModel, settingsViewModel, productAuditViewModel);
     }
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>
@@ -496,6 +565,16 @@ public class MainWindowViewModelTests
             "Ana Pérez",
             "Gerente",
             [Permission.ProcessSale, Permission.ManageProducts]);
+
+    private static AuthenticatedUser CreateViewProductAuditUser() =>
+        new(
+            UserId.New(),
+            OrganizationId.New(),
+            RoleId.New(),
+            "ADMIN",
+            "Admin Uno",
+            "Administrador",
+            [Permission.ProcessSale, Permission.ManageProducts, Permission.ViewProductAudit]);
 
     private static ActiveRegisterSession CreateActiveRegisterSession() =>
         new(

@@ -268,4 +268,28 @@ public class ProductsViewModelTests
         Assert.Equal("SKU-EDITED", service.LastSearchTerm);
         Assert.Single(viewModel.Products);
     }
+
+    // ---------- Ver detalle de auditoría (TAREA 24D, sección 32/33) ----------
+
+    [Fact]
+    public void ViewAuditDetailCommandCannotExecuteWithoutAnItem()
+    {
+        var viewModel = new ProductsViewModel(new FakeProductManagementService());
+
+        Assert.False(viewModel.ViewAuditDetailCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void ViewAuditDetailCommandRaisesAuditRequestedWithTheSelectedItem()
+    {
+        var item = CreateItem();
+        var viewModel = new ProductsViewModel(new FakeProductManagementService());
+
+        ProductCatalogItem? raisedItem = null;
+        viewModel.AuditRequested += (_, catalogItem) => raisedItem = catalogItem;
+
+        viewModel.ViewAuditDetailCommand.Execute(item);
+
+        Assert.Same(item, raisedItem);
+    }
 }

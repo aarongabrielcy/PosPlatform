@@ -3,8 +3,10 @@ using System.Globalization;
 using System.Linq;
 using System.Windows.Input;
 using Pos.Application.Authentication;
+using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.SalesCart;
+using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Common;
 using Pos.Desktop.Dashboard;
 using Pos.Desktop.Inventory;
@@ -37,9 +39,15 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly InventoryViewModel _inventoryViewModel;
     private readonly RegisterViewModel _registerViewModel;
     private readonly SettingsViewModel _settingsViewModel;
+    private readonly ProductAuditViewModel _productAuditViewModel;
     private readonly AsyncRelayCommand _logoutCommand;
     private readonly AsyncRelayCommand _closeRegisterCommand;
     private readonly AsyncRelayCommand _toggleSidebarCommand;
+
+    // Solo Auditoría tiene submenú hoy (TAREA 24D, sección 23): un HashSet generaliza sin
+    // introducir una estructura de árbol completa que ningún otro ítem necesita todavía.
+    private readonly HashSet<NavigationSection> _expandedSections = [];
+    private IReadOnlyList<NavigationItem> _topLevelNavigationItems = Array.Empty<NavigationItem>();
 
     private string? _logoutBlockedMessage;
     private string? _closeRegisterBlockedMessage;
@@ -62,7 +70,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         ProductsViewModel productsViewModel,
         InventoryViewModel inventoryViewModel,
         RegisterViewModel registerViewModel,
-        SettingsViewModel settingsViewModel)
+        SettingsViewModel settingsViewModel,
+        ProductAuditViewModel productAuditViewModel)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _registerSession = registerSession ?? throw new ArgumentNullException(nameof(registerSession));
@@ -73,6 +82,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         _inventoryViewModel = inventoryViewModel ?? throw new ArgumentNullException(nameof(inventoryViewModel));
         _registerViewModel = registerViewModel ?? throw new ArgumentNullException(nameof(registerViewModel));
         _settingsViewModel = settingsViewModel ?? throw new ArgumentNullException(nameof(settingsViewModel));
+        _productAuditViewModel = productAuditViewModel ?? throw new ArgumentNullException(nameof(productAuditViewModel));
 
         _logoutCommand = new AsyncRelayCommand(ExecuteLogoutAsync);
         _closeRegisterCommand = new AsyncRelayCommand(ExecuteCloseRegisterAsync);
@@ -84,9 +94,12 @@ public sealed class MainWindowViewModel : ViewModelBase
         _salesViewModel.CheckoutRequested += OnSalesCheckoutRequested;
         _productsViewModel.NewProductRequested += OnProductsNewProductRequested;
         _productsViewModel.EditProductRequested += OnProductsEditProductRequested;
+        _productsViewModel.AuditRequested += OnProductsAuditRequested;
         _registerViewModel.CloseRegisterRequested += OnRegisterViewCloseRegisterRequested;
 
-        NavigationItems = new ObservableCollection<NavigationItem>(BuildNavigationItems());
+        _topLevelNavigationItems = BuildNavigationItems().ToList();
+        NavigationItems = new ObservableCollection<NavigationItem>();
+        RebuildVisibleNavigationItems();
         _currentViewModel = _dashboardViewModel;
 
         if (NavigationItems.FirstOrDefault() is { } firstItem)
@@ -174,6 +187,16 @@ public sealed class MainWindowViewModel : ViewModelBase
         get => _selectedNavigationItem;
         set
         {
+            // Un ítem con hijos (Auditoría) nunca navega directamente: solo expande/colapsa su
+            // submenú (TAREA 24D, sección 23). Se revierte la selección visual del ListBox
+            // notificando el getter sin cambiar _selectedNavigationItem.
+            if (value is not null && value.HasChildren)
+            {
+                ToggleExpanded(value.Section);
+                OnPropertyChanged(nameof(SelectedNavigationItem));
+                return;
+            }
+
             if (SetProperty(ref _selectedNavigationItem, value))
             {
                 OnPropertyChanged(nameof(CurrentNavigationTitle));
@@ -205,6 +228,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             NavigationSection.Inventory => _inventoryViewModel,
             NavigationSection.Register => _registerViewModel,
             NavigationSection.Settings => _settingsViewModel,
+            NavigationSection.AuditProducts => _productAuditViewModel,
             _ => _dashboardViewModel,
         };
 
@@ -219,6 +243,41 @@ public sealed class MainWindowViewModel : ViewModelBase
         if (section == NavigationSection.Dashboard && _dashboardViewModel.LoadCommand.CanExecute(null))
         {
             _dashboardViewModel.LoadCommand.Execute(null);
+        }
+
+        if (section == NavigationSection.AuditProducts && _productAuditViewModel.LoadCommand.CanExecute(null))
+        {
+            _productAuditViewModel.LoadCommand.Execute(null);
+        }
+    }
+
+    // Único ítem con submenú hoy (Auditoría): expandir/colapsar reconstruye la lista visible
+    // insertando los hijos justo después de su padre (TAREA 24D, sección 23).
+    private void ToggleExpanded(NavigationSection section)
+    {
+        if (!_expandedSections.Remove(section))
+        {
+            _expandedSections.Add(section);
+        }
+
+        RebuildVisibleNavigationItems();
+    }
+
+    private void RebuildVisibleNavigationItems()
+    {
+        NavigationItems.Clear();
+
+        foreach (var item in _topLevelNavigationItems)
+        {
+            NavigationItems.Add(item);
+
+            if (item.HasChildren && _expandedSections.Contains(item.Section))
+            {
+                foreach (var child in item.Children!)
+                {
+                    NavigationItems.Add(child);
+                }
+            }
         }
     }
 
@@ -277,6 +336,16 @@ public sealed class MainWindowViewModel : ViewModelBase
         if (user.HasPermission(Permission.ManageUsers))
         {
             yield return new NavigationItem(NavigationSection.Settings, "Configuración");
+        }
+
+        // Auditoría > Productos: visible únicamente con ViewProductAudit, nunca por RoleName
+        // (TAREA 24D, sección 16/23).
+        if (user.HasPermission(Permission.ViewProductAudit))
+        {
+            yield return new NavigationItem(NavigationSection.Audit, "Auditoría",
+            [
+                new NavigationItem(NavigationSection.AuditProducts, "Productos"),
+            ]);
         }
     }
 
@@ -337,6 +406,24 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         _pendingEditProductSource = _productsViewModel;
         EditProductRequested?.Invoke(this, productId);
+    }
+
+    // "Ver detalle" desde el indicador de actividad reciente (TAREA 24D, sección 32/33): preaplica
+    // el filtro por ProductId en ProductAuditViewModel antes de navegar, expandiendo Auditoría si
+    // hiciera falta. No abre ninguna ventana nueva.
+    private void OnProductsAuditRequested(object? sender, ProductCatalogItem item)
+    {
+        _productAuditViewModel.ApplyProductFilter(item.ProductId, item.Sku);
+
+        if (_expandedSections.Add(NavigationSection.Audit))
+        {
+            RebuildVisibleNavigationItems();
+        }
+
+        if (NavigationItems.FirstOrDefault(i => i.Section == NavigationSection.AuditProducts) is { } auditProductsItem)
+        {
+            SelectedNavigationItem = auditProductsItem;
+        }
     }
 
     // Llamado desde App.xaml.cs tras crear un producto exitosamente en CreateProductWindow:

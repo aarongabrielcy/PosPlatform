@@ -9,6 +9,7 @@ using Pos.Application.Common.Time;
 using Pos.Application.Installation;
 using Pos.Application.Inventory;
 using Pos.Application.Organizations;
+using Pos.Application.ProductAudit;
 using Pos.Application.Products;
 using Pos.Application.Products.CreateProduct;
 using Pos.Application.Products.ManageProduct;
@@ -58,6 +59,9 @@ public static class DependencyInjection
         services.AddScoped<IRegisterSessionRepository, EfRegisterSessionRepository>();
         services.AddScoped<ICreateProductService, CreateProductService>();
         services.AddScoped<IProductManagementService, ProductManagementService>();
+        services.AddScoped<IProductAuditRepository, EfProductAuditRepository>();
+        services.AddScoped<IProductAuditQuery, EfProductAuditQuery>();
+        services.AddScoped<IProductAuditService, ProductAuditService>();
 
         services.AddScoped<IInitialBusinessBootstrapService, InitialBusinessBootstrapService>();
         services.AddScoped<IInstallationStateService, InstallationStateService>();
