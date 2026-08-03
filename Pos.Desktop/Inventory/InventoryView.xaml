@@ -20,7 +20,7 @@
 
         <StackPanel Grid.Row="0" Margin="0,0,0,16">
             <TextBlock Text="Inventario" Style="{StaticResource PageTitleStyle}" />
-            <TextBlock Text="Existencia, punto de reorden y ajustes de inventario se administran desde Productos."
+            <TextBlock Text="Existencia, stock mínimo y ajustes de inventario se administran desde Productos."
                        Style="{StaticResource PageSubtitleStyle}" />
         </StackPanel>
 

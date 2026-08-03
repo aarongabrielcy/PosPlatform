@@ -293,9 +293,9 @@ public sealed partial class EditProductViewModel : ViewModelBase
         {
             if (!TryParseNonNegative(
                     ReorderPointText,
-                    "El punto de reorden es obligatorio.",
-                    "El punto de reorden no es un valor válido.",
-                    "El punto de reorden no puede ser negativo.",
+                    "El stock mínimo es obligatorio.",
+                    "El stock mínimo no es un valor válido.",
+                    "El stock mínimo no puede ser negativo.",
                     out var reorderPointValue, out var reorderPointError))
             {
                 GeneralError = reorderPointError;
@@ -434,7 +434,7 @@ public sealed partial class EditProductViewModel : ViewModelBase
         UpdateProductResultStatus.InvalidBarcode => "El código de barras no es válido.",
         UpdateProductResultStatus.InvalidSalePrice => "El precio de venta no es válido.",
         UpdateProductResultStatus.InvalidCost => "El costo no es válido.",
-        UpdateProductResultStatus.InvalidReorderPoint => "El punto de reorden no es válido.",
+        UpdateProductResultStatus.InvalidReorderPoint => "El stock mínimo no es válido.",
         UpdateProductResultStatus.DuplicateSku => "Ya existe otro producto con ese SKU.",
         UpdateProductResultStatus.DuplicateBarcode => "Ya existe otro producto con ese código de barras.",
         _ => "Ocurrió un error inesperado. Intente nuevamente.",

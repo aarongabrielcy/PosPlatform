@@ -41,11 +41,9 @@
 
             <TextBox x:Name="SearchTextBox" Grid.Column="0" Padding="8" VerticalContentAlignment="Center"
                      BorderBrush="{StaticResource BorderBrush}"
-                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
-                <TextBox.InputBindings>
-                    <KeyBinding Key="Return" Command="{Binding SearchCommand}" />
-                </TextBox.InputBindings>
-            </TextBox>
+                     ToolTip="Buscar por nombre, SKU o código de barras"
+                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                     PreviewKeyDown="OnSearchTextBoxPreviewKeyDown" />
 
             <Button x:Name="SearchButton" Grid.Column="1" Content="Buscar" Margin="8,0,0,0"
                     Style="{StaticResource PrimaryButtonStyle}" Command="{Binding SearchCommand}" />

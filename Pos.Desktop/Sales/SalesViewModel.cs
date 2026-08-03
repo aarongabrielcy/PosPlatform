@@ -31,6 +31,7 @@ public sealed class SalesViewModel : ViewModelBase
     private readonly AsyncRelayCommand _newProductCommand;
     private readonly AsyncRelayCommand _editProductCommand;
     private readonly AsyncRelayCommand _checkoutCommand;
+    private readonly TimeSpan _searchDebounceDelay;
 
     private string _searchText = string.Empty;
     private string? _searchStatusMessage;
@@ -44,19 +45,22 @@ public sealed class SalesViewModel : ViewModelBase
     private bool _isBusy;
     private string? _generalError;
     private bool _hasItems;
+    private CancellationTokenSource? _searchCts;
 
     public SalesViewModel(
         ICurrentUserSession session,
         ICurrentRegisterSession currentRegisterSession,
         ISalesCartService salesCartService,
         IProductManagementService productManagementService,
-        ICurrentSalesCart currentSalesCart)
+        ICurrentSalesCart currentSalesCart,
+        TimeSpan? searchDebounceDelay = null)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _currentRegisterSession = currentRegisterSession ?? throw new ArgumentNullException(nameof(currentRegisterSession));
         _salesCartService = salesCartService ?? throw new ArgumentNullException(nameof(salesCartService));
         _productManagementService = productManagementService ?? throw new ArgumentNullException(nameof(productManagementService));
         _currentSalesCart = currentSalesCart ?? throw new ArgumentNullException(nameof(currentSalesCart));
+        _searchDebounceDelay = searchDebounceDelay ?? TimeSpan.FromMilliseconds(250);
 
         _searchCommand = new AsyncRelayCommand(ExecuteSearchAsync, onError: HandleUnexpectedError);
         _addSelectedProductCommand = new AsyncRelayCommand(
@@ -91,6 +95,11 @@ public sealed class SalesViewModel : ViewModelBase
     // CheckoutWindow directamente, solo pide abrirla. El checkout en sí (crear Sale, descontar
     // inventario, etc.) vive por completo en ICheckoutService, nunca aquí.
     public event EventHandler? CheckoutRequested;
+
+    // El ViewModel nunca conoce TextBox/Keyboard: solo pide que el foco regrese al buscador tras
+    // agregar un producto exitosamente (TAREA 24F, sección 13). SalesView es quien decide cómo
+    // enfocar (SearchBox.Focus()/Keyboard.Focus()).
+    public event EventHandler? SearchFocusRequested;
 
     public ICommand SearchCommand => _searchCommand;
 
@@ -133,9 +142,15 @@ public sealed class SalesViewModel : ViewModelBase
                 // Un término nuevo invalida el mensaje del resultado anterior: evita mostrar
                 // "No se encontraron productos" mientras el usuario ya está escribiendo otra cosa.
                 SearchStatusMessage = null;
+                ScheduleDebouncedSearch();
             }
         }
     }
+
+    // Expone la búsqueda en curso (inmediata o con debounce) para que las pruebas puedan esperar
+    // de forma determinista sin depender de Thread.Sleep/delays reales (TAREA 24F, sección 27).
+    // No tiene otro consumidor: la UI no la observa.
+    internal Task PendingSearchTask { get; private set; } = Task.CompletedTask;
 
     public string? SearchStatusMessage
     {
@@ -266,19 +281,89 @@ public sealed class SalesViewModel : ViewModelBase
     // vacío, totales en cero) en la UI, igual que ConfirmCancelSale.
     public void ApplyCheckoutCompleted() => ApplySnapshot(_currentSalesCart.Snapshot);
 
+    // Búsqueda inmediata (Enter/botón Buscar, TAREA 24F sección 7): cancela cualquier debounce
+    // pendiente y ejecuta la consulta sin esperar. AsyncRelayCommand espera este Task, así que al
+    // volver de Execute() los resultados ya están aplicados (igual que antes de introducir
+    // search-as-you-type).
     private async Task ExecuteSearchAsync()
     {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+
         var trimmedSearchText = SearchText.Trim();
 
         if (trimmedSearchText.Length == 0)
         {
+            _searchCts = null;
             SearchResults.Clear();
+            SelectedSearchResult = null;
             SearchStatusMessage = "Escribe un SKU, código de barras o nombre para buscar.";
             GeneralError = null;
+            PendingSearchTask = Task.CompletedTask;
 
             return;
         }
 
+        var cts = new CancellationTokenSource();
+        _searchCts = cts;
+        var task = RunSearchCoreAsync(trimmedSearchText, cts.Token);
+        PendingSearchTask = task;
+
+        try
+        {
+            await task;
+        }
+        catch (OperationCanceledException)
+        {
+            // Una búsqueda más reciente reemplazó a esta: no es un error que deba mostrarse.
+        }
+    }
+
+    // Búsqueda con debounce (TAREA 24F sección 3-4): se dispara desde el setter de SearchText.
+    // Cancela la búsqueda/debounce anterior (CancellationTokenSource) para que resultados viejos
+    // nunca sobrescriban a los nuevos, sin importar el orden en que terminen las consultas.
+    private void ScheduleDebouncedSearch()
+    {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+
+        var trimmedSearchText = SearchText.Trim();
+
+        if (trimmedSearchText.Length == 0)
+        {
+            _searchCts = null;
+            SearchResults.Clear();
+            SelectedSearchResult = null;
+            GeneralError = null;
+            PendingSearchTask = Task.CompletedTask;
+
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _searchCts = cts;
+        PendingSearchTask = RunDebouncedSearchAsync(trimmedSearchText, cts.Token);
+    }
+
+    private async Task RunDebouncedSearchAsync(string trimmedSearchText, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(_searchDebounceDelay, cancellationToken);
+            await RunSearchCoreAsync(trimmedSearchText, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Un nuevo carácter escrito canceló este debounce: comportamiento esperado, no un error.
+        }
+    }
+
+    // Lógica de consulta compartida por la búsqueda inmediata y la de debounce. Vuelve a validar
+    // la cancelación después de esperar la consulta (ThrowIfCancellationRequested) porque los
+    // fakes/servicios no siempre observan el CancellationToken: así una respuesta tardía de un
+    // término viejo nunca reemplaza los resultados de un término más nuevo (TAREA 24F sección 4).
+    private async Task RunSearchCoreAsync(string trimmedSearchText, CancellationToken cancellationToken)
+    {
         IsSearching = true;
 
         try
@@ -287,8 +372,10 @@ public sealed class SalesViewModel : ViewModelBase
             // (y el propio carrito de venta) siempre buscan exclusivamente productos activos a
             // través de SalesCartService.
             var results = IncludeInactive && CanManageProducts
-                ? await _productManagementService.SearchAsync(SearchText, includeInactive: true)
-                : await _salesCartService.SearchProductsAsync(SearchText);
+                ? await _productManagementService.SearchAsync(trimmedSearchText, includeInactive: true, cancellationToken)
+                : await _salesCartService.SearchProductsAsync(trimmedSearchText, cancellationToken);
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             SearchResults.Clear();
 
@@ -304,11 +391,19 @@ public sealed class SalesViewModel : ViewModelBase
                 _ => $"{results.Count} productos encontrados.",
             };
 
+            // Selección automática cuando la búsqueda resulta en un único producto (TAREA 24F
+            // sección 8): cubre tanto el lector de código de barras (SKU/barcode exacto + Enter)
+            // como escribir hasta dejar un solo resultado. Nunca agrega al carrito por sí sola.
+            SelectedSearchResult = SearchResults.Count == 1 ? SearchResults[0] : null;
+
             GeneralError = null;
         }
         finally
         {
-            IsSearching = false;
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                IsSearching = false;
+            }
         }
     }
 
@@ -327,11 +422,28 @@ public sealed class SalesViewModel : ViewModelBase
         {
             var result = await _salesCartService.AddProductAsync(new AddProductToCartRequest(selected.ProductId));
             ApplyResult(result);
+
+            // Solo se limpia la búsqueda cuando Add fue exitoso (TAREA 24F sección 12): si falla
+            // (stock insuficiente, producto inválido, etc.) el cajero necesita seguir viendo qué
+            // producto intentó agregar.
+            if (result.Success)
+            {
+                ClearSearchAfterAdd();
+            }
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    // TAREA 24F sección 11/13: tras agregar exitosamente, limpiar buscador/resultados/selección y
+    // pedir que el foco regrese al SearchBox. Reutiliza el mismo camino "vacío" de
+    // ScheduleDebouncedSearch (a través del setter de SearchText) para no duplicar esa limpieza.
+    private void ClearSearchAfterAdd()
+    {
+        SearchText = string.Empty;
+        SearchFocusRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private async Task ExecuteIncreaseQuantityAsync(SalesCartLine? line)

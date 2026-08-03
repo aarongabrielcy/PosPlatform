@@ -163,6 +163,90 @@ public class SalesViewModelTests
         Assert.Contains("2", viewModel.GeneralError);
     }
 
+    // ---------- Search-as-you-type / debounce / race conditions (TAREA 24F) ----------
+
+    [Fact]
+    public async Task SettingSearchTextSchedulesADebouncedSearchThatPopulatesResults()
+    {
+        var searchResult = CreateSearchResult();
+        var salesCartService = new FakeSalesCartService(
+            searchHandler: (_, _) => Task.FromResult<IReadOnlyList<ProductSearchResult>>([searchResult]));
+        var viewModel = CreateViewModel(salesCartService: salesCartService, searchDebounceDelay: TimeSpan.Zero);
+
+        viewModel.SearchText = "agua";
+        await viewModel.PendingSearchTask;
+
+        Assert.Single(viewModel.SearchResults);
+        Assert.Equal(1, salesCartService.SearchCallCount);
+        Assert.Equal("agua", salesCartService.LastSearchTerm);
+    }
+
+    [Fact]
+    public void ClearingSearchTextCancelsThePendingDebounceAndClearsImmediately()
+    {
+        var salesCartService = new FakeSalesCartService(
+            searchHandler: (_, _) => Task.FromResult<IReadOnlyList<ProductSearchResult>>([CreateSearchResult()]));
+        // Delay real (no TimeSpan.Zero): si el debounce no se cancela, no alcanzaría a ejecutar la
+        // consulta durante la prueba, así que un SearchCallCount de 0 confirma la cancelación
+        // (y no solo que "todavía no terminó").
+        var viewModel = CreateViewModel(salesCartService: salesCartService, searchDebounceDelay: TimeSpan.FromMilliseconds(250));
+        viewModel.SearchText = "agua";
+        viewModel.SelectedSearchResult = CreateSearchResult();
+
+        viewModel.SearchText = string.Empty;
+
+        Assert.Empty(viewModel.SearchResults);
+        Assert.Null(viewModel.SelectedSearchResult);
+        Assert.Equal(0, salesCartService.SearchCallCount);
+    }
+
+    [Fact]
+    public void SearchCommandCancelsThePendingDebounceAndSearchesImmediately()
+    {
+        var salesCartService = new FakeSalesCartService(
+            searchHandler: (_, _) => Task.FromResult<IReadOnlyList<ProductSearchResult>>([CreateSearchResult()]));
+        var viewModel = CreateViewModel(salesCartService: salesCartService, searchDebounceDelay: TimeSpan.FromMilliseconds(250));
+
+        viewModel.SearchText = "agua";
+        viewModel.SearchCommand.Execute(null);
+
+        Assert.Single(viewModel.SearchResults);
+        Assert.Equal(1, salesCartService.SearchCallCount);
+    }
+
+    [Fact]
+    public async Task ANewerSearchDiscardsAStaleResponseFromAnOlderSearchThatFinishesLater()
+    {
+        var oldQueryStarted = new TaskCompletionSource();
+        var oldQueryResult = new TaskCompletionSource<IReadOnlyList<ProductSearchResult>>();
+        var salesCartService = new FakeSalesCartService(searchHandler: (term, _) =>
+        {
+            if (term == "a")
+            {
+                oldQueryStarted.TrySetResult();
+                return oldQueryResult.Task;
+            }
+
+            return Task.FromResult<IReadOnlyList<ProductSearchResult>>([CreateSearchResult(sku: "SKU-AG", name: "Agua 1L")]);
+        });
+        var viewModel = CreateViewModel(salesCartService: salesCartService, searchDebounceDelay: TimeSpan.Zero);
+
+        viewModel.SearchText = "a";
+        var staleSearchTask = viewModel.PendingSearchTask;
+        await oldQueryStarted.Task;
+
+        viewModel.SearchText = "ag";
+        await viewModel.PendingSearchTask;
+
+        Assert.Equal("SKU-AG", viewModel.SearchResults.Single().Sku);
+
+        // La respuesta de "a" llega después de que "ag" ya se aplicó: no debe reemplazar nada.
+        oldQueryResult.SetResult([CreateSearchResult(sku: "SKU-OLD-A", name: "Vieja")]);
+        await staleSearchTask;
+
+        Assert.Equal("SKU-AG", viewModel.SearchResults.Single().Sku);
+    }
+
     // ---------- Agregar / totales ----------
 
     [Fact]
@@ -179,6 +263,46 @@ public class SalesViewModelTests
         Assert.True(viewModel.HasItems);
         Assert.Contains("MXN", viewModel.GrandTotal);
         Assert.Equal(1, salesCartService.AddCallCount);
+    }
+
+    [Fact]
+    public void AddingAProductSuccessfullyClearsSearchTextResultsAndSelectionAndRequestsFocus()
+    {
+        var salesCartService = new FakeSalesCartService(
+            addHandler: (_, _) => Task.FromResult(SalesCartResult.SuccessResult(CreateSnapshotWithOneLine())));
+        var viewModel = CreateViewModel(salesCartService: salesCartService);
+        viewModel.SearchText = "agua";
+        viewModel.SelectedSearchResult = CreateSearchResult();
+
+        var focusRequested = false;
+        viewModel.SearchFocusRequested += (_, _) => focusRequested = true;
+
+        viewModel.AddSelectedProductCommand.Execute(null);
+
+        Assert.Equal(string.Empty, viewModel.SearchText);
+        Assert.Empty(viewModel.SearchResults);
+        Assert.Null(viewModel.SelectedSearchResult);
+        Assert.True(focusRequested);
+    }
+
+    [Fact]
+    public void AddingAProductThatFailsKeepsSearchTextAndSelectionAndDoesNotRequestFocus()
+    {
+        var salesCartService = new FakeSalesCartService(
+            addHandler: (_, _) => Task.FromResult(SalesCartResult.Failure(SalesCartResultStatus.InsufficientStock, 2m)));
+        var viewModel = CreateViewModel(salesCartService: salesCartService);
+        var selected = CreateSearchResult();
+        viewModel.SearchText = "agua";
+        viewModel.SelectedSearchResult = selected;
+
+        var focusRequested = false;
+        viewModel.SearchFocusRequested += (_, _) => focusRequested = true;
+
+        viewModel.AddSelectedProductCommand.Execute(null);
+
+        Assert.Equal("agua", viewModel.SearchText);
+        Assert.Equal(selected, viewModel.SelectedSearchResult);
+        Assert.False(focusRequested);
     }
 
     [Fact]
@@ -608,13 +732,15 @@ public class SalesViewModelTests
         FakeCurrentRegisterSession? currentRegisterSession = null,
         FakeSalesCartService? salesCartService = null,
         FakeProductManagementService? productManagementService = null,
-        FakeCurrentSalesCart? currentSalesCart = null) =>
+        FakeCurrentSalesCart? currentSalesCart = null,
+        TimeSpan? searchDebounceDelay = null) =>
         new(
             session ?? new FakeCurrentUserSession(),
             currentRegisterSession ?? new FakeCurrentRegisterSession(),
             salesCartService ?? new FakeSalesCartService(),
             productManagementService ?? new FakeProductManagementService(),
-            currentSalesCart ?? new FakeCurrentSalesCart());
+            currentSalesCart ?? new FakeCurrentSalesCart(),
+            searchDebounceDelay);
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>
         new(
@@ -636,8 +762,9 @@ public class SalesViewModelTests
             "Gerente",
             [Permission.ProcessSale, Permission.ManageProducts]);
 
-    private static ProductSearchResult CreateSearchResult(bool isAvailable = true) =>
-        new(ProductId.New(), "SKU-001", "Agua 1L", 10m, "MXN", isAvailable ? 5m : 0m, true);
+    private static ProductSearchResult CreateSearchResult(
+        bool isAvailable = true, string sku = "SKU-001", string name = "Agua 1L") =>
+        new(ProductId.New(), sku, name, 10m, "MXN", isAvailable ? 5m : 0m, true);
 
     private static SalesCartLine CreateCartLine(decimal quantity = 1m) =>
         new(ProductId.New(), "SKU-001", "Agua 1L", quantity, 10m, 10m * quantity, "MXN", 5m, true);
