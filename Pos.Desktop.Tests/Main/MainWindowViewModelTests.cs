@@ -1,8 +1,11 @@
 using System.Linq;
+using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
+using Pos.Application.ProductAudit;
 using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.SalesCart;
+using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
 using Pos.Desktop.Inventory;
@@ -12,8 +15,10 @@ using Pos.Desktop.Register;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Settings;
 using Pos.Domain.Common.Identifiers;
+using Pos.Domain.ProductAudit;
 using Pos.Domain.Security;
 using CatalogFakeProductManagementService = Pos.Desktop.Tests.Products.Catalog.FakeProductManagementService;
+using FakeAdministrativeNotificationService = Pos.Desktop.Tests.AdministrativeNotifications.FakeAdministrativeNotificationService;
 
 namespace Pos.Desktop.Tests.Main;
 
@@ -374,6 +379,102 @@ public class MainWindowViewModelTests
         Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.AuditProducts);
     }
 
+    // ---------- Centro de notificaciones (TAREA 24E, sección 29/30) ----------
+
+    [Fact]
+    public void CanViewNotificationsIsTrueWithViewProductAuditPermission()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewProductAuditUser() };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.True(viewModel.CanViewNotifications);
+    }
+
+    [Fact]
+    public void CanViewNotificationsIsFalseWithoutViewProductAuditPermission()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.False(viewModel.CanViewNotifications);
+    }
+
+    // Click en una notificación: navega a Auditoría > Productos y selecciona exactamente el
+    // AuditEvent referenciado, nunca "el más reciente del producto" (TAREA 24E, sección 30/47).
+    [Fact]
+    public async Task OpeningANotificationNavigatesToAuditProductsWithTheExactAuditEventFilter()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewProductAuditUser() };
+        var productId = ProductId.New();
+        var auditEventId = ProductAuditEventId.New();
+        var item = new AdministrativeNotificationItem(
+            AdministrativeNotificationId.New(), auditEventId, productId, "SKU-001", "Agua 1L", "Administrador",
+            ProductAuditAction.Updated, new DateTimeOffset(2026, 8, 2, 14, 22, 0, TimeSpan.Zero), null,
+            [new ProductAuditFieldChange(ProductAuditField.SalePrice, "MXN 25.00", "MXN 27.50")]);
+        var notificationService = new FakeAdministrativeNotificationService
+        {
+            PageResult = new AdministrativeNotificationPageResult([item], false),
+        };
+        var productAuditService = new FakeProductAuditService();
+        var viewModel = CreateViewModel(session: session, notificationService: notificationService, productAuditService: productAuditService);
+
+        viewModel.NotificationCenterViewModel.ToggleCommand.Execute(null);
+        await Task.Yield();
+        var row = Assert.Single(viewModel.NotificationCenterViewModel.Notifications);
+
+        viewModel.NotificationCenterViewModel.OpenNotificationCommand.Execute(row);
+        await Task.Yield();
+
+        var auditViewModel = Assert.IsType<ProductAuditViewModel>(viewModel.CurrentViewModel);
+        Assert.True(auditViewModel.HasProductFilter);
+        Assert.Equal("Producto: SKU-001", auditViewModel.ProductFilterLabel);
+        Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.AuditProducts);
+
+        // ApplySection dispara LoadCommand al navegar: el filtro ya viajó hasta el query real.
+        Assert.Equal(auditEventId, productAuditService.LastFilter!.AuditEventId);
+        Assert.Equal(productId, productAuditService.LastFilter.ProductId);
+    }
+
+    // ---------- Refresh del badge tras operaciones locales de Producto (TAREA 24E, sección 32/33) ----------
+
+    [Fact]
+    public void ApplyProductCreatedRefreshesTheUnreadCount()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+        var notificationService = new FakeAdministrativeNotificationService();
+        var viewModel = CreateViewModel(session: session, notificationService: notificationService);
+        var callsAfterConstruction = notificationService.GetUnreadCountCallCount;
+
+        viewModel.ApplyProductCreated("SKU-NEW");
+
+        Assert.True(notificationService.GetUnreadCountCallCount > callsAfterConstruction);
+    }
+
+    [Fact]
+    public void ApplyProductUpdatedRefreshesTheUnreadCount()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+        var notificationService = new FakeAdministrativeNotificationService();
+        var viewModel = CreateViewModel(session: session, notificationService: notificationService);
+        var callsAfterConstruction = notificationService.GetUnreadCountCallCount;
+
+        viewModel.ApplyProductUpdated("SKU-EDITED");
+
+        Assert.True(notificationService.GetUnreadCountCallCount > callsAfterConstruction);
+    }
+
+    [Fact]
+    public void ConstructingTheShellLoadsTheInitialUnreadCountWithoutPolling()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewProductAuditUser() };
+        var notificationService = new FakeAdministrativeNotificationService { UnreadCount = 2 };
+
+        var viewModel = CreateViewModel(session: session, notificationService: notificationService);
+
+        Assert.Equal(2, viewModel.NotificationCenterViewModel.UnreadCount);
+        Assert.Equal(1, notificationService.GetUnreadCountCallCount);
+    }
+
     [Fact]
     public void SelectingProductsChangesCurrentViewModelToTheProductsViewModel()
     {
@@ -528,7 +629,9 @@ public class MainWindowViewModelTests
         DashboardViewModel? dashboardViewModel = null,
         SalesViewModel? salesViewModel = null,
         ProductsViewModel? productsViewModel = null,
-        RegisterViewModel? registerViewModel = null)
+        RegisterViewModel? registerViewModel = null,
+        FakeAdministrativeNotificationService? notificationService = null,
+        FakeProductAuditService? productAuditService = null)
     {
         session ??= new FakeCurrentUserSession();
         registerSession ??= new FakeCurrentRegisterSession();
@@ -539,11 +642,12 @@ public class MainWindowViewModelTests
         var inventoryViewModel = new InventoryViewModel();
         registerViewModel ??= new RegisterViewModel(registerSession);
         var settingsViewModel = new SettingsViewModel();
-        var productAuditViewModel = new ProductAuditViewModel(new FakeProductAuditService());
+        var productAuditViewModel = new ProductAuditViewModel(productAuditService ?? new FakeProductAuditService());
+        var notificationCenterViewModel = new NotificationCenterViewModel(notificationService ?? new FakeAdministrativeNotificationService());
 
         return new MainWindowViewModel(
             session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
-            inventoryViewModel, registerViewModel, settingsViewModel, productAuditViewModel);
+            inventoryViewModel, registerViewModel, settingsViewModel, productAuditViewModel, notificationCenterViewModel);
     }
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>

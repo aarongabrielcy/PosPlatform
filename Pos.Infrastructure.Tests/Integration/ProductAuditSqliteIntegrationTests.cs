@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Common.Time;
 using Pos.Application.ProductAudit;
@@ -96,9 +97,12 @@ public class ProductAuditSqliteIntegrationTests
             userSession, registerSession, productRepository, inventoryItemRepository, productAuditRepository,
             context, clock);
 
+        var administrativeNotificationWriter = new AdministrativeNotificationWriter(
+            new EfAdministrativeNotificationAudienceQuery(context), new EfAdministrativeNotificationRepository(context), clock);
+
         var managementService = new ProductManagementService(
             userSession, registerSession, productRepository, inventoryItemRepository, inventoryMovementRepository,
-            productCatalogQuery, productAuditRepository, productAuditQuery, context, clock);
+            productCatalogQuery, productAuditRepository, productAuditQuery, administrativeNotificationWriter, context, clock);
 
         // 1. Created
         var createResult = await createService.CreateAsync(new CreateProductRequest(
@@ -278,10 +282,13 @@ public class ProductAuditSqliteIntegrationTests
             userSession, registerSession, new EfProductRepository(context), new EfInventoryItemRepository(context),
             productAuditRepository, context, clock);
 
+        var administrativeNotificationWriter = new AdministrativeNotificationWriter(
+            new EfAdministrativeNotificationAudienceQuery(context), new EfAdministrativeNotificationRepository(context), clock);
+
         var managementService = new ProductManagementService(
             userSession, registerSession, new EfProductRepository(context), new EfInventoryItemRepository(context),
             new EfInventoryMovementRepository(context), new EfProductCatalogQuery(context), productAuditRepository,
-            productAuditQuery, context, clock);
+            productAuditQuery, administrativeNotificationWriter, context, clock);
 
         var recentProductResult = await createService.CreateAsync(
             new CreateProductRequest("SKU-RECENT", null, "Reciente", null, 10m, null, true, 5m, 1m),

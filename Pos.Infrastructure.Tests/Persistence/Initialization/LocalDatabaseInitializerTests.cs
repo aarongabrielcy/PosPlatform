@@ -63,6 +63,8 @@ public sealed class LocalDatabaseInitializerTests : IDisposable
 
         var expectedDomainTables = new[]
         {
+            "administrative_notification_recipients",
+            "administrative_notifications",
             "branches",
             "inventory_items",
             "inventory_movements",

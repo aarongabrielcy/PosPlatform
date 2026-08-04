@@ -7,6 +7,7 @@ using Pos.Application.Authentication;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
 using Pos.Application.SalesCart;
+using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
 using Pos.Desktop.Inventory;
@@ -81,6 +82,7 @@ namespace Pos.Desktop
                         services.AddTransient<RegisterViewModel>();
                         services.AddTransient<SettingsViewModel>();
                         services.AddTransient<ProductAuditViewModel>();
+                        services.AddTransient<NotificationCenterViewModel>();
                         services.AddTransient<InitialSetupViewModel>();
                         services.AddTransient<InitialSetupWindow>();
                         services.AddTransient<LoginViewModel>();

@@ -28,6 +28,7 @@ public sealed class ProductAuditViewModel : ViewModelBase
     private DateTime? _fromDate;
     private DateTime? _toDate;
     private ProductId? _productIdFilter;
+    private ProductAuditEventId? _auditEventIdFilter;
     private string? _productFilterLabel;
     private ProductAuditRowViewModel? _selectedEntry;
     private bool _isBusy;
@@ -173,6 +174,19 @@ public sealed class ProductAuditViewModel : ViewModelBase
     public void ApplyProductFilter(ProductId productId, string productSku)
     {
         _productIdFilter = productId;
+        _auditEventIdFilter = null;
+        ProductFilterLabel = $"Producto: {productSku}";
+        OnPropertyChanged(nameof(HasProductFilter));
+    }
+
+    // Llamado desde MainWindowViewModel cuando el centro de notificaciones pide abrir un
+    // AuditEvent puntual (TAREA 24E, sección 29/30): además del filtro por ProductId, acota la
+    // búsqueda al AuditEventId exacto, de modo que LoadPageAsync seleccione ese evento aunque no
+    // esté en la primera página del historial del producto.
+    public void ApplyAuditEventFilter(ProductId productId, string productSku, ProductAuditEventId auditEventId)
+    {
+        _productIdFilter = productId;
+        _auditEventIdFilter = auditEventId;
         ProductFilterLabel = $"Producto: {productSku}";
         OnPropertyChanged(nameof(HasProductFilter));
     }
@@ -185,6 +199,7 @@ public sealed class ProductAuditViewModel : ViewModelBase
         _fromDate = null;
         _toDate = null;
         _productIdFilter = null;
+        _auditEventIdFilter = null;
         ProductFilterLabel = null;
 
         OnPropertyChanged(nameof(SearchText));
@@ -200,6 +215,7 @@ public sealed class ProductAuditViewModel : ViewModelBase
     private Task ExecuteClearProductFilterAsync()
     {
         _productIdFilter = null;
+        _auditEventIdFilter = null;
         ProductFilterLabel = null;
         OnPropertyChanged(nameof(HasProductFilter));
 
@@ -224,7 +240,8 @@ public sealed class ProductAuditViewModel : ViewModelBase
                 ActorSearchTerm: string.IsNullOrWhiteSpace(ActorSearchText) ? null : ActorSearchText.Trim(),
                 Action: SelectedAction,
                 FromUtc: ToStartOfDayUtc(FromDate),
-                ToUtc: ToEndOfDayUtc(ToDate));
+                ToUtc: ToEndOfDayUtc(ToDate),
+                AuditEventId: _auditEventIdFilter);
 
             var skip = (CurrentPage - 1) * PageSize;
             var result = await _productAuditService.SearchPageAsync(filter, skip, PageSize);

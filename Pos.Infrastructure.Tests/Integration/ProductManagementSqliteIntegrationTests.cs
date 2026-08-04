@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
@@ -75,11 +76,13 @@ public class ProductManagementSqliteIntegrationTests
         var productAuditRepository = new EfProductAuditRepository(context);
         var productAuditQuery = new EfProductAuditQuery(context);
         var clock = new SystemClock();
+        var administrativeNotificationWriter = new AdministrativeNotificationWriter(
+            new EfAdministrativeNotificationAudienceQuery(context), new EfAdministrativeNotificationRepository(context), clock);
 
         var managementService = new ProductManagementService(
             userSession, registerSession, productRepository, inventoryItemRepository,
             inventoryMovementRepository, productCatalogQuery, productAuditRepository, productAuditQuery,
-            context, clock);
+            administrativeNotificationWriter, context, clock);
 
         var cartService = new SalesCartService(
             userSession, registerSession, new InMemoryCurrentSalesCart(), productRepository, inventoryItemRepository);

@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
@@ -179,6 +180,7 @@ public class CheckoutSqliteIntegrationTests
             await CreateAuthenticatedServiceAsync(connection, inventoryQuantity: 2m);
         await using var contextDisposable = context;
 
+        var managementServiceClock = new SystemClock();
         var managementService = new ProductManagementService(
             userSession,
             registerSession,
@@ -188,8 +190,12 @@ public class CheckoutSqliteIntegrationTests
             new EfProductCatalogQuery(context),
             new EfProductAuditRepository(context),
             new EfProductAuditQuery(context),
+            new AdministrativeNotificationWriter(
+                new EfAdministrativeNotificationAudienceQuery(context),
+                new EfAdministrativeNotificationRepository(context),
+                managementServiceClock),
             context,
-            new SystemClock());
+            managementServiceClock);
 
         var adjustResult = await managementService.AdjustInventoryAsync(new AdjustProductInventoryRequest(
             new ProductId(graph.ProductId), InventoryAdjustmentType.Decrease, 2m));

@@ -1,3 +1,4 @@
+using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
@@ -30,6 +31,7 @@ public sealed class ProductManagementService : IProductManagementService
     private readonly IProductCatalogQuery _productCatalogQuery;
     private readonly IProductAuditRepository _productAuditRepository;
     private readonly IProductAuditQuery _productAuditQuery;
+    private readonly IAdministrativeNotificationWriter _administrativeNotificationWriter;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
@@ -42,6 +44,7 @@ public sealed class ProductManagementService : IProductManagementService
         IProductCatalogQuery productCatalogQuery,
         IProductAuditRepository productAuditRepository,
         IProductAuditQuery productAuditQuery,
+        IAdministrativeNotificationWriter administrativeNotificationWriter,
         IUnitOfWork unitOfWork,
         IClock clock)
     {
@@ -53,6 +56,8 @@ public sealed class ProductManagementService : IProductManagementService
         _productCatalogQuery = productCatalogQuery ?? throw new ArgumentNullException(nameof(productCatalogQuery));
         _productAuditRepository = productAuditRepository ?? throw new ArgumentNullException(nameof(productAuditRepository));
         _productAuditQuery = productAuditQuery ?? throw new ArgumentNullException(nameof(productAuditQuery));
+        _administrativeNotificationWriter = administrativeNotificationWriter
+            ?? throw new ArgumentNullException(nameof(administrativeNotificationWriter));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
@@ -383,6 +388,10 @@ public sealed class ProductManagementService : IProductManagementService
                 changes);
 
             await _productAuditRepository.AddAsync(auditEvent, cancellationToken);
+
+            // Misma transacción que Product/Audit (TAREA 24E, sección 11): el writer solo evalúa
+            // política + prepara Notification/Recipients, nunca hace su propio Commit.
+            await _administrativeNotificationWriter.TryAddForProductAuditAsync(auditEvent, cancellationToken);
         }
 
         await _unitOfWork.CommitAsync(cancellationToken);
@@ -455,6 +464,7 @@ public sealed class ProductManagementService : IProductManagementService
                     user.Username, user.DisplayName, product.Sku.Value, product.Name, now);
 
             await _productAuditRepository.AddAsync(auditEvent, cancellationToken);
+            await _administrativeNotificationWriter.TryAddForProductAuditAsync(auditEvent, cancellationToken);
         }
 
         await _unitOfWork.CommitAsync(cancellationToken);
@@ -565,6 +575,7 @@ public sealed class ProductManagementService : IProductManagementService
         await _inventoryMovementRepository.AddAsync(movement, cancellationToken);
         await _inventoryItemRepository.UpdateAsync(inventoryItem, cancellationToken);
         await _productAuditRepository.AddAsync(auditEvent, cancellationToken);
+        await _administrativeNotificationWriter.TryAddForProductAuditAsync(auditEvent, cancellationToken);
         await _unitOfWork.CommitAsync(cancellationToken);
 
         return AdjustProductInventoryResult.SuccessResult(product.Id, inventoryItem.Quantity);

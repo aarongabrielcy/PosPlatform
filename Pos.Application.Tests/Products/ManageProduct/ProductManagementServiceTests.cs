@@ -25,6 +25,7 @@ public class ProductManagementServiceTests
         FakeProductCatalogQuery ProductCatalogQuery,
         FakeProductAuditRepository ProductAuditRepository,
         FakeProductAuditQuery ProductAuditQuery,
+        FakeAdministrativeNotificationWriter AdministrativeNotificationWriter,
         FakeUnitOfWork UnitOfWork,
         OrganizationId OrganizationId,
         BranchId BranchId);
@@ -76,18 +77,19 @@ public class ProductManagementServiceTests
         productCatalogQuery ??= new FakeProductCatalogQuery();
         var productAuditRepository = new FakeProductAuditRepository();
         productAuditQuery ??= new FakeProductAuditQuery();
+        var administrativeNotificationWriter = new FakeAdministrativeNotificationWriter();
         var unitOfWork = new FakeUnitOfWork();
         var clock = new FakeClock(UtcNow);
 
         var service = new ProductManagementService(
             userSession, registerSession, productRepository, inventoryItemRepository,
             inventoryMovementRepository, productCatalogQuery, productAuditRepository, productAuditQuery,
-            unitOfWork, clock);
+            administrativeNotificationWriter, unitOfWork, clock);
 
         return new Fixture(
             service, userSession, registerSession, productRepository, inventoryItemRepository,
             inventoryMovementRepository, productCatalogQuery, productAuditRepository, productAuditQuery,
-            unitOfWork, organizationId, branchId);
+            administrativeNotificationWriter, unitOfWork, organizationId, branchId);
     }
 
     private static Product CreateProduct(
@@ -941,6 +943,130 @@ public class ProductManagementServiceTests
         Assert.Equal(Pos.Domain.ProductAudit.ProductAuditField.InventoryQuantity, change.FieldName);
         Assert.Equal("2", change.OldValue);
         Assert.Equal("0", change.NewValue);
+    }
+
+    // ---------- Administrative notifications (TAREA 24E) ----------
+
+    [Fact]
+    public async Task UpdateAsyncInvokesTheNotificationWriterWhenSalePriceChanges()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, sku: "SKU-PRICE");
+        fixture.ProductRepository.Add(product);
+
+        await fixture.Service.UpdateAsync(new UpdateProductRequest(
+            product.Id, product.Sku.Value, product.Barcode?.Value, product.Name, product.Description,
+            27.50m, product.Cost?.Amount, null));
+
+        Assert.Equal(1, fixture.AdministrativeNotificationWriter.CallCount);
+        var auditEvent = Assert.Single(fixture.ProductAuditRepository.AddedEvents);
+        Assert.Same(auditEvent, Assert.Single(fixture.AdministrativeNotificationWriter.AuditEvents));
+    }
+
+    // El servicio nunca decide "esto notifica o no" por sí mismo (TAREA 24E, sección 33): invoca
+    // al writer siempre que se creó un AuditEvent, incluso para campos no sensibles como Name; la
+    // política ("¿notifica?") vive únicamente en ProductAuditNotificationPolicy, dentro del writer.
+    [Fact]
+    public async Task UpdateAsyncStillInvokesTheWriterWhenOnlyNameChangesAndLetsItApplyThePolicy()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, sku: "SKU-NAME");
+        fixture.ProductRepository.Add(product);
+
+        await fixture.Service.UpdateAsync(new UpdateProductRequest(
+            product.Id, product.Sku.Value, product.Barcode?.Value, "Agua Natural", product.Description,
+            product.SalePrice.Amount, product.Cost?.Amount, null));
+
+        Assert.Equal(1, fixture.AdministrativeNotificationWriter.CallCount);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncDoesNotInvokeTheNotificationWriterWhenNothingChanged()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, sku: "SKU-NOOP");
+        fixture.ProductRepository.Add(product);
+
+        await fixture.Service.UpdateAsync(new UpdateProductRequest(
+            product.Id, product.Sku.Value, product.Barcode?.Value, product.Name, product.Description,
+            product.SalePrice.Amount, product.Cost?.Amount, null));
+
+        Assert.Equal(0, fixture.AdministrativeNotificationWriter.CallCount);
+    }
+
+    [Fact]
+    public async Task SetActiveAsyncInvokesTheNotificationWriterOnARealTransition()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, isActive: true);
+        fixture.ProductRepository.Add(product);
+
+        await fixture.Service.SetActiveAsync(product.Id, false);
+
+        Assert.Equal(1, fixture.AdministrativeNotificationWriter.CallCount);
+    }
+
+    [Fact]
+    public async Task SetActiveAsyncDoesNotInvokeTheNotificationWriterWithoutARealTransition()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, isActive: true);
+        fixture.ProductRepository.Add(product);
+
+        await fixture.Service.SetActiveAsync(product.Id, true);
+
+        Assert.Equal(0, fixture.AdministrativeNotificationWriter.CallCount);
+    }
+
+    [Fact]
+    public async Task AdjustInventoryAsyncInvokesTheNotificationWriter()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, tracksInventory: true);
+        fixture.ProductRepository.Add(product);
+        fixture.InventoryItemRepository.Add(CreateInventoryItem(fixture.BranchId, product.Id, quantity: 10m));
+
+        await fixture.Service.AdjustInventoryAsync(
+            new AdjustProductInventoryRequest(product.Id, InventoryAdjustmentType.Decrease, 3m));
+
+        Assert.Equal(1, fixture.AdministrativeNotificationWriter.CallCount);
+    }
+
+    // TAREA 24E, sección 11/43: el writer se invoca ANTES del único CommitAsync del servicio, para
+    // que Product/Audit/Notification/Recipients queden en la misma transacción.
+    [Fact]
+    public async Task AdjustInventoryAsyncInvokesTheNotificationWriterBeforeTheSingleCommit()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, tracksInventory: true);
+        fixture.ProductRepository.Add(product);
+        fixture.InventoryItemRepository.Add(CreateInventoryItem(fixture.BranchId, product.Id, quantity: 10m));
+
+        var commitCallCountDuringWriterCall = -1;
+        fixture.AdministrativeNotificationWriter.OnCall = () =>
+            commitCallCountDuringWriterCall = fixture.UnitOfWork.CommitCallCount;
+
+        await fixture.Service.AdjustInventoryAsync(
+            new AdjustProductInventoryRequest(product.Id, InventoryAdjustmentType.Decrease, 3m));
+
+        Assert.Equal(0, commitCallCountDuringWriterCall);
+        Assert.Equal(1, fixture.UnitOfWork.CommitCallCount);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncWithOnlyNonSensitiveChangesStillCommitsExactlyOnce()
+    {
+        var fixture = CreateFixture();
+        var product = CreateProduct(fixture.OrganizationId, sku: "SKU-ONECOMMIT");
+        fixture.ProductRepository.Add(product);
+
+        var result = await fixture.Service.UpdateAsync(new UpdateProductRequest(
+            product.Id, product.Sku.Value, product.Barcode?.Value, "Agua Natural", product.Description,
+            product.SalePrice.Amount, product.Cost?.Amount, null));
+
+        Assert.True(result.Success);
+        Assert.Equal(1, fixture.ProductAuditRepository.AddCallCount);
+        Assert.Equal(1, fixture.UnitOfWork.CommitCallCount);
     }
 
     [Fact]

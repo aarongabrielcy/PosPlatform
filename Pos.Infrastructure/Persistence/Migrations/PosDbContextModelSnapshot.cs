@@ -17,6 +17,56 @@ namespace Pos.Infrastructure.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.22");
 
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.AdministrativeNotificationRecipientRecord", b =>
+                {
+                    b.Property<Guid>("NotificationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("notification_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("user_id");
+
+                    b.Property<long?>("ReadAtUtc")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("read_at_utc_ticks");
+
+                    b.HasKey("NotificationId", "UserId");
+
+                    b.HasIndex("UserId", "ReadAtUtc");
+
+                    b.ToTable("administrative_notification_recipients", (string)null);
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.AdministrativeNotificationRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<long>("CreatedAtUtc")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("created_at_utc_ticks");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("organization_id");
+
+                    b.Property<Guid>("ProductAuditEventId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("product_audit_event_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductAuditEventId")
+                        .IsUnique();
+
+                    b.HasIndex("OrganizationId", "CreatedAtUtc");
+
+                    b.ToTable("administrative_notifications", (string)null);
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.BranchRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -772,6 +822,38 @@ namespace Pos.Infrastructure.Persistence.Migrations
                     b.ToTable("users", (string)null);
                 });
 
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.AdministrativeNotificationRecipientRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.Records.AdministrativeNotificationRecord", "Notification")
+                        .WithMany("Recipients")
+                        .HasForeignKey("NotificationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Pos.Infrastructure.Persistence.Records.UserRecord", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Notification");
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.AdministrativeNotificationRecord", b =>
+                {
+                    b.HasOne("Pos.Infrastructure.Persistence.Records.OrganizationRecord", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Pos.Infrastructure.Persistence.Records.ProductAuditEventRecord", null)
+                        .WithMany()
+                        .HasForeignKey("ProductAuditEventId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.BranchRecord", b =>
                 {
                     b.HasOne("Pos.Infrastructure.Persistence.Records.OrganizationRecord", null)
@@ -973,6 +1055,11 @@ namespace Pos.Infrastructure.Persistence.Migrations
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.AdministrativeNotificationRecord", b =>
+                {
+                    b.Navigation("Recipients");
                 });
 
             modelBuilder.Entity("Pos.Infrastructure.Persistence.Records.ProductAuditEventRecord", b =>

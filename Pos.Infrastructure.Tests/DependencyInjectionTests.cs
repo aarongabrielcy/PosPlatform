@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Bootstrap;
 using Pos.Application.Branches;
@@ -818,6 +819,106 @@ public class DependencyInjectionTests
             var serviceB = scopeB.ServiceProvider.GetRequiredService<IProductCatalogQuery>();
 
             Assert.NotSame(serviceA, serviceB);
+        }
+    }
+
+    // ---------- Administrative notifications (TAREA 24E) ----------
+
+    [Fact]
+    public void IAdministrativeNotificationRepositoryResolvesEfAdministrativeNotificationRepositoryWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<EfAdministrativeNotificationRepository>(
+                scope.ServiceProvider.GetRequiredService<IAdministrativeNotificationRepository>());
+        }
+    }
+
+    [Fact]
+    public void IAdministrativeNotificationQueryResolvesEfAdministrativeNotificationQueryWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<EfAdministrativeNotificationQuery>(
+                scope.ServiceProvider.GetRequiredService<IAdministrativeNotificationQuery>());
+        }
+    }
+
+    [Fact]
+    public void IAdministrativeNotificationAudienceQueryResolvesEfAdministrativeNotificationAudienceQueryWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<EfAdministrativeNotificationAudienceQuery>(
+                scope.ServiceProvider.GetRequiredService<IAdministrativeNotificationAudienceQuery>());
+        }
+    }
+
+    [Fact]
+    public void IAdministrativeNotificationWriterResolvesAdministrativeNotificationWriterWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<AdministrativeNotificationWriter>(
+                scope.ServiceProvider.GetRequiredService<IAdministrativeNotificationWriter>());
+        }
+    }
+
+    [Fact]
+    public void IAdministrativeNotificationServiceResolvesAdministrativeNotificationServiceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            Assert.IsType<AdministrativeNotificationService>(
+                scope.ServiceProvider.GetRequiredService<IAdministrativeNotificationService>());
+        }
+    }
+
+    [Fact]
+    public void AdministrativeNotificationServicesAreScopedAndProduceDifferentInstancesAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            var serviceA = scopeA.ServiceProvider.GetRequiredService<IAdministrativeNotificationService>();
+            var serviceB = scopeB.ServiceProvider.GetRequiredService<IAdministrativeNotificationService>();
+
+            Assert.NotSame(serviceA, serviceB);
+        }
+    }
+
+    [Fact]
+    public void ResolvingAdministrativeNotificationServicesDoesNotCreateAnySqliteFile()
+    {
+        var (provider, pathProvider) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IAdministrativeNotificationService>();
+            scope.ServiceProvider.GetRequiredService<IAdministrativeNotificationWriter>();
+
+            Assert.False(Directory.Exists(pathProvider.DataDirectory));
+            Assert.False(File.Exists(pathProvider.DatabasePath));
         }
     }
 

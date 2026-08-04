@@ -1,0 +1,154 @@
+<UserControl x:Class="Pos.Desktop.AdministrativeNotifications.NotificationCenterView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="380">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Pos.Desktop;component/Themes/AppColors.xaml" />
+                <ResourceDictionary Source="/Pos.Desktop;component/Themes/Icons.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+
+            <!-- Fila clickeable de una notificación (TAREA 24E, sección 26/35): sin chrome de
+                 Button, la Border interior es la única superficie visual, con fondo/peso distinto
+                 según IsRead. No depende solo del color: el título también cambia de peso y las
+                 no leídas muestran la etiqueta "Nueva". -->
+            <Style x:Key="NotificationRowButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="Margin" Value="0,0,0,8" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <ContentPresenter />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border Width="380" Background="{StaticResource CardBackgroundBrush}"
+            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1,0,0,0">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Padding="16,14" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Text="Notificaciones" FontSize="16" FontWeight="Bold"
+                               VerticalAlignment="Center" Foreground="{StaticResource PrimaryTextBrush}" />
+
+                    <Button x:Name="CloseButton" Grid.Column="1" Width="28" Height="28" Padding="0"
+                            Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip="Cerrar"
+                            Command="{Binding ToggleCommand}">
+                        <Path Width="11" Height="11" Stretch="Uniform" Fill="{StaticResource SecondaryTextBrush}"
+                              Data="{StaticResource IconClose}" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="12">
+                    <TextBlock x:Name="LoadingText" Text="Cargando..." Margin="4,8" TextWrapping="Wrap"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                    <TextBlock x:Name="EmptyStateText" Text="No tienes notificaciones administrativas."
+                               Margin="4,8" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}"
+                               Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                    <TextBlock x:Name="GeneralErrorText" Text="{Binding GeneralError}" Margin="4,8" TextWrapping="Wrap"
+                               Foreground="{StaticResource DangerBrush}" />
+
+                    <ItemsControl x:Name="NotificationsItemsControl" ItemsSource="{Binding Notifications}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource NotificationRowButtonStyle}"
+                                        Command="{Binding DataContext.OpenNotificationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}">
+                                    <Border CornerRadius="6" Padding="12,10" BorderThickness="1"
+                                            BorderBrush="{StaticResource BorderBrush}">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{StaticResource CardBackgroundBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsRead}" Value="False">
+                                                        <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0" Text="{Binding Title}" TextWrapping="Wrap"
+                                                           Foreground="{StaticResource PrimaryTextBrush}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="FontWeight" Value="Normal" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsRead}" Value="False">
+                                                                    <Setter Property="FontWeight" Value="Bold" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+
+                                                <Border Grid.Column="1" Background="{StaticResource AccentBrush}" CornerRadius="8"
+                                                        Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Top">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsRead}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <TextBlock Text="{Binding StatusLabel}" Foreground="White" FontSize="10" />
+                                                </Border>
+                                            </Grid>
+
+                                            <TextBlock Text="{Binding ProductName}" FontSize="12" Margin="0,2,0,0"
+                                                       TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" />
+
+                                            <TextBlock Text="{Binding SummaryText}" FontSize="12" Margin="0,4,0,0"
+                                                       TextWrapping="Wrap" Foreground="{StaticResource PrimaryTextBrush}" />
+
+                                            <TextBlock Margin="0,6,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}">
+                                                <Run Text="{Binding ActorDisplayName, Mode=OneWay}" />
+                                                <Run Text=" · " />
+                                                <Run Text="{Binding RelativeTimeText, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</UserControl>
