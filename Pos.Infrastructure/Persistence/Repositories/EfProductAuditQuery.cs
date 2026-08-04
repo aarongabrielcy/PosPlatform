@@ -45,6 +45,11 @@ public sealed class EfProductAuditQuery : IProductAuditQuery
             query = query.Where(e => e.ProductId == productId.Value);
         }
 
+        if (filter.AuditEventId is { } auditEventId)
+        {
+            query = query.Where(e => e.Id == auditEventId.Value);
+        }
+
         if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
         {
             var term = filter.SearchTerm.Trim();

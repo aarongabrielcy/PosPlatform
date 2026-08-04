@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Bootstrap;
 using Pos.Application.Branches;
@@ -62,6 +63,12 @@ public static class DependencyInjection
         services.AddScoped<IProductAuditRepository, EfProductAuditRepository>();
         services.AddScoped<IProductAuditQuery, EfProductAuditQuery>();
         services.AddScoped<IProductAuditService, ProductAuditService>();
+
+        services.AddScoped<IAdministrativeNotificationRepository, EfAdministrativeNotificationRepository>();
+        services.AddScoped<IAdministrativeNotificationQuery, EfAdministrativeNotificationQuery>();
+        services.AddScoped<IAdministrativeNotificationAudienceQuery, EfAdministrativeNotificationAudienceQuery>();
+        services.AddScoped<IAdministrativeNotificationWriter, AdministrativeNotificationWriter>();
+        services.AddScoped<IAdministrativeNotificationService, AdministrativeNotificationService>();
 
         services.AddScoped<IInitialBusinessBootstrapService, InitialBusinessBootstrapService>();
         services.AddScoped<IInstallationStateService, InstallationStateService>();

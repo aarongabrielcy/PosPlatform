@@ -1634,6 +1634,9 @@ public class PosDbContextModelTests
         // tienen sentido sin su ProductAuditEvent padre. No expone ninguna API de Delete a nivel
         // de repositorio; distinto de un Cascade histórico desde Product/User/Organization.
         (typeof(ProductAuditChangeRecord), typeof(ProductAuditEventRecord)),
+        // Composición estructural Notification -> Recipients (TAREA 24E, sección 16/17): mismo
+        // criterio que Event -> Changes.
+        (typeof(AdministrativeNotificationRecipientRecord), typeof(AdministrativeNotificationRecord)),
     ];
 
     [Fact]

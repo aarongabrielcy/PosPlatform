@@ -13,7 +13,10 @@ public sealed record ProductAuditFilter(
     string? ActorSearchTerm = null,
     ProductAuditAction? Action = null,
     DateTimeOffset? FromUtc = null,
-    DateTimeOffset? ToUtc = null)
+    DateTimeOffset? ToUtc = null,
+    // Navegación exacta desde una notificación administrativa (TAREA 24E, sección 30/47): permite
+    // seleccionar un ProductAuditEvent puntual sin depender de que esté en la primera página.
+    ProductAuditEventId? AuditEventId = null)
 {
     public static ProductAuditFilter Empty { get; } = new();
 }

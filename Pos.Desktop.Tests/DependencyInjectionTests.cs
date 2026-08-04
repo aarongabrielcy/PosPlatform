@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Pos.Application.Authentication;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
+using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
 using Pos.Desktop.Inventory;
@@ -66,6 +67,7 @@ public class DependencyInjectionTests
         services.AddTransient<RegisterViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<ProductAuditViewModel>();
+        services.AddTransient<NotificationCenterViewModel>();
         services.AddTransient<InitialSetupViewModel>();
         services.AddTransient<InitialSetupWindow>();
         services.AddTransient<LoginViewModel>();
@@ -215,6 +217,7 @@ public class DependencyInjectionTests
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<RegisterViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<SettingsViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<ProductAuditViewModel>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<NotificationCenterViewModel>());
         });
 
     [Fact]

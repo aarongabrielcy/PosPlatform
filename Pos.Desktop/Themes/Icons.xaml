@@ -25,4 +25,16 @@
 
     <Geometry x:Key="IconLogout">M2,2 H4 V14 H2 Z M2,2 H8 V4 H2 Z M2,12 H8 V14 H2 Z M9,7 H13 V9 H9 Z M12,4.5 L16,8 L12,11.5 Z</Geometry>
 
+    <!-- Campana del centro de notificaciones (TAREA 24E, sección 24): mismo criterio que el
+         resto de IconXxx, geometría vectorial hecha a mano, sin fuentes de iconos ni emoji. -->
+    <Geometry x:Key="IconBell">
+        M8,1 C6.3,1 5,2.3 5,4 L5,7.5 C5,8.8 4.4,10 3.3,10.8 L3,11 L13,11 L12.7,10.8
+        C11.6,10 11,8.8 11,7.5 L11,4 C11,2.3 9.7,1 8,1 Z
+        M6.3,12.3 A1.7,1.7 0 0 0 9.7,12.3 Z
+    </Geometry>
+
+    <!-- Cerrar panel del centro de notificaciones: X formada por dos barras diagonales, mismo
+         estilo de polígonos simples que IconSales/IconLogout. -->
+    <Geometry x:Key="IconClose">M1,3 L3,1 L15,13 L13,15 Z M13,1 L15,3 L3,15 L1,13 Z</Geometry>
+
 </ResourceDictionary>

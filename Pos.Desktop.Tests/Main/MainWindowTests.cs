@@ -1,9 +1,11 @@
 using System.Linq;
 using System.Threading;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using Pos.Application.Authentication;
+using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
 using Pos.Desktop.Inventory;
@@ -15,6 +17,7 @@ using Pos.Desktop.Settings;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Security;
 using CatalogFakeProductManagementService = Pos.Desktop.Tests.Products.Catalog.FakeProductManagementService;
+using FakeAdministrativeNotificationService = Pos.Desktop.Tests.AdministrativeNotifications.FakeAdministrativeNotificationService;
 
 namespace Pos.Desktop.Tests.Main;
 
@@ -167,7 +170,8 @@ public class MainWindowTests
             var viewModel = new MainWindowViewModel(
                 session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
                 new InventoryViewModel(), new RegisterViewModel(registerSession), new SettingsViewModel(),
-                new ProductAuditViewModel(new FakeProductAuditService()));
+                new ProductAuditViewModel(new FakeProductAuditService()),
+                new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
             _ = new MainWindow(viewModel);
 
             viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
@@ -277,7 +281,8 @@ public class MainWindowTests
                 session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), dashboardViewModel, salesViewModel,
                 new ProductsViewModel(new CatalogFakeProductManagementService()), new InventoryViewModel(),
                 new RegisterViewModel(new FakeCurrentRegisterSession()), new SettingsViewModel(),
-                new ProductAuditViewModel(new FakeProductAuditService()));
+                new ProductAuditViewModel(new FakeProductAuditService()),
+                new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
             var window = new MainWindow(viewModel);
 
             salesViewModel.SelectedSearchResult = new Pos.Application.SalesCart.ProductSearchResult(
@@ -288,6 +293,108 @@ public class MainWindowTests
 
             Assert.Equal("SKU-EDITED", salesViewModel.SearchText);
         });
+
+    // ---------- Campana / badge de notificaciones (TAREA 24E, sección 24/46) ----------
+    //
+    // Igual patrón que SalesViewTests.IncludeInactiveCheckBoxIsBoundToTheIncludeInactivePropertyAndItsVisibilityToCanManageProducts:
+    // estos tests corren en un hilo STA sin bombear el Dispatcher, así que WPF nunca evalúa los
+    // bindings (Visibility/Text quedan en su valor por defecto). Se verifica que el binding
+    // correcto está declarado; el valor calculado (CanViewNotifications/HasUnread/UnreadCount) ya
+    // se prueba a nivel de ViewModel en MainWindowViewModelTests y NotificationCenterViewModelTests.
+
+    [Fact]
+    public void NotificationBellButtonVisibilityIsBoundToCanViewNotifications() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(CreateViewProductAuditUser());
+            var window = new MainWindow(viewModel);
+
+            var binding = BindingOperations.GetBinding(window.NotificationBellButton, UIElement.VisibilityProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(nameof(MainWindowViewModel.CanViewNotifications), binding.Path.Path);
+        });
+
+    [Fact]
+    public void NotificationBellButtonCommandIsBoundToTheToggleCommand() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(CreateViewProductAuditUser());
+            var window = new MainWindow(viewModel);
+
+            var binding = BindingOperations.GetBinding(window.NotificationBellButton, Button.CommandProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(
+                $"{nameof(MainWindowViewModel.NotificationCenterViewModel)}.{nameof(NotificationCenterViewModel.ToggleCommand)}",
+                binding.Path.Path);
+        });
+
+    [Fact]
+    public void NotificationBadgeVisibilityIsBoundToHasUnread() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(CreateViewProductAuditUser());
+            var window = new MainWindow(viewModel);
+
+            var binding = BindingOperations.GetBinding(window.NotificationBadge, UIElement.VisibilityProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(
+                $"{nameof(MainWindowViewModel.NotificationCenterViewModel)}.{nameof(NotificationCenterViewModel.HasUnread)}",
+                binding.Path.Path);
+        });
+
+    [Fact]
+    public void NotificationBadgeTextIsBoundToUnreadCount() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(CreateViewProductAuditUser());
+            var window = new MainWindow(viewModel);
+
+            var binding = BindingOperations.GetBinding(window.NotificationBadgeText, TextBlock.TextProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(
+                $"{nameof(MainWindowViewModel.NotificationCenterViewModel)}.{nameof(NotificationCenterViewModel.UnreadCount)}",
+                binding.Path.Path);
+        });
+
+    [Fact]
+    public void NotificationCenterPanelDataContextIsBoundToTheNotificationCenterViewModel() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(CreateViewProductAuditUser());
+            var window = new MainWindow(viewModel);
+
+            var binding = BindingOperations.GetBinding(window.NotificationCenterPanel, FrameworkElement.DataContextProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(nameof(MainWindowViewModel.NotificationCenterViewModel), binding.Path.Path);
+        });
+
+    [Fact]
+    public void NotificationCenterPanelVisibilityIsBoundToIsOpen() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(CreateViewProductAuditUser());
+            var window = new MainWindow(viewModel);
+
+            var binding = BindingOperations.GetBinding(window.NotificationCenterPanel, UIElement.VisibilityProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(nameof(NotificationCenterViewModel.IsOpen), binding.Path.Path);
+        });
+
+    private static AuthenticatedUser CreateViewProductAuditUser() =>
+        new(
+            UserId.New(),
+            OrganizationId.New(),
+            RoleId.New(),
+            "ADMIN",
+            "Administrador",
+            "Administrador",
+            [Permission.ManageProducts, Permission.ViewProductAudit]);
 
     private static MainWindowViewModel CreateViewModel(AuthenticatedUser user)
     {
@@ -304,10 +411,11 @@ public class MainWindowTests
         var registerViewModel = new RegisterViewModel(registerSession);
         var settingsViewModel = new SettingsViewModel();
         var productAuditViewModel = new ProductAuditViewModel(new FakeProductAuditService());
+        var notificationCenterViewModel = new NotificationCenterViewModel(new FakeAdministrativeNotificationService());
 
         return new MainWindowViewModel(
             session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
-            inventoryViewModel, registerViewModel, settingsViewModel, productAuditViewModel);
+            inventoryViewModel, registerViewModel, settingsViewModel, productAuditViewModel, notificationCenterViewModel);
     }
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>

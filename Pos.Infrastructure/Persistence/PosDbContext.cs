@@ -42,6 +42,11 @@ public sealed class PosDbContext : DbContext, IUnitOfWork
 
     internal DbSet<ProductAuditChangeRecord> ProductAuditChanges => Set<ProductAuditChangeRecord>();
 
+    internal DbSet<AdministrativeNotificationRecord> AdministrativeNotifications => Set<AdministrativeNotificationRecord>();
+
+    internal DbSet<AdministrativeNotificationRecipientRecord> AdministrativeNotificationRecipients =>
+        Set<AdministrativeNotificationRecipientRecord>();
+
     public Task CommitAsync(CancellationToken cancellationToken) => SaveChangesAsync(cancellationToken);
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -61,5 +66,7 @@ public sealed class PosDbContext : DbContext, IUnitOfWork
         modelBuilder.ApplyConfiguration(new RegisterSessionRecordConfiguration());
         modelBuilder.ApplyConfiguration(new ProductAuditEventRecordConfiguration());
         modelBuilder.ApplyConfiguration(new ProductAuditChangeRecordConfiguration());
+        modelBuilder.ApplyConfiguration(new AdministrativeNotificationRecordConfiguration());
+        modelBuilder.ApplyConfiguration(new AdministrativeNotificationRecipientRecordConfiguration());
     }
 }

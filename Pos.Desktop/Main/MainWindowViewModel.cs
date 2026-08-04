@@ -2,10 +2,12 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Input;
+using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.SalesCart;
+using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Common;
 using Pos.Desktop.Dashboard;
@@ -40,6 +42,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly RegisterViewModel _registerViewModel;
     private readonly SettingsViewModel _settingsViewModel;
     private readonly ProductAuditViewModel _productAuditViewModel;
+    private readonly NotificationCenterViewModel _notificationCenterViewModel;
     private readonly AsyncRelayCommand _logoutCommand;
     private readonly AsyncRelayCommand _closeRegisterCommand;
     private readonly AsyncRelayCommand _toggleSidebarCommand;
@@ -71,7 +74,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         InventoryViewModel inventoryViewModel,
         RegisterViewModel registerViewModel,
         SettingsViewModel settingsViewModel,
-        ProductAuditViewModel productAuditViewModel)
+        ProductAuditViewModel productAuditViewModel,
+        NotificationCenterViewModel notificationCenterViewModel)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _registerSession = registerSession ?? throw new ArgumentNullException(nameof(registerSession));
@@ -83,6 +87,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         _registerViewModel = registerViewModel ?? throw new ArgumentNullException(nameof(registerViewModel));
         _settingsViewModel = settingsViewModel ?? throw new ArgumentNullException(nameof(settingsViewModel));
         _productAuditViewModel = productAuditViewModel ?? throw new ArgumentNullException(nameof(productAuditViewModel));
+        _notificationCenterViewModel = notificationCenterViewModel ?? throw new ArgumentNullException(nameof(notificationCenterViewModel));
 
         _logoutCommand = new AsyncRelayCommand(ExecuteLogoutAsync);
         _closeRegisterCommand = new AsyncRelayCommand(ExecuteCloseRegisterAsync);
@@ -96,6 +101,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         _productsViewModel.EditProductRequested += OnProductsEditProductRequested;
         _productsViewModel.AuditRequested += OnProductsAuditRequested;
         _registerViewModel.CloseRegisterRequested += OnRegisterViewCloseRegisterRequested;
+        _notificationCenterViewModel.OpenNotificationRequested += OnNotificationCenterOpenNotificationRequested;
 
         _topLevelNavigationItems = BuildNavigationItems().ToList();
         NavigationItems = new ObservableCollection<NavigationItem>();
@@ -106,6 +112,13 @@ public sealed class MainWindowViewModel : ViewModelBase
         {
             _selectedNavigationItem = firstItem;
             ApplySection(firstItem.Section);
+        }
+
+        // Badge inicial al construir el shell (TAREA 24E, sección 32): sin polling, se dispara una
+        // sola vez aquí; RefreshCommand contiene su propio manejo de errores.
+        if (_notificationCenterViewModel.RefreshCommand.CanExecute(null))
+        {
+            _notificationCenterViewModel.RefreshCommand.Execute(null);
         }
     }
 
@@ -181,6 +194,14 @@ public sealed class MainWindowViewModel : ViewModelBase
     // Items visibles según permisos del usuario actual (TAREA 24C, sección 23): un ítem sin
     // permiso simplemente no aparece en la lista, en vez de mostrarse deshabilitado.
     public ObservableCollection<NavigationItem> NavigationItems { get; }
+
+    // El panel del centro de notificaciones se enlaza directamente a este ViewModel hijo (TAREA
+    // 24E, sección 31), igual patrón que CurrentViewModel expone las páginas del shell.
+    public NotificationCenterViewModel NotificationCenterViewModel => _notificationCenterViewModel;
+
+    // La campana es visible únicamente con ViewProductAudit (TAREA 24E, sección 24): un usuario
+    // sin el permiso ni siquiera ve el ícono.
+    public bool CanViewNotifications => _session.CurrentUser?.HasPermission(Permission.ViewProductAudit) ?? false;
 
     public NavigationItem? SelectedNavigationItem
     {
@@ -426,6 +447,26 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
     }
 
+    // Click en una Notification (TAREA 24E, sección 29/30): NotificationCenterViewModel ya marcó
+    // el receipt como leído y refrescó su propio badge antes de emitir este evento; aquí solo
+    // falta navegar a Auditoría > Productos y seleccionar exactamente ese AuditEvent (nunca "el
+    // más reciente del producto"). Igual patrón que OnProductsAuditRequested, pero con el filtro
+    // exacto por AuditEventId.
+    private void OnNotificationCenterOpenNotificationRequested(object? sender, AdministrativeNotificationItem item)
+    {
+        _productAuditViewModel.ApplyAuditEventFilter(item.ProductId, item.ProductSku, item.AuditEventId);
+
+        if (_expandedSections.Add(NavigationSection.Audit))
+        {
+            RebuildVisibleNavigationItems();
+        }
+
+        if (NavigationItems.FirstOrDefault(i => i.Section == NavigationSection.AuditProducts) is { } auditProductsItem)
+        {
+            SelectedNavigationItem = auditProductsItem;
+        }
+    }
+
     // Llamado desde App.xaml.cs tras crear un producto exitosamente en CreateProductWindow:
     // reenvía al ViewModel que originó la solicitud (Venta o Productos).
     public void ApplyProductCreated(string sku)
@@ -439,6 +480,8 @@ public sealed class MainWindowViewModel : ViewModelBase
                 _productsViewModel.ApplyProductCreated(sku);
                 break;
         }
+
+        RefreshNotificationBadge();
     }
 
     // Llamado desde App.xaml.cs tras cerrar EditProductWindow (edición, activar/desactivar o
@@ -454,10 +497,24 @@ public sealed class MainWindowViewModel : ViewModelBase
                 _productsViewModel.ApplyProductUpdated(sku);
                 break;
         }
+
+        RefreshNotificationBadge();
     }
 
     // Llamado desde App.xaml.cs tras cerrar CheckoutWindow con un cobro exitoso. El checkout solo
     // puede iniciarse desde Venta, así que siempre reenvía a _salesViewModel (sin necesidad de
     // rastrear un origen pendiente, a diferencia de ApplyProductCreated/ApplyProductUpdated).
     public void ApplyCheckoutCompleted() => _salesViewModel.ApplyCheckoutCompleted();
+
+    // Una operación Product sensible (editar, activar/desactivar, ajustar inventario) puede haber
+    // generado una AdministrativeNotification; el badge debe reflejarlo sin reiniciar la app
+    // (TAREA 24E, sección 32/33). Desktop nunca decide "esto notifica o no": solo pide refrescar
+    // el conteo ya calculado por Application.
+    private void RefreshNotificationBadge()
+    {
+        if (_notificationCenterViewModel.RefreshCommand.CanExecute(null))
+        {
+            _notificationCenterViewModel.RefreshCommand.Execute(null);
+        }
+    }
 }

@@ -165,6 +165,91 @@ public class ProductAuditViewModelTests
         Assert.Equal("agua", viewModel.SearchText);
     }
 
+    // ---------- Filtro por AuditEventId exacto (navegación desde una notificación, TAREA 24E, sección 30/47) ----------
+
+    [Fact]
+    public void ApplyAuditEventFilterSetsHasProductFilterAndTheLabel()
+    {
+        var viewModel = new ProductAuditViewModel(new FakeProductAuditService());
+        var productId = ProductId.New();
+        var auditEventId = ProductAuditEventId.New();
+
+        viewModel.ApplyAuditEventFilter(productId, "SKU-001", auditEventId);
+
+        Assert.True(viewModel.HasProductFilter);
+        Assert.Equal("Producto: SKU-001", viewModel.ProductFilterLabel);
+    }
+
+    [Fact]
+    public async Task LoadCommandAfterApplyAuditEventFilterSendsTheExactAuditEventIdToTheFilter()
+    {
+        var service = new FakeProductAuditService();
+        var viewModel = new ProductAuditViewModel(service);
+        var productId = ProductId.New();
+        var auditEventId = ProductAuditEventId.New();
+
+        viewModel.ApplyAuditEventFilter(productId, "SKU-001", auditEventId);
+        viewModel.LoadCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Equal(auditEventId, service.LastFilter!.AuditEventId);
+        Assert.Equal(productId, service.LastFilter.ProductId);
+    }
+
+    // Confirma que selecciona exactamente el AuditEvent pedido, no "el más reciente del producto"
+    // (TAREA 24E, sección 47): el resultado devuelto por la query ya viene acotado a ese único
+    // evento, y SelectedEntry debe apuntar a él.
+    [Fact]
+    public async Task LoadCommandAfterApplyAuditEventFilterSelectsExactlyThatEvent()
+    {
+        var targetEventId = ProductAuditEventId.New();
+        var targetEntry = new ProductAuditEntry(
+            targetEventId, ProductId.New(), "SKU-001", "Agua 1L", UserId.New(), "ADMIN", "Administrador",
+            ProductAuditAction.Updated, new DateTimeOffset(2026, 8, 2, 14, 22, 0, TimeSpan.Zero),
+            [new ProductAuditFieldChange(ProductAuditField.SalePrice, "MXN 25.00", "MXN 27.50")]);
+
+        var service = new FakeProductAuditService(
+            (filter, _, _, _) => Task.FromResult(
+                filter.AuditEventId == targetEventId
+                    ? new ProductAuditPageResult([targetEntry], false)
+                    : ProductAuditPageResult.Empty));
+        var viewModel = new ProductAuditViewModel(service);
+
+        viewModel.ApplyAuditEventFilter(targetEntry.ProductId, "SKU-001", targetEventId);
+        viewModel.LoadCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.NotNull(viewModel.SelectedEntry);
+        Assert.Equal(targetEventId, viewModel.SelectedEntry!.Entry.AuditEventId);
+    }
+
+    [Fact]
+    public async Task ClearProductFilterCommandAlsoRemovesTheAuditEventIdFilter()
+    {
+        var service = new FakeProductAuditService();
+        var viewModel = new ProductAuditViewModel(service);
+        viewModel.ApplyAuditEventFilter(ProductId.New(), "SKU-001", ProductAuditEventId.New());
+
+        viewModel.ClearProductFilterCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.False(viewModel.HasProductFilter);
+        Assert.Null(service.LastFilter!.AuditEventId);
+    }
+
+    [Fact]
+    public async Task ClearFiltersCommandAlsoRemovesTheAuditEventIdFilter()
+    {
+        var service = new FakeProductAuditService();
+        var viewModel = new ProductAuditViewModel(service);
+        viewModel.ApplyAuditEventFilter(ProductId.New(), "SKU-001", ProductAuditEventId.New());
+
+        viewModel.ClearFiltersCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Null(service.LastFilter!.AuditEventId);
+    }
+
     // ---------- Paginación ----------
 
     [Fact]
