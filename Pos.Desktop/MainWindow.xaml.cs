@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using Pos.Application.Inventory;
 using Pos.Desktop.Main;
 using Pos.Domain.Common.Identifiers;
 
@@ -22,6 +23,7 @@ namespace Pos.Desktop
             _viewModel.NewProductRequested += OnViewModelNewProductRequested;
             _viewModel.EditProductRequested += OnViewModelEditProductRequested;
             _viewModel.CheckoutRequested += OnViewModelCheckoutRequested;
+            _viewModel.AdjustInventoryRequested += OnViewModelAdjustInventoryRequested;
 
             DataContext = _viewModel;
 
@@ -39,6 +41,8 @@ namespace Pos.Desktop
 
         public event EventHandler? CheckoutRequested;
 
+        public event EventHandler<InventoryCatalogItem>? AdjustInventoryRequested;
+
         private void OnViewModelLogoutRequested(object? sender, EventArgs e) =>
             LogoutRequested?.Invoke(this, EventArgs.Empty);
 
@@ -54,6 +58,9 @@ namespace Pos.Desktop
         private void OnViewModelCheckoutRequested(object? sender, EventArgs e) =>
             CheckoutRequested?.Invoke(this, EventArgs.Empty);
 
+        private void OnViewModelAdjustInventoryRequested(object? sender, InventoryCatalogItem e) =>
+            AdjustInventoryRequested?.Invoke(this, e);
+
         // Llamado desde App.xaml.cs tras crear un producto exitosamente en CreateProductWindow.
         public void ApplyProductCreated(string sku) => _viewModel.ApplyProductCreated(sku);
 
@@ -63,6 +70,10 @@ namespace Pos.Desktop
 
         // Llamado desde App.xaml.cs tras cerrar CheckoutWindow con un cobro exitoso.
         public void ApplyCheckoutCompleted() => _viewModel.ApplyCheckoutCompleted();
+
+        // Llamado desde App.xaml.cs tras cerrar AdjustInventoryWindow abierto directamente desde
+        // Inventario.
+        public void ApplyInventoryAdjusted() => _viewModel.ApplyInventoryAdjusted();
 
         // Nunca permite terminar el proceso silenciosamente con una caja abierta: cierra la
         // ventana con la X requiere primero confirmar o completar el cierre de caja.
@@ -94,6 +105,7 @@ namespace Pos.Desktop
             _viewModel.NewProductRequested -= OnViewModelNewProductRequested;
             _viewModel.EditProductRequested -= OnViewModelEditProductRequested;
             _viewModel.CheckoutRequested -= OnViewModelCheckoutRequested;
+            _viewModel.AdjustInventoryRequested -= OnViewModelAdjustInventoryRequested;
             Closing -= OnWindowClosing;
             Closed -= OnWindowClosed;
         }

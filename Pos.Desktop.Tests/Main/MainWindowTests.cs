@@ -18,6 +18,7 @@ using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Security;
 using CatalogFakeProductManagementService = Pos.Desktop.Tests.Products.Catalog.FakeProductManagementService;
 using FakeAdministrativeNotificationService = Pos.Desktop.Tests.AdministrativeNotifications.FakeAdministrativeNotificationService;
+using FakeInventoryService = Pos.Desktop.Tests.Inventory.FakeInventoryService;
 
 namespace Pos.Desktop.Tests.Main;
 
@@ -169,7 +170,7 @@ public class MainWindowTests
             var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
             var viewModel = new MainWindowViewModel(
                 session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
-                new InventoryViewModel(), new RegisterViewModel(registerSession), new SettingsViewModel(),
+                new InventoryViewModel(new FakeInventoryService(), session), new RegisterViewModel(registerSession), new SettingsViewModel(),
                 new ProductAuditViewModel(new FakeProductAuditService()),
                 new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
             _ = new MainWindow(viewModel);
@@ -279,7 +280,7 @@ public class MainWindowTests
                 session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), new FakeProductManagementService());
             var viewModel = new MainWindowViewModel(
                 session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), dashboardViewModel, salesViewModel,
-                new ProductsViewModel(new CatalogFakeProductManagementService()), new InventoryViewModel(),
+                new ProductsViewModel(new CatalogFakeProductManagementService()), new InventoryViewModel(new FakeInventoryService(), session),
                 new RegisterViewModel(new FakeCurrentRegisterSession()), new SettingsViewModel(),
                 new ProductAuditViewModel(new FakeProductAuditService()),
                 new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
@@ -407,7 +408,7 @@ public class MainWindowTests
         var salesViewModel = new SalesViewModel(
             session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
         var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
-        var inventoryViewModel = new InventoryViewModel();
+        var inventoryViewModel = new InventoryViewModel(new FakeInventoryService(), session);
         var registerViewModel = new RegisterViewModel(registerSession);
         var settingsViewModel = new SettingsViewModel();
         var productAuditViewModel = new ProductAuditViewModel(new FakeProductAuditService());

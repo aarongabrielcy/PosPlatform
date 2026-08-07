@@ -16,7 +16,6 @@ public sealed partial class EditProductViewModel : ViewModelBase
     private readonly ILogger<EditProductViewModel> _logger;
     private readonly AsyncRelayCommand _saveCommand;
     private readonly AsyncRelayCommand _toggleActiveCommand;
-    private readonly AsyncRelayCommand _adjustInventoryCommand;
     private readonly AsyncRelayCommand _cancelCommand;
 
     private ProductId _productId;
@@ -46,8 +45,6 @@ public sealed partial class EditProductViewModel : ViewModelBase
 
         _saveCommand = new AsyncRelayCommand(ExecuteSaveAsync, () => !IsBusy && _isLoaded, HandleUnexpectedError);
         _toggleActiveCommand = new AsyncRelayCommand(ExecuteToggleActiveAsync, () => !IsBusy && _isLoaded, HandleUnexpectedError);
-        _adjustInventoryCommand = new AsyncRelayCommand(
-            ExecuteAdjustInventoryAsync, () => !IsBusy && _isLoaded && TracksInventory, HandleUnexpectedError);
         _cancelCommand = new AsyncRelayCommand(ExecuteCancelAsync, () => !IsBusy);
     }
 
@@ -55,10 +52,6 @@ public sealed partial class EditProductViewModel : ViewModelBase
     public event EventHandler? Saved;
 
     public event EventHandler? CancelRequested;
-
-    // El ViewModel nunca abre ventanas: solo pide abrir AdjustInventoryWindow. El código detrás
-    // de EditProductWindow reenvía el evento hasta App.xaml.cs, igual que NewProductRequested.
-    public event EventHandler? AdjustInventoryRequested;
 
     // El ViewModel nunca muestra MessageBox: solo pide mostrar la advertencia (mismo patrón que
     // CancelSaleConfirmationRequested en MainWindowViewModel). Se dispara cuando el SKU cambió y el
@@ -70,8 +63,6 @@ public sealed partial class EditProductViewModel : ViewModelBase
     public ICommand SaveCommand => _saveCommand;
 
     public ICommand ToggleActiveCommand => _toggleActiveCommand;
-
-    public ICommand AdjustInventoryCommand => _adjustInventoryCommand;
 
     public ICommand CancelCommand => _cancelCommand;
 
@@ -125,7 +116,6 @@ public sealed partial class EditProductViewModel : ViewModelBase
             if (SetProperty(ref _tracksInventory, value))
             {
                 OnPropertyChanged(nameof(CurrentQuantityText));
-                _adjustInventoryCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -179,7 +169,6 @@ public sealed partial class EditProductViewModel : ViewModelBase
                 OnPropertyChanged(nameof(IsNotBusy));
                 _saveCommand.RaiseCanExecuteChanged();
                 _toggleActiveCommand.RaiseCanExecuteChanged();
-                _adjustInventoryCommand.RaiseCanExecuteChanged();
                 _cancelCommand.RaiseCanExecuteChanged();
             }
         }
@@ -215,10 +204,6 @@ public sealed partial class EditProductViewModel : ViewModelBase
             IsBusy = false;
         }
     }
-
-    // Llamado desde el código detrás tras confirmar el ajuste en AdjustInventoryWindow: solo
-    // refleja la nueva existencia ya persistida, no vuelve a llamar al servicio.
-    public void ApplyInventoryAdjusted(decimal newQuantity) => CurrentQuantity = newQuantity;
 
     private void ApplyDetails(ProductDetails details)
     {
@@ -373,13 +358,6 @@ public sealed partial class EditProductViewModel : ViewModelBase
         {
             IsBusy = false;
         }
-    }
-
-    private Task ExecuteAdjustInventoryAsync()
-    {
-        AdjustInventoryRequested?.Invoke(this, EventArgs.Empty);
-
-        return Task.CompletedTask;
     }
 
     private Task ExecuteCancelAsync()

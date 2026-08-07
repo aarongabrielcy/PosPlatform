@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows.Input;
 using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
+using Pos.Application.Inventory;
 using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.SalesCart;
@@ -100,6 +101,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         _productsViewModel.NewProductRequested += OnProductsNewProductRequested;
         _productsViewModel.EditProductRequested += OnProductsEditProductRequested;
         _productsViewModel.AuditRequested += OnProductsAuditRequested;
+        _inventoryViewModel.AdjustInventoryRequested += OnInventoryAdjustInventoryRequested;
         _registerViewModel.CloseRegisterRequested += OnRegisterViewCloseRegisterRequested;
         _notificationCenterViewModel.OpenNotificationRequested += OnNotificationCenterOpenNotificationRequested;
 
@@ -135,6 +137,11 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     // Igual patrón que NewProductRequested/EditProductRequested, pero para CheckoutWindow.
     public event EventHandler? CheckoutRequested;
+
+    // Igual patrón que EditProductRequested, pero para AdjustInventoryWindow abierto directamente
+    // desde Inventario (TAREA 24G, sección 16/17): un solo origen posible (InventoryViewModel), sin
+    // necesidad de rastrear un "pending source" como en New/EditProductRequested.
+    public event EventHandler<InventoryCatalogItem>? AdjustInventoryRequested;
 
     public ICommand LogoutCommand => _logoutCommand;
 
@@ -270,6 +277,11 @@ public sealed class MainWindowViewModel : ViewModelBase
         {
             _productAuditViewModel.LoadCommand.Execute(null);
         }
+
+        if (section == NavigationSection.Inventory && _inventoryViewModel.LoadCommand.CanExecute(null))
+        {
+            _inventoryViewModel.LoadCommand.Execute(null);
+        }
     }
 
     // Único ítem con submenú hoy (Auditoría): expandir/colapsar reconstruye la lista visible
@@ -402,6 +414,9 @@ public sealed class MainWindowViewModel : ViewModelBase
     private void OnRegisterViewCloseRegisterRequested(object? sender, EventArgs e) =>
         _closeRegisterCommand.Execute(null);
 
+    private void OnInventoryAdjustInventoryRequested(object? sender, InventoryCatalogItem item) =>
+        AdjustInventoryRequested?.Invoke(this, item);
+
     private void OnSalesNewProductRequested(object? sender, EventArgs e)
     {
         _pendingNewProductSource = _salesViewModel;
@@ -505,6 +520,15 @@ public sealed class MainWindowViewModel : ViewModelBase
     // puede iniciarse desde Venta, así que siempre reenvía a _salesViewModel (sin necesidad de
     // rastrear un origen pendiente, a diferencia de ApplyProductCreated/ApplyProductUpdated).
     public void ApplyCheckoutCompleted() => _salesViewModel.ApplyCheckoutCompleted();
+
+    // Llamado desde App.xaml.cs tras cerrar AdjustInventoryWindow abierto directamente desde
+    // Inventario (a diferencia del flujo de Productos, aquí no hay EditProductWindow de por medio):
+    // refresca Existencias/KPIs/Movimientos y el badge de notificaciones (TAREA 24G, sección 19).
+    public void ApplyInventoryAdjusted()
+    {
+        _inventoryViewModel.ApplyInventoryAdjusted();
+        RefreshNotificationBadge();
+    }
 
     // Una operación Product sensible (editar, activar/desactivar, ajustar inventario) puede haber
     // generado una AdministrativeNotification; el badge debe reflejarlo sin reiniciar la app

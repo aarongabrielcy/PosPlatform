@@ -73,19 +73,6 @@ public class EditProductWindowTests
         });
 
     [Fact]
-    public void AdjustInventoryButtonIsBoundToTheAdjustInventoryCommandProperty() =>
-        RunOnStaThread(() =>
-        {
-            var viewModel = CreateViewModel(new FakeProductManagementService());
-            var window = new EditProductWindow(viewModel);
-
-            var binding = BindingOperations.GetBinding(window.AdjustInventoryButton, Button.CommandProperty);
-
-            Assert.NotNull(binding);
-            Assert.Equal(nameof(EditProductViewModel.AdjustInventoryCommand), binding.Path.Path);
-        });
-
-    [Fact]
     public void CancelButtonIsBoundToTheCancelCommandProperty() =>
         RunOnStaThread(() =>
         {

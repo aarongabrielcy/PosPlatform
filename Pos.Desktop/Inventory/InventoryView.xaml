@@ -3,30 +3,327 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:inventoryApp="clr-namespace:Pos.Application.Inventory;assembly=Pos.Application"
+             xmlns:domainInventory="clr-namespace:Pos.Domain.Inventory;assembly=Pos.Domain"
              mc:Ignorable="d"
-             d:DesignHeight="450" d:DesignWidth="800">
+             d:DesignHeight="700" d:DesignWidth="1200">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/Pos.Desktop;component/Themes/AppColors.xaml" />
+                <ResourceDictionary Source="/Pos.Desktop;component/Themes/Icons.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+
+            <Style x:Key="FilterLabelStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Margin" Value="0,0,0,4" />
+            </Style>
+
+            <!-- Estado con texto + color de apoyo (TAREA 24G, sección 15): el color nunca es el
+                 único indicador, el texto en español ya viene resuelto en StockStatusText. -->
+            <Style x:Key="StockStatusTextStyle" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding Item.StockStatus}" Value="{x:Static inventoryApp:InventoryStockStatus.OutOfStock}">
+                        <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Item.StockStatus}" Value="{x:Static inventoryApp:InventoryStockStatus.LowStock}">
+                        <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Item.StockStatus}" Value="{x:Static inventoryApp:InventoryStockStatus.InStock}">
+                        <Setter Property="Foreground" Value="{StaticResource SuccessBrush}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
     <Grid Background="{StaticResource AppBackgroundBrush}" Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Margin="0,0,0,16">
             <TextBlock Text="Inventario" Style="{StaticResource PageTitleStyle}" />
-            <TextBlock Text="Existencia, stock mínimo y ajustes de inventario se administran desde Productos."
-                       Style="{StaticResource PageSubtitleStyle}" />
+            <TextBlock Text="Existencias, estado de stock y movimientos del inventario." Style="{StaticResource PageSubtitleStyle}" />
         </StackPanel>
 
-        <Border Grid.Row="1" Style="{StaticResource CardStyle}" MaxWidth="640" HorizontalAlignment="Left">
-            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource PrimaryTextBrush}"
-                       Text="El módulo avanzado de inventario se implementará en una fase posterior." />
-        </Border>
+        <!-- KPIs globales del scope actual, no de la página visible (TAREA 24G, sección 12). -->
+        <UniformGrid Grid.Row="1" Rows="1" Margin="0,0,0,16">
+            <Border Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+                <StackPanel>
+                    <TextBlock Text="Productos con inventario" Style="{StaticResource PageSubtitleStyle}" Margin="0" />
+                    <TextBlock Text="{Binding TrackedProductsCount}" FontSize="28" FontWeight="Bold"
+                               Foreground="{StaticResource PrimaryTextBrush}" Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+                <StackPanel>
+                    <TextBlock Text="Con stock" Style="{StaticResource PageSubtitleStyle}" Margin="0" />
+                    <TextBlock Text="{Binding InStockCount}" FontSize="28" FontWeight="Bold"
+                               Foreground="{StaticResource SuccessBrush}" Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+                <StackPanel>
+                    <TextBlock Text="Stock bajo" Style="{StaticResource PageSubtitleStyle}" Margin="0" />
+                    <TextBlock Text="{Binding LowStockCount}" FontSize="28" FontWeight="Bold"
+                               Foreground="{StaticResource WarningBrush}" Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel>
+                    <TextBlock Text="Sin existencia" Style="{StaticResource PageSubtitleStyle}" Margin="0" />
+                    <TextBlock Text="{Binding OutOfStockCount}" FontSize="28" FontWeight="Bold"
+                               Foreground="{StaticResource DangerBrush}" Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+        </UniformGrid>
+
+        <TabControl x:Name="InventoryTabControl" Grid.Row="2" SelectedIndex="{Binding SelectedTabIndex}" Background="Transparent" BorderThickness="0">
+            <TabItem Header="Existencias">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="220" />
+                            <ColumnDefinition Width="180" MinWidth="150" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="Buscar" Style="{StaticResource FilterLabelStyle}" />
+                            <TextBox x:Name="SearchTextBox" Padding="8" VerticalContentAlignment="Center"
+                                     BorderBrush="{StaticResource BorderBrush}"
+                                     ToolTip="Buscar por producto, SKU o código de barras"
+                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
+                                <TextBox.InputBindings>
+                                    <KeyBinding Key="Return" Command="{Binding SearchCommand}" />
+                                </TextBox.InputBindings>
+                            </TextBox>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                            <TextBlock Text="Estado" Style="{StaticResource FilterLabelStyle}" />
+                            <ComboBox x:Name="StockFilterComboBox" Padding="8,5"
+                                      SelectedValuePath="Tag" SelectedValue="{Binding SelectedStockFilter}">
+                                <ComboBoxItem Content="Todos" Tag="{x:Static inventoryApp:InventoryCatalogStatusFilter.All}" />
+                                <ComboBoxItem Content="Con stock" Tag="{x:Static inventoryApp:InventoryCatalogStatusFilter.InStock}" />
+                                <ComboBoxItem Content="Stock bajo" Tag="{x:Static inventoryApp:InventoryCatalogStatusFilter.LowStock}" />
+                                <ComboBoxItem Content="Sin existencia" Tag="{x:Static inventoryApp:InventoryCatalogStatusFilter.OutOfStock}" />
+                            </ComboBox>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Bottom">
+                            <Button x:Name="SearchButton" Content="Buscar" Margin="0,0,8,0"
+                                    Style="{StaticResource PrimaryButtonStyle}" Command="{Binding SearchCommand}" />
+                            <Button x:Name="ClearFiltersButton" Content="Limpiar filtros" Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding ClearFiltersCommand}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Grid.Row="1" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Foreground="{StaticResource SecondaryTextBrush}" Text="{Binding StatusMessage}" />
+
+                    <Border Grid.Row="2" Style="{StaticResource CardStyle}" Padding="0" Margin="0,0,0,12">
+                        <DataGrid x:Name="InventoryGrid" BorderThickness="0" Background="Transparent"
+                                  ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}"
+                                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                                  SelectionMode="Single" SelectionUnit="FullRow">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="SKU" Binding="{Binding Item.Sku}" Width="110" MinWidth="90" />
+                                <DataGridTextColumn Header="Producto" Binding="{Binding Item.ProductName}" Width="*" MinWidth="160" />
+                                <DataGridTextColumn Header="Existencia" Binding="{Binding Item.Quantity}" Width="100" MinWidth="90" />
+                                <DataGridTextColumn Header="Stock mínimo" Binding="{Binding Item.ReorderPoint}" Width="110" MinWidth="100" />
+                                <DataGridTemplateColumn Header="Estado" Width="120" MinWidth="110">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding StockStatusText}" Style="{StaticResource StockStatusTextStyle}"
+                                                       VerticalAlignment="Center" Margin="8,0" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="Activo" Binding="{Binding IsActiveText}" Width="80" MinWidth="70" />
+                                <DataGridTemplateColumn Header="Acciones" Width="90" MinWidth="80">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Style="{StaticResource TableIconButtonStyle}"
+                                                        ToolTip="Ver movimientos de stock"
+                                                        AutomationProperties.Name="Ver movimientos de stock"
+                                                        Command="{Binding DataContext.ViewMovementsCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        CommandParameter="{Binding}">
+                                                    <Path Width="16" Height="16" Stretch="Uniform"
+                                                          Fill="{StaticResource PrimaryTextBrush}" Data="{StaticResource IconHistory}" />
+                                                </Button>
+                                                <Button Style="{StaticResource TableIconButtonStyle}"
+                                                        ToolTip="Ajustar existencia"
+                                                        AutomationProperties.Name="Ajustar existencia"
+                                                        Visibility="{Binding DataContext.CanAdjustInventory, RelativeSource={RelativeSource AncestorType=DataGrid}, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                        Command="{Binding DataContext.AdjustCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        CommandParameter="{Binding}">
+                                                    <Path Width="16" Height="16" Stretch="Uniform"
+                                                          Fill="{StaticResource PrimaryTextBrush}" Data="{StaticResource IconAdjust}" />
+                                                </Button>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+
+                    <Grid Grid.Row="3">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="{Binding GeneralError}" Foreground="{StaticResource DangerBrush}" />
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button Content="Anterior" Margin="0,0,8,0"
+                                    Style="{StaticResource SecondaryButtonStyle}" Command="{Binding PreviousPageCommand}" />
+                            <TextBlock Text="{Binding CurrentPage}" VerticalAlignment="Center" Margin="0,0,8,0"
+                                       Foreground="{StaticResource PrimaryTextBrush}" />
+                            <Button Content="Siguiente" Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding NextPageCommand}" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- TAREA 24G-FIX, sección 1: "Movimientos de stock" en vez de "Movimientos" para
+                 diferenciarlo explícitamente de Auditoría (Movimientos = solo InventoryMovement:
+                 ManualIncrease/ManualDecrease/SaleDecrease; nunca ProductAuditEvent). -->
+            <TabItem Header="Movimientos de stock">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="{StaticResource CardBackgroundBrush}" CornerRadius="6" Padding="8,4" Margin="0,0,0,12"
+                            HorizontalAlignment="Left"
+                            Visibility="{Binding HasMovementProductFilter, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding MovementProductFilterLabel}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource PrimaryTextBrush}" Margin="4,0,8,0" />
+                            <Button Content="Quitar filtro" Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding ClearMovementProductFilterCommand}" />
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Grid.Row="1" Margin="0,0,0,8">
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="220" />
+                                <ColumnDefinition Width="180" MinWidth="150" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="Producto / SKU" Style="{StaticResource FilterLabelStyle}" />
+                                <TextBox x:Name="MovementSearchTextBox" Padding="8" VerticalContentAlignment="Center"
+                                         BorderBrush="{StaticResource BorderBrush}"
+                                         Text="{Binding MovementSearchText, UpdateSourceTrigger=PropertyChanged}">
+                                    <TextBox.InputBindings>
+                                        <KeyBinding Key="Return" Command="{Binding MovementSearchCommand}" />
+                                    </TextBox.InputBindings>
+                                </TextBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="Tipo de movimiento" Style="{StaticResource FilterLabelStyle}" />
+                                <ComboBox x:Name="MovementTypeComboBox" Padding="8,5"
+                                          SelectedValuePath="Tag" SelectedValue="{Binding SelectedMovementType}">
+                                    <ComboBoxItem Content="Todos" Tag="{x:Null}" />
+                                    <ComboBoxItem Content="Venta" Tag="{x:Static domainInventory:InventoryMovementType.SaleDecrease}" />
+                                    <ComboBoxItem Content="Ajuste manual (entrada)" Tag="{x:Static domainInventory:InventoryMovementType.ManualIncrease}" />
+                                    <ComboBoxItem Content="Ajuste manual (salida)" Tag="{x:Static domainInventory:InventoryMovementType.ManualDecrease}" />
+                                </ComboBox>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" MinWidth="150" />
+                                <ColumnDefinition Width="Auto" MinWidth="150" />
+                                <ColumnDefinition Width="*" MinWidth="16" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="Desde" Style="{StaticResource FilterLabelStyle}" />
+                                <DatePicker x:Name="MovementFromDatePicker" Language="es-MX" Loaded="DatePicker_Loaded"
+                                            SelectedDate="{Binding MovementFromDate}" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                                <TextBlock Text="Hasta" Style="{StaticResource FilterLabelStyle}" />
+                                <DatePicker x:Name="MovementToDatePicker" Language="es-MX" Loaded="DatePicker_Loaded"
+                                            SelectedDate="{Binding MovementToDate}" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Bottom">
+                                <Button Content="Buscar" Margin="0,0,8,0"
+                                        Style="{StaticResource PrimaryButtonStyle}" Command="{Binding MovementSearchCommand}" />
+                                <Button Content="Limpiar filtros" Style="{StaticResource SecondaryButtonStyle}"
+                                        Command="{Binding ClearMovementFiltersCommand}" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+
+                    <Border Grid.Row="2" Style="{StaticResource CardStyle}" Padding="0" Margin="0,0,0,12">
+                        <DataGrid x:Name="MovementsGrid" BorderThickness="0" Background="Transparent"
+                                  ItemsSource="{Binding Movements}"
+                                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                                  SelectionMode="Single" SelectionUnit="FullRow">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Fecha/Hora" Binding="{Binding OccurredAtLocalText}" Width="140" MinWidth="130" />
+                                <DataGridTextColumn Header="Tipo" Binding="{Binding TypeText}" Width="110" MinWidth="100" />
+                                <DataGridTextColumn Header="SKU" Binding="{Binding Item.Sku}" Width="100" MinWidth="90" />
+                                <DataGridTextColumn Header="Producto" Binding="{Binding Item.ProductName}" Width="*" MinWidth="140" />
+                                <DataGridTextColumn Header="Cambio" Binding="{Binding ChangeText}" Width="90" MinWidth="80" />
+                                <DataGridTextColumn Header="Existencia resultante" Binding="{Binding Item.QuantityAfter}" Width="150" MinWidth="130" />
+                                <DataGridTextColumn Header="Referencia" Binding="{Binding ReferenceText}" Width="160" MinWidth="120" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+
+                    <Grid Grid.Row="3">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="{Binding GeneralError}" Foreground="{StaticResource DangerBrush}" />
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button Content="Anterior" Margin="0,0,8,0"
+                                    Style="{StaticResource SecondaryButtonStyle}" Command="{Binding MovementPreviousPageCommand}" />
+                            <TextBlock Text="{Binding MovementCurrentPage}" VerticalAlignment="Center" Margin="0,0,8,0"
+                                       Foreground="{StaticResource PrimaryTextBrush}" />
+                            <Button Content="Siguiente" Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding MovementNextPageCommand}" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </TabItem>
+        </TabControl>
     </Grid>
 </UserControl>

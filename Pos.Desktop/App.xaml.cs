@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Pos.Application.Authentication;
+using Pos.Application.Inventory;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
 using Pos.Application.SalesCart;
@@ -316,6 +317,7 @@ namespace Pos.Desktop
             mainWindow.NewProductRequested += OnMainWindowNewProductRequested;
             mainWindow.EditProductRequested += OnMainWindowEditProductRequested;
             mainWindow.CheckoutRequested += OnMainWindowCheckoutRequested;
+            mainWindow.AdjustInventoryRequested += OnMainWindowAdjustInventoryRequested;
 
             MainWindow = mainWindow;
             ShutdownMode = ShutdownMode.OnMainWindowClose;
@@ -337,6 +339,7 @@ namespace Pos.Desktop
                 mainWindow.NewProductRequested -= OnMainWindowNewProductRequested;
                 mainWindow.EditProductRequested -= OnMainWindowEditProductRequested;
                 mainWindow.CheckoutRequested -= OnMainWindowCheckoutRequested;
+                mainWindow.AdjustInventoryRequested -= OnMainWindowAdjustInventoryRequested;
             }
 
             _mainWindowScope?.ServiceProvider.GetService<ICurrentSalesCart>()?.Clear();
@@ -380,6 +383,7 @@ namespace Pos.Desktop
             mainWindow.NewProductRequested -= OnMainWindowNewProductRequested;
             mainWindow.EditProductRequested -= OnMainWindowEditProductRequested;
             mainWindow.CheckoutRequested -= OnMainWindowCheckoutRequested;
+            mainWindow.AdjustInventoryRequested -= OnMainWindowAdjustInventoryRequested;
 
             // Evita que cerrar la MainWindow actual dispare el apagado automático de
             // ShutdownMode.OnMainWindowClose antes de que OpenRegisterSessionWindow pueda mostrarse.
@@ -412,10 +416,12 @@ namespace Pos.Desktop
 
         // Muestra EditProductWindow sobre MainWindow (que permanece abierta como owner). Carga el
         // producto antes de mostrar el diálogo; si la carga falla, la ventana igual se muestra con
-        // el error visible (el usuario solo puede cancelar). Guardar, activar/desactivar o
-        // ajustar inventario se aplican de inmediato dentro de EditProductWindow, no al cerrar:
-        // por eso el buscador de MainWindow se refresca siempre que el producto se haya podido
-        // cargar, sin importar el DialogResult final (Guardar vs Cancelar).
+        // el error visible (el usuario solo puede cancelar). Guardar y activar/desactivar se
+        // aplican de inmediato dentro de EditProductWindow, no al cerrar: por eso el buscador de
+        // MainWindow se refresca siempre que el producto se haya podido cargar, sin importar el
+        // DialogResult final (Guardar vs Cancelar). Ajustar existencia ya no vive aquí (TAREA
+        // 24G-FIX, sección 2): su único hogar es Inventario
+        // (OnMainWindowAdjustInventoryRequested), reutilizando el mismo AdjustInventoryWindow.
         private async void OnMainWindowEditProductRequested(object? sender, ProductId productId)
         {
             if (_mainWindowScope is null || sender is not MainWindow mainWindow)
@@ -425,12 +431,9 @@ namespace Pos.Desktop
 
             var editProductWindow = _mainWindowScope.ServiceProvider.GetRequiredService<EditProductWindow>();
             editProductWindow.Owner = mainWindow;
-            editProductWindow.AdjustInventoryRequested += OnEditProductWindowAdjustInventoryRequested;
 
             await editProductWindow.LoadAsync(productId);
             editProductWindow.ShowDialog();
-
-            editProductWindow.AdjustInventoryRequested -= OnEditProductWindowAdjustInventoryRequested;
 
             if (editProductWindow.LoadedSku is { } sku)
             {
@@ -438,24 +441,26 @@ namespace Pos.Desktop
             }
         }
 
-        // Muestra AdjustInventoryWindow sobre EditProductWindow. Si el ajuste se confirma, refleja
-        // la nueva existencia en EditProductViewModel sin volver a consultar el servicio.
-        private void OnEditProductWindowAdjustInventoryRequested(object? sender, EventArgs e)
+        // Muestra AdjustInventoryWindow sobre MainWindow (que permanece abierta como owner), abierta
+        // directamente desde Inventario (TAREA 24G, sección 16/17/19) — a diferencia del flujo de
+        // Productos (OnEditProductWindowAdjustInventoryRequested), aquí no hay EditProductWindow de
+        // por medio. Reutiliza exactamente el mismo AdjustInventoryWindow/ViewModel/servicio.
+        private void OnMainWindowAdjustInventoryRequested(object? sender, InventoryCatalogItem item)
         {
-            if (_mainWindowScope is null || sender is not EditProductWindow editProductWindow)
+            if (_mainWindowScope is null || sender is not MainWindow mainWindow)
             {
                 return;
             }
 
             var adjustInventoryWindow = _mainWindowScope.ServiceProvider.GetRequiredService<AdjustInventoryWindow>();
-            adjustInventoryWindow.Owner = editProductWindow;
-            adjustInventoryWindow.Load(editProductWindow.ProductId, editProductWindow.ProductName, editProductWindow.CurrentQuantity);
+            adjustInventoryWindow.Owner = mainWindow;
+            adjustInventoryWindow.Load(item.ProductId, item.ProductName, item.Quantity);
 
             var dialogResult = adjustInventoryWindow.ShowDialog();
 
-            if (dialogResult == true && adjustInventoryWindow.NewQuantity is { } newQuantity)
+            if (dialogResult == true)
             {
-                editProductWindow.ApplyInventoryAdjusted(newQuantity);
+                mainWindow.ApplyInventoryAdjusted();
             }
         }
 

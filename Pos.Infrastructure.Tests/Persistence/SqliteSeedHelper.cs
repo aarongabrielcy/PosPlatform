@@ -1,3 +1,4 @@
+using Pos.Domain.Inventory;
 using Pos.Domain.RegisterSessions;
 using Pos.Domain.Sales;
 using Pos.Infrastructure.Persistence;
@@ -134,7 +135,8 @@ internal static class SqliteSeedHelper
         DateTimeOffset? timestamp = null,
         Guid? organizationId = null,
         Guid? branchId = null,
-        Guid? productId = null)
+        Guid? productId = null,
+        bool includeProduct = true)
     {
         var now = timestamp ?? DefaultTimestamp;
         var organization = organizationId ?? Guid.NewGuid();
@@ -157,18 +159,22 @@ internal static class SqliteSeedHelper
             IsActive = true,
             CreatedAtUtc = now,
         });
-        context.Add(new ProductRecord
+
+        if (includeProduct)
         {
-            Id = product,
-            OrganizationId = organization,
-            Sku = "SKU-001",
-            Name = "Producto de prueba",
-            SalePriceAmount = 10m,
-            SalePriceCurrency = "MXN",
-            TracksInventory = true,
-            IsActive = true,
-            CreatedAtUtc = now,
-        });
+            context.Add(new ProductRecord
+            {
+                Id = product,
+                OrganizationId = organization,
+                Sku = "SKU-001",
+                Name = "Producto de prueba",
+                SalePriceAmount = 10m,
+                SalePriceCurrency = "MXN",
+                TracksInventory = true,
+                IsActive = true,
+                CreatedAtUtc = now,
+            });
+        }
 
         await context.CommitAsync(CancellationToken.None);
         context.ChangeTracker.Clear();
@@ -197,6 +203,44 @@ internal static class SqliteSeedHelper
             ReorderPoint = reorderPoint,
             CreatedAtUtc = now,
             UpdatedAtUtc = updatedAtUtc ?? now,
+        };
+
+        context.Add(record);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        return record;
+    }
+
+    public static async Task<InventoryMovementRecord> SeedInventoryMovementAsync(
+        PosDbContext context,
+        Guid inventoryItemId,
+        Guid branchId,
+        Guid productId,
+        Guid performedByUserId,
+        InventoryMovementType type = InventoryMovementType.ManualIncrease,
+        decimal quantity = 1m,
+        decimal quantityBefore = 0m,
+        decimal quantityAfter = 1m,
+        Guid? saleId = null,
+        Guid? saleLineId = null,
+        Guid? id = null,
+        DateTimeOffset? occurredAtUtc = null)
+    {
+        var record = new InventoryMovementRecord
+        {
+            Id = id ?? Guid.NewGuid(),
+            InventoryItemId = inventoryItemId,
+            BranchId = branchId,
+            ProductId = productId,
+            PerformedByUserId = performedByUserId,
+            Type = type,
+            Quantity = quantity,
+            QuantityBefore = quantityBefore,
+            QuantityAfter = quantityAfter,
+            SaleId = saleId,
+            SaleLineId = saleLineId,
+            OccurredAtUtc = occurredAtUtc ?? DefaultTimestamp,
         };
 
         context.Add(record);
