@@ -49,6 +49,9 @@ public static class DependencyInjection
 
         services.AddScoped<IInventoryItemRepository, EfInventoryItemRepository>();
         services.AddScoped<IInventoryMovementRepository, EfInventoryMovementRepository>();
+        services.AddScoped<IInventoryCatalogQuery, EfInventoryCatalogQuery>();
+        services.AddScoped<IInventoryMovementQuery, EfInventoryMovementQuery>();
+        services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<ISaleRepository, EfSaleRepository>();
         services.AddScoped<IOrganizationRepository, EfOrganizationRepository>();
         services.AddScoped<IBranchRepository, EfBranchRepository>();

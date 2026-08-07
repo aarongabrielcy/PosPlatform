@@ -113,12 +113,8 @@
 
             <StackPanel Grid.Column="0" Orientation="Horizontal">
                 <Button x:Name="ToggleActiveButton" Content="{Binding ToggleActiveButtonText}"
-                        MinWidth="100" Padding="12,6" Margin="0,0,8,0" TabIndex="7"
+                        MinWidth="100" Padding="12,6" TabIndex="7"
                         Command="{Binding ToggleActiveCommand}" />
-                <Button x:Name="AdjustInventoryButton" Content="Ajustar inventario"
-                        MinWidth="140" Padding="12,6" TabIndex="8"
-                        IsEnabled="{Binding TracksInventory}"
-                        Command="{Binding AdjustInventoryCommand}" />
             </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal">

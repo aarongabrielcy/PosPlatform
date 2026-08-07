@@ -37,4 +37,48 @@
          estilo de polígonos simples que IconSales/IconLogout. -->
     <Geometry x:Key="IconClose">M1,3 L3,1 L15,13 L13,15 Z M13,1 L15,3 L3,15 L1,13 Z</Geometry>
 
+    <!-- Iconos de acción de fila en DataGrid (TAREA 24G-FIX, sección 8): sin emoji, mismo criterio
+         de geometrías simples de trazo grueso que el resto del archivo. -->
+
+    <!-- Editar (lápiz): cuerpo del lápiz + virola + punta, tres cuadriláteros consecutivos sin
+         superposición para evitar el efecto de "anillo" de EvenOdd (deliberado en IconSettings,
+         no deseado aquí). -->
+    <Geometry x:Key="IconEdit">
+        M1,15 L1,12.2 L9,4.2 L11.8,7 L3.8,15 Z
+        M9,4.2 L11,2.2 L13.8,5 L11.8,7 Z
+        M11,2.2 L12.4,0.8 L15.2,3.6 L13.8,5 Z
+    </Geometry>
+
+    <!-- Ver movimientos de stock (reloj/historial): anillo exterior (mismo truco que IconSettings)
+         más manecillas, contenidas dentro del radio interior para no cruzar el anillo. -->
+    <Geometry x:Key="IconHistory">
+        M8,1 A7,7 0 1,0 8.001,1 Z
+        M8,2 A6,6 0 1,0 8.001,2 Z
+        M7.4,4 H8.6 V8 H7.4 Z
+        M8,8 L11,10 L11.7,9 L8.7,7 Z
+    </Geometry>
+
+    <!-- Ajustar existencia (sliders/control deslizante): tres rieles con su control, cada riel
+         interrumpido para no superponerse con el círculo del control. -->
+    <Geometry x:Key="IconAdjust">
+        M1,2.5 H3.2 V3.5 H1 Z
+        M6.8,2.5 H15 V3.5 H6.8 Z
+        M5,1.5 A1.5,1.5 0 1,0 5.001,1.5 Z
+        M1,7.5 H9.2 V8.5 H1 Z
+        M12.8,7.5 H15 V8.5 H12.8 Z
+        M11,6.5 A1.5,1.5 0 1,0 11.001,6.5 Z
+        M1,12.5 H5.2 V13.5 H1 Z
+        M8.8,12.5 H15 V13.5 H8.8 Z
+        M7,11.5 A1.5,1.5 0 1,0 7.001,11.5 Z
+    </Geometry>
+
+    <!-- Ver actividad/auditoría (documento con líneas): rectángulo sólido con tres muescas
+         horizontales (EvenOdd las deja "huecas", efecto de líneas de texto). -->
+    <Geometry x:Key="IconAuditDocument">
+        M3,1 H13 V15 H3 Z
+        M5,4 H11 V5 H5 Z
+        M5,7 H11 V8 H5 Z
+        M5,10 H9 V11 H5 Z
+    </Geometry>
+
 </ResourceDictionary>

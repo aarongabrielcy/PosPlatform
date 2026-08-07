@@ -10,6 +10,7 @@ using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
 using Pos.Desktop.Inventory;
 using Pos.Desktop.Main;
+using FakeInventoryService = Pos.Desktop.Tests.Inventory.FakeInventoryService;
 using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
 using Pos.Desktop.Sales;
@@ -298,6 +299,36 @@ public class MainWindowViewModelTests
         Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.Inventory);
     }
 
+    // TAREA 24G, sección 18/49: el módulo Inventario es visible con ManageProducts O
+    // AdjustInventory (cualquiera de los dos basta), pero no sin ninguno.
+    [Fact]
+    public void NavigationItemsIncludeInventoryForAUserWithOnlyAdjustInventoryPermission()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "USERNAME", "Ana Pérez", "Almacenista",
+                [Permission.ProcessSale, Permission.AdjustInventory]),
+        };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.Inventory);
+    }
+
+    [Fact]
+    public void NavigationItemsExcludeInventoryForAUserWithNeitherPermission()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "USERNAME", "Ana Pérez", "Cajero",
+                [Permission.ProcessSale]),
+        };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.DoesNotContain(viewModel.NavigationItems, i => i.Section == NavigationSection.Inventory);
+    }
+
     [Fact]
     public void NavigationItemsIncludeRegisterForAUserWithOpenOrCloseRegisterPermission()
     {
@@ -461,6 +492,51 @@ public class MainWindowViewModelTests
         viewModel.ApplyProductUpdated("SKU-EDITED");
 
         Assert.True(notificationService.GetUnreadCountCallCount > callsAfterConstruction);
+    }
+
+    // TAREA 24G, sección 19/50: un ajuste exitoso desde Inventario refresca el badge de
+    // notificaciones exactamente igual que un ajuste hecho desde Productos (misma política, sin
+    // duplicarla en Desktop).
+    [Fact]
+    public void ApplyInventoryAdjustedRefreshesTheUnreadCount()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+        var notificationService = new FakeAdministrativeNotificationService();
+        var viewModel = CreateViewModel(session: session, notificationService: notificationService);
+        var callsAfterConstruction = notificationService.GetUnreadCountCallCount;
+
+        viewModel.ApplyInventoryAdjusted();
+
+        Assert.True(notificationService.GetUnreadCountCallCount > callsAfterConstruction);
+    }
+
+    // TAREA 24G, sección 16/17: AdjustInventoryWindow se abre directamente desde Inventario (sin
+    // pasar por EditProductWindow), igual patrón de burbujeo que EditProductRequested.
+    [Fact]
+    public void AdjustInventoryRequestedFromInventoryBubblesUpWithTheItem()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "GERENTE", "Ana Pérez", "Gerente",
+                [Permission.ProcessSale, Permission.ManageProducts, Permission.AdjustInventory]),
+        };
+        var inventoryItem = new Pos.Application.Inventory.InventoryCatalogItem(
+            ProductId.New(), "SKU-001", null, "Producto", true, 5m, 2m,
+            Pos.Application.Inventory.InventoryStockStatus.InStock);
+        var inventoryViewModel = new InventoryViewModel(
+            new FakeInventoryService(catalogHandler: (_, _, _, _, _) =>
+                Task.FromResult(new Pos.Application.Inventory.InventoryCatalogPageResult([inventoryItem], false))),
+            session);
+        var viewModel = CreateViewModel(session: session, inventoryViewModel: inventoryViewModel);
+        inventoryViewModel.LoadCommand.Execute(null);
+
+        Pos.Application.Inventory.InventoryCatalogItem? raised = null;
+        viewModel.AdjustInventoryRequested += (_, item) => raised = item;
+
+        inventoryViewModel.AdjustCommand.Execute(inventoryViewModel.Items.Single());
+
+        Assert.Equal(inventoryItem.ProductId, raised?.ProductId);
     }
 
     [Fact]
@@ -629,6 +705,7 @@ public class MainWindowViewModelTests
         DashboardViewModel? dashboardViewModel = null,
         SalesViewModel? salesViewModel = null,
         ProductsViewModel? productsViewModel = null,
+        InventoryViewModel? inventoryViewModel = null,
         RegisterViewModel? registerViewModel = null,
         FakeAdministrativeNotificationService? notificationService = null,
         FakeProductAuditService? productAuditService = null)
@@ -639,7 +716,7 @@ public class MainWindowViewModelTests
         dashboardViewModel ??= new DashboardViewModel(session, registerSession, currentSalesCart, new CatalogFakeProductManagementService());
         salesViewModel ??= new SalesViewModel(session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
         productsViewModel ??= new ProductsViewModel(new CatalogFakeProductManagementService());
-        var inventoryViewModel = new InventoryViewModel();
+        inventoryViewModel ??= new InventoryViewModel(new FakeInventoryService(), session);
         registerViewModel ??= new RegisterViewModel(registerSession);
         var settingsViewModel = new SettingsViewModel();
         var productAuditViewModel = new ProductAuditViewModel(productAuditService ?? new FakeProductAuditService());

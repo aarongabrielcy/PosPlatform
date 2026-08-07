@@ -397,45 +397,6 @@ public class EditProductViewModelTests
     }
 
     [Fact]
-    public async Task AdjustInventoryCommandCannotExecuteWhenProductDoesNotTrackInventory()
-    {
-        var details = CreateDetails(tracksInventory: false, currentQuantity: 0m, reorderPoint: 0m);
-        var service = new FakeProductManagementService(getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details));
-        var viewModel = await CreateLoadedViewModelAsync(service, details);
-
-        Assert.False(viewModel.AdjustInventoryCommand.CanExecute(null));
-    }
-
-    [Fact]
-    public async Task AdjustInventoryCommandRaisesAdjustInventoryRequestedWhenProductTracksInventory()
-    {
-        var details = CreateDetails(tracksInventory: true);
-        var service = new FakeProductManagementService(getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details));
-        var viewModel = await CreateLoadedViewModelAsync(service, details);
-
-        var raised = false;
-        viewModel.AdjustInventoryRequested += (_, _) => raised = true;
-
-        viewModel.AdjustInventoryCommand.Execute(null);
-
-        Assert.True(raised);
-        Assert.Equal(0, service.AdjustInventoryCallCount);
-    }
-
-    [Fact]
-    public async Task ApplyInventoryAdjustedUpdatesTheDisplayedQuantityWithoutCallingTheService()
-    {
-        var details = CreateDetails(tracksInventory: true, currentQuantity: 10m);
-        var service = new FakeProductManagementService(getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details));
-        var viewModel = await CreateLoadedViewModelAsync(service, details);
-
-        viewModel.ApplyInventoryAdjusted(15m);
-
-        Assert.Equal(15m, viewModel.CurrentQuantity);
-        Assert.Equal(0, service.AdjustInventoryCallCount);
-    }
-
-    [Fact]
     public void CancelCommandRaisesCancelRequested()
     {
         var service = new FakeProductManagementService();
