@@ -20,6 +20,7 @@ using Pos.Desktop.Register;
 using Pos.Desktop.RegisterSessions;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Sales.Checkout;
+using Pos.Desktop.Sales.History;
 using Pos.Desktop.Settings;
 using Pos.Desktop.Setup;
 using Pos.Domain.Common.Identifiers;
@@ -78,6 +79,7 @@ namespace Pos.Desktop
                         services.AddTransient<MainWindowViewModel>();
                         services.AddTransient<DashboardViewModel>();
                         services.AddTransient<SalesViewModel>();
+                        services.AddTransient<SalesHistoryViewModel>();
                         services.AddTransient<ProductsViewModel>();
                         services.AddTransient<InventoryViewModel>();
                         services.AddTransient<RegisterViewModel>();

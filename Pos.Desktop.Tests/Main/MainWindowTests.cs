@@ -13,12 +13,15 @@ using Pos.Desktop.Main;
 using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
 using Pos.Desktop.Sales;
+using Pos.Desktop.Sales.History;
 using Pos.Desktop.Settings;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Security;
 using CatalogFakeProductManagementService = Pos.Desktop.Tests.Products.Catalog.FakeProductManagementService;
 using FakeAdministrativeNotificationService = Pos.Desktop.Tests.AdministrativeNotifications.FakeAdministrativeNotificationService;
 using FakeInventoryService = Pos.Desktop.Tests.Inventory.FakeInventoryService;
+using FakeClock = Pos.Desktop.Tests.Sales.History.FakeClock;
+using FakeSalesHistoryService = Pos.Desktop.Tests.Sales.History.FakeSalesHistoryService;
 
 namespace Pos.Desktop.Tests.Main;
 
@@ -167,15 +170,18 @@ public class MainWindowTests
                 [new Pos.Application.SalesCart.SalesCartLine(ProductId.New(), "SKU-001", "Agua 1L", 1m, 10m, 10m, "MXN", 5m, true)], "MXN"));
             var dashboardViewModel = new DashboardViewModel(session, registerSession, currentSalesCart, new FakeProductManagementService());
             var salesViewModel = new SalesViewModel(session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
+            var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
             var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
             var viewModel = new MainWindowViewModel(
-                session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
+                session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
                 new InventoryViewModel(new FakeInventoryService(), session), new RegisterViewModel(registerSession), new SettingsViewModel(),
                 new ProductAuditViewModel(new FakeProductAuditService()),
                 new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
             _ = new MainWindow(viewModel);
 
-            viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
+            var salesItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
+            viewModel.SelectedNavigationItem = salesItem;
+            viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.SalesPointOfSale);
 
             viewModel.ToggleSidebarCommand.Execute(null);
 
@@ -261,6 +267,7 @@ public class MainWindowTests
             Assert.IsType<InventoryViewModel>(viewModel.CurrentViewModel);
 
             viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
+            viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.SalesPointOfSale);
             Assert.IsType<SalesViewModel>(viewModel.CurrentViewModel);
 
             viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Dashboard);
@@ -278,8 +285,9 @@ public class MainWindowTests
             var salesViewModel = new SalesViewModel(session, new FakeCurrentRegisterSession(), salesCartService, new FakeProductManagementService(), new FakeCurrentSalesCart());
             var dashboardViewModel = new DashboardViewModel(
                 session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), new FakeProductManagementService());
+            var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
             var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), dashboardViewModel, salesViewModel,
+                session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), dashboardViewModel, salesViewModel, salesHistoryViewModel,
                 new ProductsViewModel(new CatalogFakeProductManagementService()), new InventoryViewModel(new FakeInventoryService(), session),
                 new RegisterViewModel(new FakeCurrentRegisterSession()), new SettingsViewModel(),
                 new ProductAuditViewModel(new FakeProductAuditService()),
@@ -407,6 +415,7 @@ public class MainWindowTests
             session, registerSession, currentSalesCart, new FakeProductManagementService());
         var salesViewModel = new SalesViewModel(
             session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
+        var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
         var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
         var inventoryViewModel = new InventoryViewModel(new FakeInventoryService(), session);
         var registerViewModel = new RegisterViewModel(registerSession);
@@ -415,7 +424,7 @@ public class MainWindowTests
         var notificationCenterViewModel = new NotificationCenterViewModel(new FakeAdministrativeNotificationService());
 
         return new MainWindowViewModel(
-            session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
+            session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
             inventoryViewModel, registerViewModel, settingsViewModel, productAuditViewModel, notificationCenterViewModel);
     }
 

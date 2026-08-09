@@ -30,6 +30,12 @@ public sealed class NavigationSectionIconConverter : IValueConverter
     private static readonly Geometry AuditIcon = Geometry.Parse(
         "M3,1 H10 L13,4 V15 H3 Z M10,1 V4 H13 Z M5,7 H11 V8 H5 Z M5,10 H11 V11 H5 Z M5,4 H8 V5 H5 Z");
 
+    // Mismo trazo que IconHistory en Icons.xaml (TAREA 25B, sección 9): reloj/historial, ya usado
+    // para "Ver movimientos de stock" en Inventario, reutilizado aquí para el ítem de navegación
+    // "Historial" en vez de duplicar geometría.
+    private static readonly Geometry SalesHistoryIcon = Geometry.Parse(
+        "M8,1 A7,7 0 1,0 8.001,1 Z M8,2 A6,6 0 1,0 8.001,2 Z M7.4,4 H8.6 V8 H7.4 Z M8,8 L11,10 L11.7,9 L8.7,7 Z");
+
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not NavigationSection section)
@@ -40,7 +46,8 @@ public sealed class NavigationSectionIconConverter : IValueConverter
         return section switch
         {
             NavigationSection.Dashboard => DashboardIcon,
-            NavigationSection.Sales => SalesIcon,
+            NavigationSection.Sales or NavigationSection.SalesPointOfSale => SalesIcon,
+            NavigationSection.SalesHistory => SalesHistoryIcon,
             NavigationSection.Products => ProductsIcon,
             NavigationSection.Inventory => InventoryIcon,
             NavigationSection.Register => RegisterIcon,

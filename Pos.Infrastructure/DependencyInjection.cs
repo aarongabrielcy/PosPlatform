@@ -18,6 +18,7 @@ using Pos.Application.RegisterSessions;
 using Pos.Application.Registers;
 using Pos.Application.Sales;
 using Pos.Application.Sales.Checkout;
+using Pos.Application.Sales.History;
 using Pos.Application.SalesCart;
 using Pos.Application.Security;
 using Pos.Application.Users;
@@ -53,6 +54,8 @@ public static class DependencyInjection
         services.AddScoped<IInventoryMovementQuery, EfInventoryMovementQuery>();
         services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<ISaleRepository, EfSaleRepository>();
+        services.AddScoped<ISalesHistoryQuery, EfSalesHistoryQuery>();
+        services.AddScoped<ISalesHistoryService, SalesHistoryService>();
         services.AddScoped<IOrganizationRepository, EfOrganizationRepository>();
         services.AddScoped<IBranchRepository, EfBranchRepository>();
         services.AddScoped<IRegisterRepository, EfRegisterRepository>();
