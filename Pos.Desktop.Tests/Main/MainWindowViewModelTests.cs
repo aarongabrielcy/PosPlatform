@@ -14,12 +14,15 @@ using FakeInventoryService = Pos.Desktop.Tests.Inventory.FakeInventoryService;
 using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
 using Pos.Desktop.Sales;
+using Pos.Desktop.Sales.History;
 using Pos.Desktop.Settings;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.ProductAudit;
 using Pos.Domain.Security;
 using CatalogFakeProductManagementService = Pos.Desktop.Tests.Products.Catalog.FakeProductManagementService;
 using FakeAdministrativeNotificationService = Pos.Desktop.Tests.AdministrativeNotifications.FakeAdministrativeNotificationService;
+using FakeClock = Pos.Desktop.Tests.Sales.History.FakeClock;
+using FakeSalesHistoryService = Pos.Desktop.Tests.Sales.History.FakeSalesHistoryService;
 
 namespace Pos.Desktop.Tests.Main;
 
@@ -410,6 +413,122 @@ public class MainWindowViewModelTests
         Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.AuditProducts);
     }
 
+    // ---------- Ventas > Punto de venta / Historial (TAREA 25B, sección 9/49) ----------
+
+    [Fact]
+    public void UserWithOnlyProcessSaleSeesPointOfSaleButNotHistory()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "CAJERO", "Ana Pérez", "Cajero",
+                [Permission.ProcessSale]),
+        };
+        var viewModel = CreateViewModel(session: session);
+
+        var salesItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
+        Assert.Contains(salesItem.Children!, child => child.Section == NavigationSection.SalesPointOfSale);
+        Assert.DoesNotContain(salesItem.Children!, child => child.Section == NavigationSection.SalesHistory);
+    }
+
+    [Fact]
+    public void UserWithOnlyViewReportsSeesHistoryButNotPointOfSale()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "GERENTE", "Ana Pérez", "Gerente",
+                [Permission.ViewReports]),
+        };
+        var viewModel = CreateViewModel(session: session);
+
+        var salesItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
+        Assert.Contains(salesItem.Children!, child => child.Section == NavigationSection.SalesHistory);
+        Assert.DoesNotContain(salesItem.Children!, child => child.Section == NavigationSection.SalesPointOfSale);
+    }
+
+    [Fact]
+    public void UserWithBothPermissionsSeesBothSalesChildren()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "GERENTE", "Ana Pérez", "Gerente",
+                [Permission.ProcessSale, Permission.ViewReports]),
+        };
+        var viewModel = CreateViewModel(session: session);
+
+        var salesItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
+        Assert.Contains(salesItem.Children!, child => child.Section == NavigationSection.SalesPointOfSale);
+        Assert.Contains(salesItem.Children!, child => child.Section == NavigationSection.SalesHistory);
+    }
+
+    [Fact]
+    public void UserWithNeitherProcessSaleNorViewReportsDoesNotSeeTheSalesParent()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "ALMACEN", "Ana Pérez", "Almacenista",
+                [Permission.AdjustInventory]),
+        };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.DoesNotContain(viewModel.NavigationItems, i => i.Section == NavigationSection.Sales);
+    }
+
+    [Fact]
+    public void SelectingTheSalesParentItemExpandsItsChildrenWithoutChangingCurrentViewModel()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewReportsUser() };
+        var viewModel = CreateViewModel(session: session);
+        var previousViewModel = viewModel.CurrentViewModel;
+        var salesItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
+
+        viewModel.SelectedNavigationItem = salesItem;
+
+        Assert.Same(previousViewModel, viewModel.CurrentViewModel);
+        Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.SalesHistory);
+    }
+
+    [Fact]
+    public void SelectingTheSalesHistoryChildNavigatesToTheSalesHistoryViewModel()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewReportsUser() };
+        var viewModel = CreateViewModel(session: session);
+        var salesItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
+        viewModel.SelectedNavigationItem = salesItem;
+        var historyItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.SalesHistory);
+
+        viewModel.SelectedNavigationItem = historyItem;
+
+        Assert.IsType<SalesHistoryViewModel>(viewModel.CurrentViewModel);
+    }
+
+    // TAREA 25B-FIX, sección 9/17: navegar a Ventas > Historial por primera vez debe disparar,
+    // automáticamente y sin presionar "Buscar", las tres llamadas de la carga inicial (página 1,
+    // resumen, opciones de filtro), y nunca debe dejar el ViewModel mostrando Detail.
+    [Fact]
+    public void NavigatingToSalesHistoryTriggersItsLoadCommand()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewReportsUser() };
+        var salesHistoryService = new FakeSalesHistoryService();
+        var salesHistoryViewModel = new SalesHistoryViewModel(salesHistoryService, new FakeClock(DateTimeOffset.UtcNow));
+        var viewModel = CreateViewModel(session: session, salesHistoryViewModel: salesHistoryViewModel);
+        var salesItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
+        viewModel.SelectedNavigationItem = salesItem;
+        var historyItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.SalesHistory);
+
+        viewModel.SelectedNavigationItem = historyItem;
+
+        Assert.Equal(1, salesHistoryService.SearchPageCallCount);
+        Assert.Equal(0, salesHistoryService.LastSkip);
+        Assert.Equal(1, salesHistoryService.GetSummaryCallCount);
+        Assert.Equal(1, salesHistoryService.GetFilterOptionsCallCount);
+        Assert.False(salesHistoryViewModel.IsShowingDetail);
+        Assert.True(salesHistoryViewModel.IsShowingList);
+    }
+
     // ---------- Centro de notificaciones (TAREA 24E, sección 29/30) ----------
 
     [Fact]
@@ -573,6 +692,7 @@ public class MainWindowViewModelTests
 
         viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Products);
         viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
+        viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.SalesPointOfSale);
 
         Assert.Same(salesViewModel, viewModel.CurrentViewModel);
     }
@@ -591,6 +711,7 @@ public class MainWindowViewModelTests
 
         viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Products);
         viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
+        viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.SalesPointOfSale);
 
         Assert.Single(salesViewModel.CartLines);
     }
@@ -704,6 +825,7 @@ public class MainWindowViewModelTests
         FakeCurrentSalesCart? currentSalesCart = null,
         DashboardViewModel? dashboardViewModel = null,
         SalesViewModel? salesViewModel = null,
+        SalesHistoryViewModel? salesHistoryViewModel = null,
         ProductsViewModel? productsViewModel = null,
         InventoryViewModel? inventoryViewModel = null,
         RegisterViewModel? registerViewModel = null,
@@ -715,6 +837,7 @@ public class MainWindowViewModelTests
         currentSalesCart ??= new FakeCurrentSalesCart();
         dashboardViewModel ??= new DashboardViewModel(session, registerSession, currentSalesCart, new CatalogFakeProductManagementService());
         salesViewModel ??= new SalesViewModel(session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
+        salesHistoryViewModel ??= new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
         productsViewModel ??= new ProductsViewModel(new CatalogFakeProductManagementService());
         inventoryViewModel ??= new InventoryViewModel(new FakeInventoryService(), session);
         registerViewModel ??= new RegisterViewModel(registerSession);
@@ -723,7 +846,7 @@ public class MainWindowViewModelTests
         var notificationCenterViewModel = new NotificationCenterViewModel(notificationService ?? new FakeAdministrativeNotificationService());
 
         return new MainWindowViewModel(
-            session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, productsViewModel,
+            session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
             inventoryViewModel, registerViewModel, settingsViewModel, productAuditViewModel, notificationCenterViewModel);
     }
 
@@ -746,6 +869,16 @@ public class MainWindowViewModelTests
             "Ana Pérez",
             "Gerente",
             [Permission.ProcessSale, Permission.ManageProducts]);
+
+    private static AuthenticatedUser CreateViewReportsUser() =>
+        new(
+            UserId.New(),
+            OrganizationId.New(),
+            RoleId.New(),
+            "GERENTE",
+            "Ana Pérez",
+            "Gerente",
+            [Permission.ViewReports]);
 
     private static AuthenticatedUser CreateViewProductAuditUser() =>
         new(

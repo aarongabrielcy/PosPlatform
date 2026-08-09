@@ -16,6 +16,7 @@ using Pos.Desktop.Inventory;
 using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
 using Pos.Desktop.Sales;
+using Pos.Desktop.Sales.History;
 using Pos.Desktop.Settings;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Security;
@@ -38,6 +39,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly ICurrentSalesCart _currentSalesCart;
     private readonly DashboardViewModel _dashboardViewModel;
     private readonly SalesViewModel _salesViewModel;
+    private readonly SalesHistoryViewModel _salesHistoryViewModel;
     private readonly ProductsViewModel _productsViewModel;
     private readonly InventoryViewModel _inventoryViewModel;
     private readonly RegisterViewModel _registerViewModel;
@@ -71,6 +73,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         ICurrentSalesCart currentSalesCart,
         DashboardViewModel dashboardViewModel,
         SalesViewModel salesViewModel,
+        SalesHistoryViewModel salesHistoryViewModel,
         ProductsViewModel productsViewModel,
         InventoryViewModel inventoryViewModel,
         RegisterViewModel registerViewModel,
@@ -83,6 +86,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         _currentSalesCart = currentSalesCart ?? throw new ArgumentNullException(nameof(currentSalesCart));
         _dashboardViewModel = dashboardViewModel ?? throw new ArgumentNullException(nameof(dashboardViewModel));
         _salesViewModel = salesViewModel ?? throw new ArgumentNullException(nameof(salesViewModel));
+        _salesHistoryViewModel = salesHistoryViewModel ?? throw new ArgumentNullException(nameof(salesHistoryViewModel));
         _productsViewModel = productsViewModel ?? throw new ArgumentNullException(nameof(productsViewModel));
         _inventoryViewModel = inventoryViewModel ?? throw new ArgumentNullException(nameof(inventoryViewModel));
         _registerViewModel = registerViewModel ?? throw new ArgumentNullException(nameof(registerViewModel));
@@ -251,7 +255,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         CurrentViewModel = section switch
         {
             NavigationSection.Dashboard => _dashboardViewModel,
-            NavigationSection.Sales => _salesViewModel,
+            NavigationSection.SalesPointOfSale => _salesViewModel,
+            NavigationSection.SalesHistory => _salesHistoryViewModel,
             NavigationSection.Products => _productsViewModel,
             NavigationSection.Inventory => _inventoryViewModel,
             NavigationSection.Register => _registerViewModel,
@@ -281,6 +286,13 @@ public sealed class MainWindowViewModel : ViewModelBase
         if (section == NavigationSection.Inventory && _inventoryViewModel.LoadCommand.CanExecute(null))
         {
             _inventoryViewModel.LoadCommand.Execute(null);
+        }
+
+        // Consulta la DB al entrar a Historial (TAREA 25B, sección 33): sin cache permanente, sin
+        // polling. Preserva filtros/página ya elegidos (ver SalesHistoryViewModel.LoadCommand).
+        if (section == NavigationSection.SalesHistory && _salesHistoryViewModel.LoadCommand.CanExecute(null))
+        {
+            _salesHistoryViewModel.LoadCommand.Execute(null);
         }
     }
 
@@ -343,9 +355,24 @@ public sealed class MainWindowViewModel : ViewModelBase
         // respetan ManageProducts (ver DashboardViewModel.CanViewProductCards).
         yield return new NavigationItem(NavigationSection.Dashboard, "Dashboard");
 
+        // Ventas > Punto de venta / Historial (TAREA 25B, sección 9): mismo patrón padre/hijo que
+        // Auditoría. El padre "Ventas" es visible si el usuario puede acceder al menos a uno de sus
+        // hijos; cada hijo aparece según su propio permiso, nunca por Role.Name.
+        var salesChildren = new List<NavigationItem>();
+
         if (user.HasPermission(Permission.ProcessSale))
         {
-            yield return new NavigationItem(NavigationSection.Sales, "Venta");
+            salesChildren.Add(new NavigationItem(NavigationSection.SalesPointOfSale, "Punto de venta"));
+        }
+
+        if (user.HasPermission(Permission.ViewReports))
+        {
+            salesChildren.Add(new NavigationItem(NavigationSection.SalesHistory, "Historial"));
+        }
+
+        if (salesChildren.Count > 0)
+        {
+            yield return new NavigationItem(NavigationSection.Sales, "Ventas", salesChildren);
         }
 
         if (user.HasPermission(Permission.ManageProducts))

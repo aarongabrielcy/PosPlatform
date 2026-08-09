@@ -16,6 +16,7 @@ using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
 using Pos.Desktop.RegisterSessions;
 using Pos.Desktop.Sales;
+using Pos.Desktop.Sales.History;
 using Pos.Desktop.Settings;
 using Pos.Desktop.Setup;
 using Pos.Infrastructure;
@@ -62,6 +63,7 @@ public class DependencyInjectionTests
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<DashboardViewModel>();
         services.AddTransient<SalesViewModel>();
+        services.AddTransient<SalesHistoryViewModel>();
         services.AddTransient<ProductsViewModel>();
         services.AddTransient<InventoryViewModel>();
         services.AddTransient<RegisterViewModel>();
@@ -212,6 +214,7 @@ public class DependencyInjectionTests
 
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<DashboardViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<SalesViewModel>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<SalesHistoryViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<ProductsViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<InventoryViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<RegisterViewModel>());

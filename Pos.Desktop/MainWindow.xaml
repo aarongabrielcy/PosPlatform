@@ -8,6 +8,7 @@
         xmlns:main="clr-namespace:Pos.Desktop.Main"
         xmlns:dashboard="clr-namespace:Pos.Desktop.Dashboard"
         xmlns:sales="clr-namespace:Pos.Desktop.Sales"
+        xmlns:salesHistory="clr-namespace:Pos.Desktop.Sales.History"
         xmlns:catalog="clr-namespace:Pos.Desktop.Products.Catalog"
         xmlns:inventory="clr-namespace:Pos.Desktop.Inventory"
         xmlns:register="clr-namespace:Pos.Desktop.Register"
@@ -32,6 +33,9 @@
             </DataTemplate>
             <DataTemplate DataType="{x:Type sales:SalesViewModel}">
                 <sales:SalesView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type salesHistory:SalesHistoryViewModel}">
+                <salesHistory:SalesHistoryView />
             </DataTemplate>
             <DataTemplate DataType="{x:Type catalog:ProductsViewModel}">
                 <catalog:ProductsView />
