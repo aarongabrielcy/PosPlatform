@@ -316,6 +316,71 @@ public class CheckoutServiceTests
         AssertNothingPersisted(fixture);
     }
 
+    // ---------- Manual Card (TAREA 25C) ----------
+
+    [Fact]
+    public async Task CheckoutWithValidCardReferenceChargesExactTotalWithoutChange()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs([Permission.ProcessSale]);
+        fixture.OpenRegister();
+        var product = fixture.AddProduct(salePrice: 62.75m);
+        fixture.SeedInventory(product, 10m);
+        fixture.AddCartLine(product, 2m);
+        var service = fixture.BuildService();
+
+        var result = await service.CheckoutAsync(
+            new CheckoutRequest(0m, CheckoutPaymentMethod.Card, "  AUTH-4471  "));
+
+        Assert.True(result.Success);
+        Assert.Equal(CheckoutPaymentMethod.Card, result.Summary!.PaymentMethod);
+        Assert.Equal(125.50m, result.Summary.TotalAmount);
+        Assert.Equal(0m, result.Summary.CashTendered);
+        Assert.Equal(0m, result.Summary.ChangeAmount);
+        Assert.Equal("AUTH-4471", result.Summary.CardReference);
+
+        var payment = Assert.Single(fixture.SaleRepository.AddedSale!.Payments);
+        Assert.Equal(PaymentMethod.Card, payment.Method);
+        Assert.Equal(125.50m, payment.Amount.Amount);
+        Assert.Equal("AUTH-4471", payment.Reference);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task CheckoutWithBlankOrWhitespaceCardReferenceReturnsInvalidCardReference(string reference)
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs([Permission.ProcessSale]);
+        fixture.OpenRegister();
+        var product = fixture.AddProduct(salePrice: 10m);
+        fixture.SeedInventory(product, 10m);
+        fixture.AddCartLine(product, 1m);
+        var service = fixture.BuildService();
+
+        var result = await service.CheckoutAsync(new CheckoutRequest(0m, CheckoutPaymentMethod.Card, reference));
+
+        Assert.Equal(CheckoutResultStatus.InvalidCardReference, result.Status);
+        AssertNothingPersisted(fixture);
+    }
+
+    [Fact]
+    public async Task CheckoutWithNullCardReferenceReturnsInvalidCardReference()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs([Permission.ProcessSale]);
+        fixture.OpenRegister();
+        var product = fixture.AddProduct(salePrice: 10m);
+        fixture.SeedInventory(product, 10m);
+        fixture.AddCartLine(product, 1m);
+        var service = fixture.BuildService();
+
+        var result = await service.CheckoutAsync(new CheckoutRequest(0m, CheckoutPaymentMethod.Card, null));
+
+        Assert.Equal(CheckoutResultStatus.InvalidCardReference, result.Status);
+        AssertNothingPersisted(fixture);
+    }
+
     // ---------- Éxito: Sale / SaleLines / Payment / Inventory / Movement / Commit ----------
 
     [Fact]

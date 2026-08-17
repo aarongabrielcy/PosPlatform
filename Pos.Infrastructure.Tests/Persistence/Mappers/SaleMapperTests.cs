@@ -136,6 +136,7 @@ public class SaleMapperTests
             Amount = 60m,
             Currency = "MXN",
             PaidAtUtc = CreatedAtUtc,
+            Reference = "AUTH-0001",
             Sale = record,
         });
         record.Payments.Add(new PaymentRecord
@@ -154,6 +155,59 @@ public class SaleMapperTests
         Assert.Equal(2, sale.Payments.Count);
         Assert.Contains(sale.Payments, p => p.Id.Value == firstPaymentId);
         Assert.Contains(sale.Payments, p => p.Id.Value == secondPaymentId);
+    }
+
+    // TAREA 25C-FIX sección 5-6: una fila PaymentRecord Card histórica con reference = NULL
+    // (persistida antes de que la referencia fuera obligatoria para Card nuevos) debe poder
+    // reconstruirse sin lanzar PersistenceDataException.
+    [Fact]
+    public void ToDomainReconstructsAHistoricalCardPaymentWithNullReferenceWithoutThrowing()
+    {
+        var record = CreateValidDraftRecord();
+        record.Payments.Clear();
+        record.Payments.Add(new PaymentRecord
+        {
+            Id = Guid.NewGuid(),
+            SaleId = record.Id,
+            Method = PaymentMethod.Card,
+            Amount = 20m,
+            Currency = "MXN",
+            PaidAtUtc = CreatedAtUtc,
+            Reference = null,
+            Sale = record,
+        });
+
+        var sale = SaleMapper.ToDomain(record);
+
+        var payment = Assert.Single(sale.Payments);
+        Assert.Equal(PaymentMethod.Card, payment.Method);
+        Assert.Null(payment.Reference);
+    }
+
+    // TAREA 25C-FIX sección 7: BankTransfer nunca tuvo una invariante de Reference nueva; una fila
+    // sin referencia debe seguir siendo válida/legible igual que antes de este cambio.
+    [Fact]
+    public void ToDomainReconstructsABankTransferPaymentWithNullReferenceWithoutThrowing()
+    {
+        var record = CreateValidDraftRecord();
+        record.Payments.Clear();
+        record.Payments.Add(new PaymentRecord
+        {
+            Id = Guid.NewGuid(),
+            SaleId = record.Id,
+            Method = PaymentMethod.BankTransfer,
+            Amount = 20m,
+            Currency = "MXN",
+            PaidAtUtc = CreatedAtUtc,
+            Reference = null,
+            Sale = record,
+        });
+
+        var sale = SaleMapper.ToDomain(record);
+
+        var payment = Assert.Single(sale.Payments);
+        Assert.Equal(PaymentMethod.BankTransfer, payment.Method);
+        Assert.Null(payment.Reference);
     }
 
     [Fact]

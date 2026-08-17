@@ -14,5 +14,6 @@ public enum CheckoutResultStatus
     InsufficientStock,
     InvalidPayment,
     InsufficientCash,
+    InvalidCardReference,
     InternalValidationError,
 }

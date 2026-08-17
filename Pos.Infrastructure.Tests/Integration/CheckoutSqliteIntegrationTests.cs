@@ -142,6 +142,59 @@ public class CheckoutSqliteIntegrationTests
         Assert.Equal(line.Id, movement.SaleLineId);
     }
 
+    // TAREA 25C: Manual Card (terminal externa ajena a PosPlatform). El monto persistido es
+    // exactamente el total (nunca hay CashTendered/Change) y la referencia/autorización queda en
+    // Payment.Reference, nunca datos sensibles de tarjeta (no se piden en ningún punto del flujo).
+    [Fact]
+    public async Task SuccessfulManualCardCheckoutPersistsReferenceAndExactAmount()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        var (context, service, cart, graph, _, _) = await CreateAuthenticatedServiceAsync(connection);
+        await using var contextDisposable = context;
+
+        var result = await service.CheckoutAsync(
+            new CheckoutRequest(0m, CheckoutPaymentMethod.Card, "  AUTH-77321  "));
+
+        Assert.True(result.Success);
+        Assert.Equal(20m, result.Summary!.TotalAmount);
+        Assert.Equal(CheckoutPaymentMethod.Card, result.Summary.PaymentMethod);
+        Assert.Equal(0m, result.Summary.CashTendered);
+        Assert.Equal(0m, result.Summary.ChangeAmount);
+        Assert.Equal("AUTH-77321", result.Summary.CardReference);
+        Assert.Empty(cart.Snapshot.Lines);
+
+        var saleRecord = await context.Set<SaleRecord>()
+            .AsNoTracking()
+            .Include(r => r.Payments)
+            .SingleAsync(r => r.Id == result.Summary.SaleId);
+
+        Assert.Equal(SaleStatus.Completed, saleRecord.Status);
+
+        var payment = Assert.Single(saleRecord.Payments);
+        Assert.Equal(PaymentMethod.Card, payment.Method);
+        Assert.Equal(20m, payment.Amount);
+        Assert.Equal("AUTH-77321", payment.Reference);
+    }
+
+    [Fact]
+    public async Task ManualCardCheckoutWithBlankReferenceIsRejectedAndPersistsNothing()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+
+        var (context, service, cart, _, _, _) = await CreateAuthenticatedServiceAsync(connection);
+        await using var contextDisposable = context;
+
+        var result = await service.CheckoutAsync(new CheckoutRequest(0m, CheckoutPaymentMethod.Card, "   "));
+
+        Assert.Equal(CheckoutResultStatus.InvalidCardReference, result.Status);
+        Assert.Single(cart.Snapshot.Lines);
+        Assert.Equal(0, await context.Set<SaleRecord>().CountAsync());
+        Assert.Equal(0, await context.Set<PaymentRecord>().CountAsync());
+    }
+
     [Fact]
     public async Task InsufficientStockCheckoutPersistsNothingAndKeepsTheCart()
     {

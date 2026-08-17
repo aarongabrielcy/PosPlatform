@@ -80,6 +80,10 @@ public sealed class SaleHistoryDetailPaymentRowViewModel
 
     public string PaidAtLocalText { get; }
 
+    // Solo tiene contenido para Manual Card (TAREA 25C): la referencia/autorización de la terminal
+    // externa. Cash siempre la deja vacía (Payment.Reference es null para Cash).
+    public string ReferenceText { get; }
+
     public SaleHistoryDetailPaymentRowViewModel(SaleHistoryDetailPayment payment)
     {
         ArgumentNullException.ThrowIfNull(payment);
@@ -88,5 +92,6 @@ public sealed class SaleHistoryDetailPaymentRowViewModel
         MethodText = SalesHistoryDisplayFormatter.ToMethodLabel(payment.Method);
         AmountText = $"{payment.Amount.ToString("N2", CultureInfo.CurrentCulture)} {payment.Currency}";
         PaidAtLocalText = payment.PaidAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.CurrentCulture);
+        ReferenceText = payment.Reference is { } reference ? $"Ref: {reference}" : string.Empty;
     }
 }

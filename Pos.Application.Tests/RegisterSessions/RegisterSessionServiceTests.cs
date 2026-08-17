@@ -457,6 +457,51 @@ public class RegisterSessionServiceTests
         Assert.Equal(0m, result.Summary.Difference);
     }
 
+    // TAREA 25C, invariante de cajón: una venta con Manual Card es una venta pero nunca efectivo
+    // físico. ExpectedCash debe ignorar CompletedCardTotalToReturn por completo.
+    [Fact]
+    public async Task CloseNeverAddsCompletedCardSalesTotalToExpectedCash()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.SeedOpenCurrentSession(openingAmount: 500m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 900m;
+        fixture.SaleRepository.CompletedCardTotalToReturn = 600m;
+        fixture.SaleRepository.CompletedGrossTotalToReturn = 1500m;
+        var service = fixture.BuildService();
+
+        var result = await service.CloseAsync(new CloseRegisterSessionRequest(1400m));
+
+        Assert.True(result.Success);
+        Assert.Equal(900m, result.Summary!.CashSales);
+        Assert.Equal(600m, result.Summary.CardSales);
+        Assert.Equal(1500m, result.Summary.GrossSales);
+        Assert.Equal(1400m, result.Summary.ExpectedAmount);
+        Assert.Equal(0m, result.Summary.Difference);
+    }
+
+    // TAREA 25C-FIX sección 10: GrossSales debe provenir de ISaleRepository.
+    // GetCompletedGrossTotalByRegisterSessionAsync, nunca de CashSales + CardSales. Se fuerza un
+    // valor de GrossSales distinto de la suma Cash+Card (1500) para probar que CloseAsync jamás lo
+    // recalcula localmente sumando los desgloses: si volviera a derivarse, esta prueba fallaría.
+    [Fact]
+    public async Task CloseNeverDerivesGrossSalesFromCashPlusCardTotals()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.SeedOpenCurrentSession(openingAmount: 500m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 900m;
+        fixture.SaleRepository.CompletedCardTotalToReturn = 600m;
+        fixture.SaleRepository.CompletedGrossTotalToReturn = 1650m;
+        var service = fixture.BuildService();
+
+        var result = await service.CloseAsync(new CloseRegisterSessionRequest(1400m));
+
+        Assert.True(result.Success);
+        Assert.Equal(1650m, result.Summary!.GrossSales);
+        Assert.Equal(1400m, result.Summary.ExpectedAmount);
+    }
+
     [Fact]
     public async Task CloseQueriesCashTotalForTheCurrentRegisterSessionId()
     {
@@ -672,6 +717,49 @@ public class RegisterSessionServiceTests
         Assert.Equal(129m, result.Summary.CompletedCashSales);
         Assert.Equal(629m, result.Summary.ExpectedCash);
         Assert.Equal("MXN", result.Summary.Currency);
+    }
+
+    [Fact]
+    public async Task GetClosingSummaryIncludesCardSalesInBreakdownButNeverInExpectedCash()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.SeedOpenCurrentSession(openingAmount: 500m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 900m;
+        fixture.SaleRepository.CompletedCardTotalToReturn = 600m;
+        fixture.SaleRepository.CompletedGrossTotalToReturn = 1500m;
+        var service = fixture.BuildService();
+
+        var result = await service.GetClosingSummaryAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(500m, result.Summary!.OpeningFloat);
+        Assert.Equal(900m, result.Summary.CompletedCashSales);
+        Assert.Equal(600m, result.Summary.CompletedCardSales);
+        Assert.Equal(1500m, result.Summary.GrossSales);
+        Assert.Equal(1400m, result.Summary.ExpectedCash);
+    }
+
+    // TAREA 25C-FIX sección 10, misma protección que CloseNeverDerivesGrossSalesFromCashPlusCardTotals
+    // pero para la vista previa: GrossSales viene de GetCompletedGrossTotalByRegisterSessionAsync,
+    // no de sumar CashSales + CardSales localmente (aquí serían 1500, pero se fuerza 1650 para
+    // demostrar que un tercer método de pago -p. ej. BankTransfer- no desaparecería del total).
+    [Fact]
+    public async Task GetClosingSummaryNeverDerivesGrossSalesFromCashPlusCardTotals()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.SeedOpenCurrentSession(openingAmount: 500m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 900m;
+        fixture.SaleRepository.CompletedCardTotalToReturn = 600m;
+        fixture.SaleRepository.CompletedGrossTotalToReturn = 1650m;
+        var service = fixture.BuildService();
+
+        var result = await service.GetClosingSummaryAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(1650m, result.Summary!.GrossSales);
+        Assert.Equal(1400m, result.Summary.ExpectedCash);
     }
 
     [Fact]

@@ -181,26 +181,51 @@ public sealed class CheckoutService : ICheckoutService
             return CheckoutResult.Failure(CheckoutResultStatus.InternalValidationError);
         }
 
-        // ---------- Pago en efectivo (sección 13-14) ----------
-        // Payment.Amount = Sale.Total (lo que efectivamente paga la venta); el efectivo entregado
-        // y el cambio son solo resultado transitorio del checkout, no hay CashTendered/Change en
-        // el esquema de Payment.
+        // ---------- Pago (sección 13-14, TAREA 25C) ----------
+        // Payment.Amount = Sale.Total (lo que efectivamente paga la venta) en ambos métodos. Para
+        // Cash, el efectivo entregado y el cambio son solo resultado transitorio del checkout, no
+        // hay CashTendered/Change en el esquema de Payment. Para Card (Manual Card: terminal externa
+        // ajena a PosPlatform), el monto es exactamente el total y se exige una referencia/
+        // autorización no vacía; nunca se solicitan datos sensibles de tarjeta.
 
-        var roundedCashTendered = Math.Round(request.CashTendered, 2, MidpointRounding.AwayFromZero);
+        decimal roundedCashTendered;
+        decimal changeAmount;
+        string? cardReference;
 
-        if (roundedCashTendered <= 0m)
+        if (request.PaymentMethod == CheckoutPaymentMethod.Cash)
         {
-            return CheckoutResult.Failure(CheckoutResultStatus.InvalidPayment);
-        }
+            roundedCashTendered = Math.Round(request.CashTendered, 2, MidpointRounding.AwayFromZero);
 
-        if (roundedCashTendered < sale.Total.Amount)
+            if (roundedCashTendered <= 0m)
+            {
+                return CheckoutResult.Failure(CheckoutResultStatus.InvalidPayment);
+            }
+
+            if (roundedCashTendered < sale.Total.Amount)
+            {
+                return CheckoutResult.Failure(CheckoutResultStatus.InsufficientCash);
+            }
+
+            changeAmount = roundedCashTendered - sale.Total.Amount;
+            cardReference = null;
+
+            sale.AddPayment(PaymentId.New(), PaymentMethod.Cash, sale.Total, now);
+        }
+        else
         {
-            return CheckoutResult.Failure(CheckoutResultStatus.InsufficientCash);
+            var trimmedReference = request.CardReference?.Trim();
+
+            if (string.IsNullOrWhiteSpace(trimmedReference))
+            {
+                return CheckoutResult.Failure(CheckoutResultStatus.InvalidCardReference);
+            }
+
+            roundedCashTendered = 0m;
+            changeAmount = 0m;
+            cardReference = trimmedReference;
+
+            sale.AddPayment(PaymentId.New(), PaymentMethod.Card, sale.Total, now, cardReference);
         }
-
-        var changeAmount = roundedCashTendered - sale.Total.Amount;
-
-        sale.AddPayment(PaymentId.New(), PaymentMethod.Cash, sale.Total, now);
 
         // ---------- Inventario: movimientos + aplicación (sección 9, 18) ----------
         // Toda la mutación en memoria ocurre antes de cualquier escritura, igual que
@@ -261,8 +286,10 @@ public sealed class CheckoutService : ICheckoutService
             sale.CompletedAtUtc!.Value,
             sale.Total.Amount,
             sale.Total.Currency,
+            request.PaymentMethod,
             roundedCashTendered,
-            changeAmount);
+            changeAmount,
+            cardReference);
 
         return CheckoutResult.SuccessResult(summary);
     }

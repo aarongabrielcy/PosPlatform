@@ -295,11 +295,13 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="160" />
                                         <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="160" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Text="{Binding MethodText}" Foreground="{StaticResource PrimaryTextBrush}" />
                                     <TextBlock Grid.Column="1" Text="{Binding AmountText}" Foreground="{StaticResource PrimaryTextBrush}" />
-                                    <TextBlock Grid.Column="2" Text="{Binding PaidAtLocalText}" Foreground="{StaticResource SecondaryTextBrush}" />
+                                    <TextBlock Grid.Column="2" Text="{Binding ReferenceText}" Foreground="{StaticResource SecondaryTextBrush}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding PaidAtLocalText}" Foreground="{StaticResource SecondaryTextBrush}" />
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

@@ -7,13 +7,15 @@ using Pos.Desktop.Common;
 
 namespace Pos.Desktop.Sales.Checkout;
 
-// TAREA 25A: presenta el resumen de la venta actual (leído directamente de ICurrentSalesCart, la
-// misma fuente que SalesView) y pide el efectivo recibido. Todo el checkout real (revalidación de
-// carrito, creación de Sale/Payment, descuento de inventario, Commit) vive en ICheckoutService:
-// este ViewModel nunca crea Sale ni toca repositorios/DbContext directamente.
+// TAREA 25A/25C: presenta el resumen de la venta actual (leído directamente de ICurrentSalesCart, la
+// misma fuente que SalesView) y pide el pago: efectivo recibido (Cash) o referencia/autorización
+// externa (Card — Manual Card, terminal externa ajena a PosPlatform). Todo el checkout real
+// (revalidación de carrito, creación de Sale/Payment, descuento de inventario, Commit) vive en
+// ICheckoutService: este ViewModel nunca crea Sale ni toca repositorios/DbContext directamente.
 public sealed partial class CheckoutViewModel : ViewModelBase
 {
     private const decimal MaxCashTendered = 999_999_999.99m;
+    private const int MaxCardReferenceLength = 100;
 
     private readonly ICheckoutService _checkoutService;
     private readonly ICurrentSalesCart _currentSalesCart;
@@ -21,7 +23,9 @@ public sealed partial class CheckoutViewModel : ViewModelBase
     private readonly AsyncRelayCommand _confirmCommand;
     private readonly AsyncRelayCommand _cancelCommand;
 
+    private bool _isCashSelected = true;
     private string _cashTenderedText = string.Empty;
+    private string _cardReferenceText = string.Empty;
     private bool _isBusy;
     private string? _generalError;
 
@@ -52,6 +56,28 @@ public sealed partial class CheckoutViewModel : ViewModelBase
 
     public string TotalAmountText => FormatAmount(_currentSalesCart.Snapshot.TotalAmount);
 
+    // Un solo par de propiedades booleanas complementarias respalda los dos RadioButton de
+    // CheckoutWindow (GroupName="PaymentMethod"): seleccionar uno siempre deselecciona el otro.
+    public bool IsCashSelected
+    {
+        get => _isCashSelected;
+        set
+        {
+            if (SetProperty(ref _isCashSelected, value))
+            {
+                OnPropertyChanged(nameof(IsCardSelected));
+                OnPropertyChanged(nameof(ChangeText));
+                GeneralError = null;
+            }
+        }
+    }
+
+    public bool IsCardSelected
+    {
+        get => !_isCashSelected;
+        set => IsCashSelected = !value;
+    }
+
     public string CashTenderedText
     {
         get => _cashTenderedText;
@@ -68,13 +94,21 @@ public sealed partial class CheckoutViewModel : ViewModelBase
     {
         get
         {
-            if (!TryParseCash(CashTenderedText, out var cashTendered, out _))
+            if (!IsCashSelected || !TryParseCash(CashTenderedText, out var cashTendered, out _))
             {
                 return string.Empty;
             }
 
             return FormatAmount(cashTendered - _currentSalesCart.Snapshot.TotalAmount);
         }
+    }
+
+    // Referencia/autorización externa (Manual Card): el cajero la copia de la terminal externa tras
+    // una autorización aprobada. Nunca se pide número de tarjeta, expiración ni CVV.
+    public string CardReferenceText
+    {
+        get => _cardReferenceText;
+        set => SetProperty(ref _cardReferenceText, value);
     }
 
     public bool IsBusy
@@ -103,17 +137,34 @@ public sealed partial class CheckoutViewModel : ViewModelBase
     {
         GeneralError = null;
 
-        if (!TryParseCash(CashTenderedText, out var cashTendered, out var parseError))
+        CheckoutRequest request;
+
+        if (IsCashSelected)
         {
-            GeneralError = parseError;
-            return;
+            if (!TryParseCash(CashTenderedText, out var cashTendered, out var parseError))
+            {
+                GeneralError = parseError;
+                return;
+            }
+
+            request = new CheckoutRequest(cashTendered, CheckoutPaymentMethod.Cash);
+        }
+        else
+        {
+            if (!TryValidateCardReference(CardReferenceText, out var reference, out var parseError))
+            {
+                GeneralError = parseError;
+                return;
+            }
+
+            request = new CheckoutRequest(0m, CheckoutPaymentMethod.Card, reference);
         }
 
         IsBusy = true;
 
         try
         {
-            var result = await _checkoutService.CheckoutAsync(new CheckoutRequest(cashTendered), CancellationToken);
+            var result = await _checkoutService.CheckoutAsync(request, CancellationToken);
 
             if (result.Success)
             {
@@ -187,6 +238,29 @@ public sealed partial class CheckoutViewModel : ViewModelBase
         return true;
     }
 
+    private static bool TryValidateCardReference(string text, out string reference, out string? error)
+    {
+        reference = string.Empty;
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            error = "La referencia/autorización es obligatoria.";
+            return false;
+        }
+
+        var trimmed = text.Trim();
+
+        if (trimmed.Length > MaxCardReferenceLength)
+        {
+            error = $"La referencia/autorización no puede superar {MaxCardReferenceLength} caracteres.";
+            return false;
+        }
+
+        reference = trimmed;
+        return true;
+    }
+
     private string FormatAmount(decimal amount) =>
         $"{amount.ToString("N2", CultureInfo.CurrentCulture)} {Currency}";
 
@@ -206,6 +280,7 @@ public sealed partial class CheckoutViewModel : ViewModelBase
             : "No hay existencia suficiente para completar la venta.",
         CheckoutResultStatus.InvalidPayment => "El efectivo recibido no es válido.",
         CheckoutResultStatus.InsufficientCash => "El efectivo recibido es menor que el total.",
+        CheckoutResultStatus.InvalidCardReference => "La referencia/autorización es obligatoria.",
         CheckoutResultStatus.InternalValidationError => "El total de la venta no coincide con el carrito. Intenta nuevamente.",
         _ => "No fue posible completar el cobro.",
     };

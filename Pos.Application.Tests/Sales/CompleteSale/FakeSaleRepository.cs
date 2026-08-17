@@ -27,7 +27,15 @@ internal sealed class FakeSaleRepository : ISaleRepository
 
     public decimal CompletedCashTotalToReturn { get; set; }
 
+    public decimal CompletedCardTotalToReturn { get; set; }
+
+    public decimal CompletedGrossTotalToReturn { get; set; }
+
     public RegisterSessionId? LastQueriedCashTotalRegisterSessionId { get; private set; }
+
+    public RegisterSessionId? LastQueriedCardTotalRegisterSessionId { get; private set; }
+
+    public RegisterSessionId? LastQueriedGrossTotalRegisterSessionId { get; private set; }
 
     public Task<Sale?> GetByIdAsync(SaleId saleId, CancellationToken cancellationToken)
     {
@@ -60,5 +68,21 @@ internal sealed class FakeSaleRepository : ISaleRepository
         LastQueriedCashTotalRegisterSessionId = registerSessionId;
 
         return Task.FromResult(CompletedCashTotalToReturn);
+    }
+
+    public Task<decimal> GetCompletedCardTotalByRegisterSessionAsync(
+        RegisterSessionId registerSessionId, CancellationToken cancellationToken)
+    {
+        LastQueriedCardTotalRegisterSessionId = registerSessionId;
+
+        return Task.FromResult(CompletedCardTotalToReturn);
+    }
+
+    public Task<decimal> GetCompletedGrossTotalByRegisterSessionAsync(
+        RegisterSessionId registerSessionId, CancellationToken cancellationToken)
+    {
+        LastQueriedGrossTotalRegisterSessionId = registerSessionId;
+
+        return Task.FromResult(CompletedGrossTotalToReturn);
     }
 }

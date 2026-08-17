@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Cobrar — PosPlatform"
-        Height="440" Width="440"
+        Height="480" Width="440"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
     <Window.Resources>
@@ -42,22 +42,57 @@
 
             <Label Grid.Row="1" Grid.Column="0" Content="Forma de pago" />
             <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,10">
-                <RadioButton x:Name="CashRadioButton" Content="Efectivo" IsChecked="True" IsEnabled="False"
-                        GroupName="PaymentMethod" Margin="0,0,16,0" />
-                <RadioButton x:Name="CardRadioButton" Content="Tarjeta" IsEnabled="False"
+                <RadioButton x:Name="CashRadioButton" Content="Efectivo"
+                        GroupName="PaymentMethod" Margin="0,0,16,0"
+                        IsChecked="{Binding IsCashSelected}" />
+                <RadioButton x:Name="CardRadioButton" Content="Tarjeta — manual"
                         GroupName="PaymentMethod"
-                        ToolTip="Disponible al integrar terminal Point Smart" />
+                        ToolTip="Cobro realizado en una terminal externa; PosPlatform solo registra la referencia/autorización."
+                        IsChecked="{Binding IsCardSelected}" />
             </StackPanel>
 
-            <Label Grid.Row="2" Grid.Column="0" Content="Efectivo recibido"
-                    Target="{Binding ElementName=CashTenderedTextBox}" />
-            <TextBox x:Name="CashTenderedTextBox" Grid.Row="2" Grid.Column="1"
-                    Margin="0,6" Padding="6,4" TabIndex="0"
-                    Text="{Binding CashTenderedText, UpdateSourceTrigger=PropertyChanged}" />
+            <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                    Visibility="{Binding IsCashSelected, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-            <Label Grid.Row="3" Grid.Column="0" Content="Cambio" />
-            <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,10" VerticalAlignment="Center"
-                    FontWeight="Bold" Text="{Binding ChangeText, Mode=OneWay}" />
+                    <Label Grid.Row="0" Grid.Column="0" Content="Efectivo recibido"
+                            Target="{Binding ElementName=CashTenderedTextBox}" />
+                    <TextBox x:Name="CashTenderedTextBox" Grid.Row="0" Grid.Column="1"
+                            Margin="0,6" Padding="6,4" TabIndex="0"
+                            Text="{Binding CashTenderedText, UpdateSourceTrigger=PropertyChanged}" />
+
+                    <Label Grid.Row="1" Grid.Column="0" Content="Cambio" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,10" VerticalAlignment="Center"
+                            FontWeight="Bold" Text="{Binding ChangeText, Mode=OneWay}" />
+                </Grid>
+            </StackPanel>
+
+            <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                    Visibility="{Binding IsCardSelected, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Label Grid.Row="0" Grid.Column="0" Content="Referencia / autorización"
+                            Target="{Binding ElementName=CardReferenceTextBox}" />
+                    <TextBox x:Name="CardReferenceTextBox" Grid.Row="0" Grid.Column="1"
+                            Margin="0,6" Padding="6,4" TabIndex="0"
+                            Text="{Binding CardReferenceText, UpdateSourceTrigger=PropertyChanged}" />
+                </Grid>
+            </StackPanel>
         </Grid>
 
         <TextBlock Grid.Row="2" Text="{Binding GeneralError}"
