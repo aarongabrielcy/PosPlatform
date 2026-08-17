@@ -43,6 +43,11 @@ internal sealed class PaymentRecordConfiguration : IEntityTypeConfiguration<Paym
             .HasConversion<DateTimeOffsetToTicksConverter>()
             .IsRequired();
 
+        builder.Property(record => record.Reference)
+            .HasColumnName("reference")
+            .HasMaxLength(100)
+            .IsRequired(false);
+
         builder.HasIndex(record => record.SaleId);
         builder.HasIndex(record => record.Method);
         builder.HasIndex(record => record.PaidAtUtc);

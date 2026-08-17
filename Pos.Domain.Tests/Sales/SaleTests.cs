@@ -677,12 +677,14 @@ public class SaleTests
         PaymentId? paymentId = null,
         PaymentMethod method = PaymentMethod.Cash,
         Money? amount = null,
-        DateTimeOffset? paidAtUtc = null) =>
+        DateTimeOffset? paidAtUtc = null,
+        string? reference = null) =>
         sale.AddPayment(
             paymentId ?? PaymentId.New(),
             method,
             amount ?? new Money(10m, "MXN"),
-            paidAtUtc ?? CreatedAtUtc);
+            paidAtUtc ?? CreatedAtUtc,
+            reference ?? (method == PaymentMethod.Cash ? null : "AUTH-0001"));
 
     [Fact]
     public void AddPaymentAddsValidCashPayment()
@@ -1618,12 +1620,14 @@ public class SaleTests
         PaymentId? id = null,
         PaymentMethod method = PaymentMethod.Cash,
         Money? amount = null,
-        DateTimeOffset? paidAtUtc = null) =>
+        DateTimeOffset? paidAtUtc = null,
+        string? reference = null) =>
         new(
             id ?? PaymentId.New(),
             method,
             amount ?? new Money(10m, "MXN"),
-            paidAtUtc ?? CreatedAtUtc);
+            paidAtUtc ?? CreatedAtUtc,
+            reference ?? (method == PaymentMethod.Cash ? null : "AUTH-0001"));
 
     private static Sale Rehydrate(
         SaleId? id = null,

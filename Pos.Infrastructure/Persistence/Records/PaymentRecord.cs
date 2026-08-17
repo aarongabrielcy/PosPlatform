@@ -16,5 +16,7 @@ internal sealed class PaymentRecord
 
     public DateTimeOffset PaidAtUtc { get; set; }
 
+    public string? Reference { get; set; }
+
     public SaleRecord Sale { get; set; } = null!;
 }

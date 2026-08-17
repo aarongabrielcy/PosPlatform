@@ -133,11 +133,12 @@ public sealed class Sale
         PaymentId paymentId,
         PaymentMethod method,
         Money amount,
-        DateTimeOffset paidAtUtc)
+        DateTimeOffset paidAtUtc,
+        string? reference = null)
     {
         EnsureDraft();
 
-        var payment = new Payment(paymentId, method, amount, paidAtUtc);
+        var payment = new Payment(paymentId, method, amount, paidAtUtc, reference);
 
         if (payment.Amount.Currency != _currency)
         {
@@ -328,7 +329,7 @@ public sealed class Sale
                 throw new DomainValidationException("Ya existe un pago con el mismo PaymentId.");
             }
 
-            _payments.Add(new Payment(payment.Id, payment.Method, payment.Amount, payment.PaidAtUtc));
+            _payments.Add(Payment.Rehydrate(payment.Id, payment.Method, payment.Amount, payment.PaidAtUtc, payment.Reference));
         }
 
         RecalculateTotals();

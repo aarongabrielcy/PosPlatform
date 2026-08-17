@@ -47,7 +47,8 @@ public class CheckoutWindowTests
         {
             var cart = new FakeCurrentSalesCart();
             cart.SetSnapshot(CreateSnapshot(20m));
-            var summary = new CheckoutSummary(Guid.NewGuid(), CompletedAtUtc, 20m, "MXN", 20m, 0m);
+            var summary = new CheckoutSummary(
+                Guid.NewGuid(), CompletedAtUtc, 20m, "MXN", CheckoutPaymentMethod.Cash, 20m, 0m, null);
             var service = new FakeCheckoutService((_, _) => Task.FromResult(CheckoutResult.SuccessResult(summary)));
             var viewModel = new CheckoutViewModel(service, cart, NullLogger<CheckoutViewModel>.Instance);
             var window = new CheckoutWindow(viewModel);

@@ -7,6 +7,7 @@ using Pos.Application.Authentication;
 using Pos.Application.Inventory;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
+using Pos.Application.Sales.Checkout;
 using Pos.Application.SalesCart;
 using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
@@ -488,12 +489,18 @@ namespace Pos.Desktop
 
             mainWindow.ApplyCheckoutCompleted();
 
+            var paymentDetail = summary.PaymentMethod == CheckoutPaymentMethod.Cash
+                ? $"\n\nForma de pago:\nEfectivo" +
+                  $"\n\nEfectivo recibido:\n{summary.CashTendered.ToString("N2", CultureInfo.CurrentCulture)} {summary.Currency}" +
+                  $"\n\nCambio:\n{summary.ChangeAmount.ToString("N2", CultureInfo.CurrentCulture)} {summary.Currency}"
+                : $"\n\nForma de pago:\nTarjeta — manual" +
+                  $"\n\nReferencia/autorización:\n{summary.CardReference}";
+
             MessageBox.Show(
                 "Venta completada correctamente." +
                 $"\n\nVenta: {summary.SaleId}" +
                 $"\n\nTotal:\n{summary.TotalAmount.ToString("N2", CultureInfo.CurrentCulture)} {summary.Currency}" +
-                $"\n\nEfectivo recibido:\n{summary.CashTendered.ToString("N2", CultureInfo.CurrentCulture)} {summary.Currency}" +
-                $"\n\nCambio:\n{summary.ChangeAmount.ToString("N2", CultureInfo.CurrentCulture)} {summary.Currency}",
+                paymentDetail,
                 "PosPlatform",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);

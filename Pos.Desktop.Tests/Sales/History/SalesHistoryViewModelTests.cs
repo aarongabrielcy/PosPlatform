@@ -339,7 +339,7 @@ public class SalesHistoryViewModelTests
             saleId, SaleStatus.Completed, Now, Now, UserId.New(), "Ana Pérez", RegisterId.New(), "Caja 1",
             RegisterSessionId.New(), 10m, 10m, "MXN",
             [new SaleHistoryDetailLine("SKU-001", "Agua 1L", 1m, 10m, 10m, "MXN")],
-            [new SaleHistoryDetailPayment(PaymentMethod.Cash, 10m, "MXN", Now)]);
+            [new SaleHistoryDetailPayment(PaymentMethod.Cash, 10m, "MXN", Now, null)]);
         var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
         var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
         var row = new SalesHistoryRowViewModel(CreateItem(saleId: saleId));

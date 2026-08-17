@@ -270,6 +270,12 @@ internal static class SaleMapper
                 throw new PersistenceDataException(
                     $"No se puede actualizar PaymentRecord '{paymentRecord.Id}': PaidAtUtc no coincide.");
             }
+
+            if (!string.Equals(paymentRecord.Reference, payment.Reference, StringComparison.Ordinal))
+            {
+                throw new PersistenceDataException(
+                    $"No se puede actualizar PaymentRecord '{paymentRecord.Id}': Reference no coincide.");
+            }
         }
 
         return salePaymentsById;
@@ -300,11 +306,15 @@ internal static class SaleMapper
                 $"PaymentRecord con Id '{payment.Id}' tiene SaleId '{payment.SaleId}' distinto al de SaleRecord '{saleId}'.");
         }
 
-        return new Payment(
+        // Payment.Rehydrate (no el constructor público): un PaymentRecord Card histórico con
+        // reference = NULL (persistido antes de que la referencia fuera obligatoria) debe poder
+        // reconstruirse sin lanzar (TAREA 25C-FIX sección 5).
+        return Payment.Rehydrate(
             new PaymentId(payment.Id),
             payment.Method,
             new Money(payment.Amount, payment.Currency),
-            payment.PaidAtUtc);
+            payment.PaidAtUtc,
+            payment.Reference);
     }
 
     private static SaleLineRecord ToLineRecord(SaleLine line, SaleRecord record) => new()
@@ -328,6 +338,7 @@ internal static class SaleMapper
         Amount = payment.Amount.Amount,
         Currency = payment.Amount.Currency,
         PaidAtUtc = payment.PaidAtUtc,
+        Reference = payment.Reference,
         Sale = record,
     };
 

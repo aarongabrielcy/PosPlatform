@@ -30,7 +30,7 @@ public class CloseRegisterSessionViewModelTests
     public async Task LoadAsyncPopulatesOpeningCashSalesAndExpectedAmountsFromTheRealSummary()
     {
         var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession() };
-        var summary = new RegisterClosingSummary(500m, 129m, 629m, "MXN");
+        var summary = new RegisterClosingSummary(500m, 129m, 75m, 204m, 629m, "MXN");
         var service = new FakeRegisterSessionService(
             getClosingSummaryHandler: _ => Task.FromResult(RegisterClosingSummaryResult.SuccessResult(summary)));
         var viewModel = CreateViewModel(service, registerSession);
@@ -40,6 +40,8 @@ public class CloseRegisterSessionViewModelTests
         Assert.Equal(1, service.GetClosingSummaryCallCount);
         Assert.Contains("500", viewModel.OpeningAmountText);
         Assert.Contains("129", viewModel.CashSalesAmountText);
+        Assert.Contains("75", viewModel.CardSalesAmountText);
+        Assert.Contains("204", viewModel.GrossSalesAmountText);
         Assert.Contains("629", viewModel.ExpectedAmountText);
     }
 
@@ -70,7 +72,7 @@ public class CloseRegisterSessionViewModelTests
 
         Assert.True(viewModel.IsBusy);
 
-        gate.SetResult(RegisterClosingSummaryResult.SuccessResult(new RegisterClosingSummary(100m, 0m, 100m, "MXN")));
+        gate.SetResult(RegisterClosingSummaryResult.SuccessResult(new RegisterClosingSummary(100m, 0m, 0m, 0m, 100m, "MXN")));
         await loadTask;
 
         Assert.False(viewModel.IsBusy);
@@ -121,7 +123,7 @@ public class CloseRegisterSessionViewModelTests
     public async Task DifferenceTextReflectsTheEnteredClosingAmountAgainstExpectedCash()
     {
         var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession(openingAmount: 100m) };
-        var summary = new RegisterClosingSummary(100m, 129m, 229m, "MXN");
+        var summary = new RegisterClosingSummary(100m, 129m, 0m, 129m, 229m, "MXN");
         var service = new FakeRegisterSessionService(
             getClosingSummaryHandler: _ => Task.FromResult(RegisterClosingSummaryResult.SuccessResult(summary)));
         var viewModel = CreateViewModel(service, registerSession);
@@ -236,5 +238,5 @@ public class CloseRegisterSessionViewModelTests
     private static RegisterSessionSummary CreateSummary() =>
         new(
             "Caja 1", OpenedAtUtc, ClosedAtUtc, "Ana Pérez", "Ana Pérez",
-            100m, 100m, 100m, 0m, "MXN");
+            100m, 0m, 0m, 0m, 100m, 100m, 0m, "MXN");
 }

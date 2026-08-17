@@ -52,6 +52,35 @@ public sealed class EfSaleRepository : ISaleRepository
         return amounts.Sum();
     }
 
+    public async Task<decimal> GetCompletedCardTotalByRegisterSessionAsync(
+        RegisterSessionId registerSessionId, CancellationToken cancellationToken)
+    {
+        // Mismo límite de SQLite/EF documentado arriba: se suma en memoria.
+        var amounts = await _context.Sales
+            .Where(r => r.RegisterSessionId == registerSessionId.Value && r.Status == SaleStatus.Completed)
+            .SelectMany(r => r.Payments.Where(p => p.Method == PaymentMethod.Card))
+            .Select(p => p.Amount)
+            .ToListAsync(cancellationToken);
+
+        return amounts.Sum();
+    }
+
+    public async Task<decimal> GetCompletedGrossTotalByRegisterSessionAsync(
+        RegisterSessionId registerSessionId, CancellationToken cancellationToken)
+    {
+        // Fuente: SaleLine (Sale.Total = suma de LineSubtotal), nunca Payment (TAREA 25C-FIX
+        // sección 8-10): así una venta con varios Payment o con un método sin desglose propio
+        // (p. ej. BankTransfer) sigue contando exactamente una vez. Mismo límite de SQLite/EF
+        // documentado arriba: se suma en memoria.
+        var lineAmounts = await _context.Sales
+            .Where(r => r.RegisterSessionId == registerSessionId.Value && r.Status == SaleStatus.Completed)
+            .SelectMany(r => r.Lines)
+            .Select(l => new { l.Quantity, l.UnitPriceAmount })
+            .ToListAsync(cancellationToken);
+
+        return lineAmounts.Sum(l => l.Quantity * l.UnitPriceAmount);
+    }
+
     public async Task UpdateAsync(Sale sale, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sale);

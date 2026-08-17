@@ -570,6 +570,14 @@ public class CompleteSaleHandlerTests
         public Task<decimal> GetCompletedCashTotalByRegisterSessionAsync(
             RegisterSessionId registerSessionId, CancellationToken cancellationToken) =>
             Task.FromResult(0m);
+
+        public Task<decimal> GetCompletedCardTotalByRegisterSessionAsync(
+            RegisterSessionId registerSessionId, CancellationToken cancellationToken) =>
+            Task.FromResult(0m);
+
+        public Task<decimal> GetCompletedGrossTotalByRegisterSessionAsync(
+            RegisterSessionId registerSessionId, CancellationToken cancellationToken) =>
+            Task.FromResult(0m);
     }
 
     // ---------- Helpers ----------

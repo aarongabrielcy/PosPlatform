@@ -316,8 +316,16 @@ public sealed class RegisterSessionService : IRegisterSessionService
 
         // ExpectedCash = OpeningFloat + ventas en efectivo completadas durante esta sesión de
         // caja. No existe todavía un ledger de movimientos de caja (entradas/salidas manuales):
-        // solo se suman las ventas Cash ya persistidas, tal como exige TAREA 25A sección 23.
+        // solo se suman las ventas Cash ya persistidas, tal como exige TAREA 25A sección 23. Las
+        // ventas Card (TAREA 25C) nunca se suman: no son efectivo físico en el cajón.
         var cashSalesTotal = await _saleRepository.GetCompletedCashTotalByRegisterSessionAsync(
+            session.Id, cancellationToken);
+        var cardSalesTotal = await _saleRepository.GetCompletedCardTotalByRegisterSessionAsync(
+            session.Id, cancellationToken);
+        // GrossSales se calcula desde Sale.Total (vía SaleLine), nunca sumando CashSales + CardSales
+        // (TAREA 25C-FIX sección 8-10): Sale ya admite varios Payment y el dominio ya define métodos
+        // además de Cash/Card, así que derivarlo de los desgloses por método subcontaría/duplicaría.
+        var grossSalesTotal = await _saleRepository.GetCompletedGrossTotalByRegisterSessionAsync(
             session.Id, cancellationToken);
         var expectedCash = new Money(session.OpeningFloat.Amount + cashSalesTotal, session.OpeningFloat.Currency);
 
@@ -343,6 +351,9 @@ public sealed class RegisterSessionService : IRegisterSessionService
             current.OpenedByDisplayName,
             user.DisplayName,
             session.OpeningFloat.Amount,
+            cashSalesTotal,
+            cardSalesTotal,
+            grossSalesTotal,
             session.CountedCash!.Amount,
             session.ExpectedCash!.Amount,
             session.CashDifference!.Amount,
@@ -392,10 +403,16 @@ public sealed class RegisterSessionService : IRegisterSessionService
 
         var cashSalesTotal = await _saleRepository.GetCompletedCashTotalByRegisterSessionAsync(
             session.Id, cancellationToken);
+        var cardSalesTotal = await _saleRepository.GetCompletedCardTotalByRegisterSessionAsync(
+            session.Id, cancellationToken);
+        var grossSalesTotal = await _saleRepository.GetCompletedGrossTotalByRegisterSessionAsync(
+            session.Id, cancellationToken);
 
         var summary = new RegisterClosingSummary(
             session.OpeningFloat.Amount,
             cashSalesTotal,
+            cardSalesTotal,
+            grossSalesTotal,
             session.OpeningFloat.Amount + cashSalesTotal,
             session.OpeningFloat.Currency);
 

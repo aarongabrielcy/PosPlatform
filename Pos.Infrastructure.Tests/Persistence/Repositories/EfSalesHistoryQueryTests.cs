@@ -678,6 +678,57 @@ public class EfSalesHistoryQueryTests
         Assert.Equal(10m, detail.Payments.Single(p => p.Method == PaymentMethod.Card).Amount);
     }
 
+    // TAREA 25C, sección 21: el detalle de venta debe exponer la referencia/autorización de Manual
+    // Card para que el recibo/detalle pueda mostrarla; Cash nunca la tiene.
+    [Fact]
+    public async Task GetDetailAsyncExposesTheManualCardReference()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var graph = await SqliteSeedHelper.SeedFullCatalogGraphAsync(context);
+
+        var saleId = Guid.NewGuid();
+        var record = new SaleRecord
+        {
+            Id = saleId,
+            OrganizationId = graph.OrganizationId,
+            BranchId = graph.BranchId,
+            RegisterSessionId = graph.RegisterSessionId,
+            CreatedByUserId = graph.UserId,
+            Currency = "MXN",
+            Status = SaleStatus.Completed,
+            CreatedAtUtc = SqliteSeedHelper.DefaultTimestamp,
+            CompletedAtUtc = SqliteSeedHelper.DefaultTimestamp,
+        };
+        record.Lines.Add(new SaleLineRecord
+        {
+            Id = Guid.NewGuid(), SaleId = saleId, ProductId = graph.ProductId, ProductSku = "SKU-001",
+            ProductName = "Producto de prueba", Quantity = 1m, UnitPriceAmount = 30m, Currency = "MXN", Sale = record,
+        });
+        record.Payments.Add(new PaymentRecord
+        {
+            Id = Guid.NewGuid(), SaleId = saleId, Method = PaymentMethod.Card, Amount = 30m, Currency = "MXN",
+            PaidAtUtc = SqliteSeedHelper.DefaultTimestamp, Reference = "AUTH-7788", Sale = record,
+        });
+
+        context.Add(record);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var query = new EfSalesHistoryQuery(context);
+
+        var detail = await query.GetDetailAsync(
+            new OrganizationId(graph.OrganizationId), new SaleId(saleId), CancellationToken.None);
+
+        Assert.NotNull(detail);
+        var payment = Assert.Single(detail!.Payments);
+        Assert.Equal(PaymentMethod.Card, payment.Method);
+        Assert.Equal("AUTH-7788", payment.Reference);
+    }
+
     // Aislamiento de tenant (TAREA 25B, sección 28/43): un SaleId real de otra Organization nunca
     // se materializa, ni siquiera para confirmar que existe.
     [Fact]

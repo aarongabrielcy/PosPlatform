@@ -54,13 +54,19 @@ public sealed partial class CloseRegisterSessionViewModel : ViewModelBase
 
     public string Currency => _currentRegisterSession.Current?.Currency ?? string.Empty;
 
-    // OpeningAmountText/CashSalesAmountText/ExpectedAmountText provienen del summary cargado por
-    // LoadAsync (RegisterSessionService.GetClosingSummaryAsync), nunca del OpeningAmount en caché
-    // de ICurrentRegisterSession: ese valor nunca refleja las ventas realizadas durante la sesión
-    // (TAREA 25A-FIX, defecto 1).
+    // OpeningAmountText/CashSalesAmountText/CardSalesAmountText/GrossSalesAmountText/
+    // ExpectedAmountText provienen del summary cargado por LoadAsync
+    // (RegisterSessionService.GetClosingSummaryAsync), nunca del OpeningAmount en caché de
+    // ICurrentRegisterSession: ese valor nunca refleja las ventas realizadas durante la sesión
+    // (TAREA 25A-FIX, defecto 1). ExpectedAmount excluye ventas Card (TAREA 25C): una venta con
+    // tarjeta no es efectivo físico en el cajón.
     public string OpeningAmountText => FormatAmount(_summary?.OpeningFloat);
 
     public string CashSalesAmountText => FormatAmount(_summary?.CompletedCashSales);
+
+    public string CardSalesAmountText => FormatAmount(_summary?.CompletedCardSales);
+
+    public string GrossSalesAmountText => FormatAmount(_summary?.GrossSales);
 
     public string ExpectedAmountText => FormatAmount(_summary?.ExpectedCash);
 
@@ -150,6 +156,8 @@ public sealed partial class CloseRegisterSessionViewModel : ViewModelBase
         {
             OnPropertyChanged(nameof(OpeningAmountText));
             OnPropertyChanged(nameof(CashSalesAmountText));
+            OnPropertyChanged(nameof(CardSalesAmountText));
+            OnPropertyChanged(nameof(GrossSalesAmountText));
             OnPropertyChanged(nameof(ExpectedAmountText));
             OnPropertyChanged(nameof(DifferenceText));
             IsBusy = false;

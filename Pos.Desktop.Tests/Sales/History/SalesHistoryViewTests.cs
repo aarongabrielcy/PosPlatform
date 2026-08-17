@@ -50,7 +50,7 @@ public class SalesHistoryViewTests
         saleId, SaleStatus.Completed, Now, Now, UserId.New(), "Ana Pérez", RegisterId.New(), "Caja 1",
         RegisterSessionId.New(), 100m, 116m, "MXN",
         [new SaleHistoryDetailLine("SKU-001", "Agua 1L", 1m, 100m, 100m, "MXN")],
-        [new SaleHistoryDetailPayment(PaymentMethod.Cash, 116m, "MXN", Now)]);
+        [new SaleHistoryDetailPayment(PaymentMethod.Cash, 116m, "MXN", Now, null)]);
 
     private static SalesHistoryView CreateViewShowingDetail()
     {

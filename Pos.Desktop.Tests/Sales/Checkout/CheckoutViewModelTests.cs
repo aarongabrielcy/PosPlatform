@@ -91,6 +91,106 @@ public class CheckoutViewModelTests
         Assert.Contains("74.50", viewModel.ChangeText);
     }
 
+    // ---------- Selección de forma de pago (TAREA 25C) ----------
+
+    [Fact]
+    public void CashIsSelectedByDefault()
+    {
+        var viewModel = CreateViewModel(cart: CreateCartWithSnapshot(100m));
+
+        Assert.True(viewModel.IsCashSelected);
+        Assert.False(viewModel.IsCardSelected);
+    }
+
+    [Fact]
+    public void SelectingCardDeselectsCashAndViceVersa()
+    {
+        var viewModel = CreateViewModel(cart: CreateCartWithSnapshot(100m));
+
+        viewModel.IsCardSelected = true;
+
+        Assert.True(viewModel.IsCardSelected);
+        Assert.False(viewModel.IsCashSelected);
+
+        viewModel.IsCashSelected = true;
+
+        Assert.True(viewModel.IsCashSelected);
+        Assert.False(viewModel.IsCardSelected);
+    }
+
+    [Fact]
+    public void ChangeTextIsEmptyWhileCardIsSelectedEvenWithCashTenderedTextSet()
+    {
+        var viewModel = CreateViewModel(cart: CreateCartWithSnapshot(100m));
+        viewModel.CashTenderedText = "200";
+        viewModel.IsCardSelected = true;
+
+        Assert.Equal(string.Empty, viewModel.ChangeText);
+    }
+
+    [Fact]
+    public void CardWithBlankReferenceShowsValidationErrorWithoutCallingTheService()
+    {
+        var service = new FakeCheckoutService();
+        var viewModel = CreateViewModel(service, CreateCartWithSnapshot(100m));
+        viewModel.IsCardSelected = true;
+        viewModel.CardReferenceText = "   ";
+
+        viewModel.ConfirmCommand.Execute(null);
+
+        Assert.Equal("La referencia/autorización es obligatoria.", viewModel.GeneralError);
+        Assert.Equal(0, service.CheckoutCallCount);
+    }
+
+    [Fact]
+    public void CardWithReferenceLongerThan100CharactersShowsValidationErrorWithoutCallingTheService()
+    {
+        var service = new FakeCheckoutService();
+        var viewModel = CreateViewModel(service, CreateCartWithSnapshot(100m));
+        viewModel.IsCardSelected = true;
+        viewModel.CardReferenceText = new string('A', 101);
+
+        viewModel.ConfirmCommand.Execute(null);
+
+        Assert.Equal("La referencia/autorización no puede superar 100 caracteres.", viewModel.GeneralError);
+        Assert.Equal(0, service.CheckoutCallCount);
+    }
+
+    [Fact]
+    public async Task ConfirmingAValidCardPaymentSendsTrimmedReferenceAndRaisesCheckoutCompleted()
+    {
+        var summary = CreateCardSummary(100m, "AUTH-0099");
+        var service = new FakeCheckoutService((_, _) => Task.FromResult(CheckoutResult.SuccessResult(summary)));
+        var viewModel = CreateViewModel(service, CreateCartWithSnapshot(100m));
+        viewModel.IsCardSelected = true;
+        viewModel.CardReferenceText = "  AUTH-0099  ";
+
+        CheckoutSummary? received = null;
+        viewModel.CheckoutCompleted += (_, s) => received = s;
+
+        viewModel.ConfirmCommand.Execute(null);
+
+        Assert.Same(summary, received);
+        Assert.Equal(1, service.CheckoutCallCount);
+        Assert.Equal(CheckoutPaymentMethod.Card, service.LastRequest!.PaymentMethod);
+        Assert.Equal("AUTH-0099", service.LastRequest.CardReference);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public void CardCheckoutFailureFromServiceShowsTheMappedMessage()
+    {
+        var service = new FakeCheckoutService(
+            (_, _) => Task.FromResult(CheckoutResult.Failure(CheckoutResultStatus.InvalidCardReference)));
+        var viewModel = CreateViewModel(service, CreateCartWithSnapshot(100m));
+        viewModel.IsCardSelected = true;
+        viewModel.CardReferenceText = "AUTH-1";
+
+        viewModel.ConfirmCommand.Execute(null);
+
+        Assert.Equal("La referencia/autorización es obligatoria.", viewModel.GeneralError);
+    }
+
     [Fact]
     public async Task ConfirmingASuccessfulCheckoutRaisesCheckoutCompletedWithTheSummary()
     {
@@ -206,6 +306,17 @@ public class CheckoutViewModelTests
     private static SalesCartSnapshot CreateSnapshot(decimal unitPrice) =>
         new([new SalesCartLine(ProductId.New(), "SKU-001", "Producto de prueba", 1m, unitPrice, unitPrice, "MXN", 10m, true)], "MXN");
 
+    private static FakeCurrentSalesCart CreateCartWithSnapshot(decimal unitPrice)
+    {
+        var cart = new FakeCurrentSalesCart();
+        cart.SetSnapshot(CreateSnapshot(unitPrice));
+
+        return cart;
+    }
+
     private static CheckoutSummary CreateSummary(decimal total, decimal cashTendered, decimal change) =>
-        new(Guid.NewGuid(), CompletedAtUtc, total, "MXN", cashTendered, change);
+        new(Guid.NewGuid(), CompletedAtUtc, total, "MXN", CheckoutPaymentMethod.Cash, cashTendered, change, null);
+
+    private static CheckoutSummary CreateCardSummary(decimal total, string cardReference) =>
+        new(Guid.NewGuid(), CompletedAtUtc, total, "MXN", CheckoutPaymentMethod.Card, 0m, 0m, cardReference);
 }

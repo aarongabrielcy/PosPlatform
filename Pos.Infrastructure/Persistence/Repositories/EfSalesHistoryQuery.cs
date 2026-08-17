@@ -217,7 +217,7 @@ public sealed class EfSalesHistoryQuery : ISalesHistoryQuery
 
         var payments = record.Payments
             .OrderBy(p => p.PaidAtUtc)
-            .Select(p => new SaleHistoryDetailPayment(p.Method, p.Amount, p.Currency, p.PaidAtUtc))
+            .Select(p => new SaleHistoryDetailPayment(p.Method, p.Amount, p.Currency, p.PaidAtUtc, p.Reference))
             .ToList();
 
         var subtotal = lines.Sum(l => l.LineTotal);

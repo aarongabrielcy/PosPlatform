@@ -1,7 +1,10 @@
 namespace Pos.Application.Sales.Checkout;
 
-// Resultado de un checkout exitoso. Solo expone tipos primitivos (igual que ActiveRegisterSession
-// y SalesCartSnapshot): Pos.Desktop no depende de Pos.Domain y nunca debe recibir SaleId/Money.
+// Resultado de un checkout exitoso. Solo expone tipos primitivos/Application (igual que
+// ActiveRegisterSession y SalesCartSnapshot): Pos.Desktop no depende de Pos.Domain y nunca debe
+// recibir SaleId/Money. Para PaymentMethod Card, CashTendered/ChangeAmount siempre son cero (no
+// aplica efectivo) y CardReference lleva la referencia/autorización registrada; para Cash,
+// CardReference siempre es null.
 public sealed class CheckoutSummary
 {
     public Guid SaleId { get; }
@@ -12,17 +15,23 @@ public sealed class CheckoutSummary
 
     public string Currency { get; }
 
+    public CheckoutPaymentMethod PaymentMethod { get; }
+
     public decimal CashTendered { get; }
 
     public decimal ChangeAmount { get; }
+
+    public string? CardReference { get; }
 
     public CheckoutSummary(
         Guid saleId,
         DateTimeOffset completedAtUtc,
         decimal totalAmount,
         string currency,
+        CheckoutPaymentMethod paymentMethod,
         decimal cashTendered,
-        decimal changeAmount)
+        decimal changeAmount,
+        string? cardReference)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);
 
@@ -30,7 +39,9 @@ public sealed class CheckoutSummary
         CompletedAtUtc = completedAtUtc;
         TotalAmount = totalAmount;
         Currency = currency;
+        PaymentMethod = paymentMethod;
         CashTendered = cashTendered;
         ChangeAmount = changeAmount;
+        CardReference = cardReference;
     }
 }
