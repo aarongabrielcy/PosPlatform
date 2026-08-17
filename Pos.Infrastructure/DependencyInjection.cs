@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Pos.Application.Activation;
 using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Bootstrap;
@@ -22,6 +23,7 @@ using Pos.Application.Sales.History;
 using Pos.Application.SalesCart;
 using Pos.Application.Security;
 using Pos.Application.Users;
+using Pos.Infrastructure.Activation;
 using Pos.Infrastructure.Authentication;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Initialization;
@@ -36,7 +38,13 @@ namespace Pos.Infrastructure;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddPosInfrastructure(this IServiceCollection services)
+    // installationActivationBaseUrl: URL base de pos-cloud para el canje del Enrollment Code
+    // (ver Pos.Desktop/appsettings.json, clave "Activation:BaseUrl"). El valor por defecto
+    // apunta al backend local de desarrollo y solo se usa si no se provee configuración explícita
+    // (p. ej. en las pruebas de composición existentes, que llaman a este método sin argumentos).
+    public static IServiceCollection AddPosInfrastructure(
+        this IServiceCollection services,
+        string installationActivationBaseUrl = "http://localhost:5100")
     {
         services.AddSingleton<IApplicationPathProvider, ApplicationPathProvider>();
 
@@ -98,7 +106,38 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddScoped<ILocalDatabaseInitializer, LocalDatabaseInitializer>();
 
+        services.AddSingleton<IInstallationActivationClient>(sp =>
+        {
+            var httpClient = new HttpClient
+            {
+                BaseAddress = new Uri(NormalizeBaseUrl(installationActivationBaseUrl), UriKind.Absolute),
+            };
+
+            return ActivatorUtilities.CreateInstance<HttpInstallationActivationClient>(sp, httpClient);
+        });
+
+        // DpapiInstallationCredentialStore usa CryptProtectData/CryptUnprotectData (DPAPI), una
+        // API exclusiva de Windows. PosPlatform Desktop es net8.0-windows/WPF, por lo que esta
+        // condición siempre es verdadera en producción; se expresa como guard explícito (en vez de
+        // suprimir CA1416) porque es el patrón que el analizador de compatibilidad reconoce.
+        if (OperatingSystem.IsWindows())
+        {
+            services.AddSingleton<IInstallationCredentialStore, DpapiInstallationCredentialStore>();
+        }
+
+        services.AddSingleton<IInstallationActivationRecordStore, FileInstallationActivationRecordStore>();
+        services.AddScoped<IInstallationActivationStateService, InstallationActivationStateService>();
+
         return services;
+    }
+
+    // HttpClient exige que BaseAddress termine en "/" para que las rutas relativas sin "/" inicial
+    // (p. ej. "api/v1/installation-auth/enroll") se combinen agregando el segmento en lugar de
+    // reemplazar el último tramo de la URL configurada.
+    internal static string NormalizeBaseUrl(string baseUrl)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
+        return baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/";
     }
 
     internal static string BuildConnectionString(string databasePath)

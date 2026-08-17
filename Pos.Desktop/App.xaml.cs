@@ -1,14 +1,18 @@
 using System.Globalization;
 using System.Windows;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Pos.Application.Activation;
 using Pos.Application.Authentication;
 using Pos.Application.Inventory;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Sales.Checkout;
 using Pos.Application.SalesCart;
+using Pos.Desktop.Activation;
+using Pos.Desktop.Configuration;
 using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
@@ -67,15 +71,25 @@ namespace Pos.Desktop
 
             try
             {
-                _host = Host.CreateDefaultBuilder()
+                _host = HostConfigurationFactory.CreateBaseBuilder(AppContext.BaseDirectory)
                     .UseDefaultServiceProvider(options =>
                     {
                         options.ValidateScopes = true;
                         options.ValidateOnBuild = true;
                     })
-                    .ConfigureServices(services =>
+                    .ConfigureServices((context, services) =>
                     {
-                        services.AddPosInfrastructure();
+                        var activationBaseUrl = context.Configuration["Activation:BaseUrl"];
+
+                        if (string.IsNullOrWhiteSpace(activationBaseUrl))
+                        {
+                            throw new InvalidOperationException(
+                                "La configuración 'Activation:BaseUrl' es obligatoria (ver appsettings.json).");
+                        }
+
+                        services.AddPosInfrastructure(activationBaseUrl);
+                        services.AddTransient<ActivationViewModel>();
+                        services.AddTransient<ActivationWindow>();
                         services.AddTransient<MainWindow>();
                         services.AddTransient<MainWindowViewModel>();
                         services.AddTransient<DashboardViewModel>();
@@ -117,6 +131,22 @@ namespace Pos.Desktop
 
                 var initializer = _mainWindowScope.ServiceProvider.GetRequiredService<ILocalDatabaseInitializer>();
                 await initializer.InitializeAsync();
+
+                var activationStateService = _mainWindowScope.ServiceProvider.GetRequiredService<IInstallationActivationStateService>();
+                var activationStatus = await activationStateService.GetActivationStatusAsync(CancellationToken.None);
+                var activationDecision = StartupFlowCoordinator.DecideForActivationStatus(activationStatus);
+
+                if (activationDecision == StartupFlowDecision.ShowActivationDialog)
+                {
+                    var activationWindow = _mainWindowScope.ServiceProvider.GetRequiredService<ActivationWindow>();
+                    var activationCompleted = activationWindow.ShowDialog();
+
+                    if (StartupFlowCoordinator.DecideForActivationDialogResult(activationCompleted) == StartupFlowDecision.ShutdownCancelled)
+                    {
+                        Shutdown(0);
+                        return;
+                    }
+                }
 
                 var installationStateService = _mainWindowScope.ServiceProvider.GetRequiredService<IInstallationStateService>();
                 var installationState = await installationStateService.GetInstallationStateAsync(CancellationToken.None);
