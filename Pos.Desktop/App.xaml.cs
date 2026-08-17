@@ -16,6 +16,7 @@ using Pos.Desktop.Configuration;
 using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
+using Pos.Desktop.InstallationHealth;
 using Pos.Desktop.Inventory;
 using Pos.Desktop.Login;
 using Pos.Desktop.Main;
@@ -88,6 +89,7 @@ namespace Pos.Desktop
                         }
 
                         services.AddPosInfrastructure(activationBaseUrl);
+                        services.AddHostedService<InstallationHeartbeatBackgroundService>();
                         services.AddTransient<ActivationViewModel>();
                         services.AddTransient<ActivationWindow>();
                         services.AddTransient<MainWindow>();
@@ -120,8 +122,10 @@ namespace Pos.Desktop
                     })
                     .Build();
 
-                // No hay IHostedService registrado; Start()/Stop() son síncronos y no bloquean
-                // el hilo de UI de forma perceptible.
+                // InstallationHeartbeatBackgroundService es el único IHostedService registrado.
+                // BackgroundService.StartAsync() no espera a que ExecuteAsync termine, solo a que
+                // arranque, así que Start() sigue sin bloquear el hilo de UI de forma perceptible
+                // (ver Pos.Desktop.InstallationHealth.InstallationHeartbeatBackgroundService).
                 _host.Start();
 
                 var pathProvider = _host.Services.GetRequiredService<IApplicationPathProvider>();

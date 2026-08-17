@@ -8,7 +8,9 @@ using Pos.Application.Bootstrap;
 using Pos.Application.Branches;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
+using Pos.Application.Common.Versioning;
 using Pos.Application.Installation;
+using Pos.Application.InstallationHealth;
 using Pos.Application.Inventory;
 using Pos.Application.Organizations;
 using Pos.Application.Products;
@@ -21,6 +23,7 @@ using Pos.Application.SalesCart;
 using Pos.Application.Security;
 using Pos.Application.Users;
 using Pos.Infrastructure.Authentication;
+using Pos.Infrastructure.InstallationHealth;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Persistence.Repositories;
@@ -990,6 +993,71 @@ public class DependencyInjectionTests
         {
             using var scope = provider.CreateScope();
             scope.ServiceProvider.GetRequiredService<IInstallationActivationStateService>();
+
+            Assert.False(Directory.Exists(pathProvider.DataDirectory));
+            Assert.False(File.Exists(pathProvider.DatabasePath));
+        }
+    }
+
+    [Fact]
+    public void IInstallationHealthClientResolvesAsSingletonAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            var root = provider.GetRequiredService<IInstallationHealthClient>();
+
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            Assert.Same(root, scopeA.ServiceProvider.GetRequiredService<IInstallationHealthClient>());
+            Assert.Same(root, scopeB.ServiceProvider.GetRequiredService<IInstallationHealthClient>());
+        }
+    }
+
+    [Fact]
+    public void IApplicationVersionProviderResolvesAssemblyApplicationVersionProviderAsSingleton()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            var root = provider.GetRequiredService<IApplicationVersionProvider>();
+
+            using var scope = provider.CreateScope();
+
+            Assert.IsType<AssemblyApplicationVersionProvider>(root);
+            Assert.Same(root, scope.ServiceProvider.GetRequiredService<IApplicationVersionProvider>());
+        }
+    }
+
+    [Fact]
+    public void IInstallationHeartbeatSenderResolvesAsSingletonAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            var root = provider.GetRequiredService<IInstallationHeartbeatSender>();
+
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            Assert.IsType<InstallationHeartbeatSender>(root);
+            Assert.Same(root, scopeA.ServiceProvider.GetRequiredService<IInstallationHeartbeatSender>());
+            Assert.Same(root, scopeB.ServiceProvider.GetRequiredService<IInstallationHeartbeatSender>());
+        }
+    }
+
+    [Fact]
+    public void ResolvingInstallationHealthServicesDoesNotCreateAnySqliteFile()
+    {
+        var (provider, pathProvider) = BuildProvider();
+
+        using (provider)
+        {
+            provider.GetRequiredService<IInstallationHeartbeatSender>();
 
             Assert.False(Directory.Exists(pathProvider.DataDirectory));
             Assert.False(File.Exists(pathProvider.DatabasePath));
