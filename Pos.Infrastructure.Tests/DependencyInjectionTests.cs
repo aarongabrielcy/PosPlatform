@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Pos.Application.Activation;
 using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Bootstrap;
@@ -920,6 +921,86 @@ public class DependencyInjectionTests
             Assert.False(Directory.Exists(pathProvider.DataDirectory));
             Assert.False(File.Exists(pathProvider.DatabasePath));
         }
+    }
+
+    [Fact]
+    public void IInstallationActivationClientResolvesAsSingletonAcrossScopes()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            var root = provider.GetRequiredService<IInstallationActivationClient>();
+
+            using var scopeA = provider.CreateScope();
+            using var scopeB = provider.CreateScope();
+
+            Assert.Same(root, scopeA.ServiceProvider.GetRequiredService<IInstallationActivationClient>());
+            Assert.Same(root, scopeB.ServiceProvider.GetRequiredService<IInstallationActivationClient>());
+        }
+    }
+
+    [Fact]
+    public void IInstallationCredentialStoreResolvesOnWindows()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            Assert.NotNull(provider.GetRequiredService<IInstallationCredentialStore>());
+        }
+    }
+
+    [Fact]
+    public void IInstallationActivationRecordStoreResolvesAsSingleton()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            var root = provider.GetRequiredService<IInstallationActivationRecordStore>();
+            using var scope = provider.CreateScope();
+
+            Assert.Same(root, scope.ServiceProvider.GetRequiredService<IInstallationActivationRecordStore>());
+        }
+    }
+
+    [Fact]
+    public void IInstallationActivationStateServiceIsScopedAndReusesTheSameInstanceWithinAScope()
+    {
+        var (provider, _) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+
+            var first = scope.ServiceProvider.GetRequiredService<IInstallationActivationStateService>();
+            var second = scope.ServiceProvider.GetRequiredService<IInstallationActivationStateService>();
+
+            Assert.Same(first, second);
+        }
+    }
+
+    [Fact]
+    public void ResolvingActivationServicesDoesNotCreateAnySqliteFile()
+    {
+        var (provider, pathProvider) = BuildProvider();
+
+        using (provider)
+        {
+            using var scope = provider.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IInstallationActivationStateService>();
+
+            Assert.False(Directory.Exists(pathProvider.DataDirectory));
+            Assert.False(File.Exists(pathProvider.DatabasePath));
+        }
+    }
+
+    [Fact]
+    public void NormalizeBaseUrlAppendsTrailingSlashOnlyWhenMissing()
+    {
+        Assert.Equal("http://localhost:3000/", DependencyInjection.NormalizeBaseUrl("http://localhost:3000"));
+        Assert.Equal("http://localhost:3000/", DependencyInjection.NormalizeBaseUrl("http://localhost:3000/"));
     }
 
     [Fact]

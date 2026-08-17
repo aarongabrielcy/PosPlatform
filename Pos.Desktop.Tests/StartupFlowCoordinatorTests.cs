@@ -1,3 +1,4 @@
+using Pos.Application.Activation;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
 using Pos.Desktop.RegisterSessions;
@@ -6,6 +7,36 @@ namespace Pos.Desktop.Tests;
 
 public class StartupFlowCoordinatorTests
 {
+    [Fact]
+    public void NotActivatedDecidesToShowActivationDialog() =>
+        Assert.Equal(
+            StartupFlowDecision.ShowActivationDialog,
+            StartupFlowCoordinator.DecideForActivationStatus(ActivationStatus.NotActivated));
+
+    [Fact]
+    public void ActivatedDecidesToContinueAfterActivationNotDirectlyToSetupOrLogin() =>
+        Assert.Equal(
+            StartupFlowDecision.ContinueAfterActivation,
+            StartupFlowCoordinator.DecideForActivationStatus(ActivationStatus.Activated));
+
+    [Fact]
+    public void SuccessfulActivationDialogDecidesToContinueAfterActivation() =>
+        Assert.Equal(
+            StartupFlowDecision.ContinueAfterActivation,
+            StartupFlowCoordinator.DecideForActivationDialogResult(true));
+
+    [Fact]
+    public void CancelledActivationDialogDecidesToShutdown() =>
+        Assert.Equal(
+            StartupFlowDecision.ShutdownCancelled,
+            StartupFlowCoordinator.DecideForActivationDialogResult(false));
+
+    [Fact]
+    public void ClosedActivationDialogWithoutResultDecidesToShutdown() =>
+        Assert.Equal(
+            StartupFlowDecision.ShutdownCancelled,
+            StartupFlowCoordinator.DecideForActivationDialogResult(null));
+
     [Fact]
     public void RequiresSetupDecidesToShowSetupDialog() =>
         Assert.Equal(

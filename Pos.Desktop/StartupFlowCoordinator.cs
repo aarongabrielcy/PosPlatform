@@ -1,3 +1,4 @@
+using Pos.Application.Activation;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
 using Pos.Desktop.RegisterSessions;
@@ -11,6 +12,8 @@ namespace Pos.Desktop;
 // nunca directamente desde este coordinador.
 internal enum StartupFlowDecision
 {
+    ShowActivationDialog,
+    ContinueAfterActivation,
     ShowSetupDialog,
     ShowLogin,
     ContinueAfterLogin,
@@ -23,6 +26,19 @@ internal enum StartupFlowDecision
 
 internal static class StartupFlowCoordinator
 {
+    // Puerta de arranque previa a todo lo demás: sin una Installation activada ante pos-cloud, no
+    // debe alcanzarse ni la configuración inicial del negocio ni el login local (ver secciones 6/7
+    // de la tarea de activación).
+    public static StartupFlowDecision DecideForActivationStatus(ActivationStatus activationStatus) =>
+        activationStatus == ActivationStatus.NotActivated
+            ? StartupFlowDecision.ShowActivationDialog
+            : StartupFlowDecision.ContinueAfterActivation;
+
+    // Cerrar la ventana de activación sin completarla (X, Alt+F4, "Salir") no debe dejar pasar al
+    // resto de la aplicación: termina el proceso igual que un setup o login cancelado.
+    public static StartupFlowDecision DecideForActivationDialogResult(bool? dialogResult) =>
+        dialogResult == true ? StartupFlowDecision.ContinueAfterActivation : StartupFlowDecision.ShutdownCancelled;
+
     public static StartupFlowDecision DecideForInstallationState(InstallationState installationState) =>
         installationState switch
         {

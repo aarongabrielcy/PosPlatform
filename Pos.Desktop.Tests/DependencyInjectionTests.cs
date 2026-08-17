@@ -3,9 +3,11 @@ using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Pos.Application.Activation;
 using Pos.Application.Authentication;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
+using Pos.Desktop.Activation;
 using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
@@ -59,6 +61,8 @@ public class DependencyInjectionTests
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<IApplicationPathProvider>(pathProvider);
 
+        services.AddTransient<ActivationViewModel>();
+        services.AddTransient<ActivationWindow>();
         services.AddTransient<MainWindow>();
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<DashboardViewModel>();
@@ -163,6 +167,36 @@ public class DependencyInjectionTests
             var firstSetupWindow = scope.ServiceProvider.GetRequiredService<InitialSetupWindow>();
             var secondSetupWindow = scope.ServiceProvider.GetRequiredService<InitialSetupWindow>();
             Assert.NotSame(firstSetupWindow, secondSetupWindow);
+        });
+
+    [Fact]
+    public void ActivationViewModelResolvesWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<ActivationViewModel>());
+        });
+
+    [Fact]
+    public void ActivationWindowResolvesWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<ActivationWindow>());
+        });
+
+    [Fact]
+    public void IInstallationActivationStateServiceResolvesWithinTheDesktopComposition() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<IInstallationActivationStateService>());
         });
 
     [Fact]
@@ -315,6 +349,7 @@ public class DependencyInjectionTests
             using var provider = BuildProvider(pathProvider);
             using var scope = provider.CreateScope();
 
+            scope.ServiceProvider.GetRequiredService<ActivationWindow>();
             scope.ServiceProvider.GetRequiredService<MainWindow>();
             scope.ServiceProvider.GetRequiredService<InitialSetupWindow>();
             scope.ServiceProvider.GetRequiredService<LoginWindow>();
