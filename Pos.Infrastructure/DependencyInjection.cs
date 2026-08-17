@@ -8,7 +8,9 @@ using Pos.Application.Bootstrap;
 using Pos.Application.Branches;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
+using Pos.Application.Common.Versioning;
 using Pos.Application.Installation;
+using Pos.Application.InstallationHealth;
 using Pos.Application.Inventory;
 using Pos.Application.Organizations;
 using Pos.Application.ProductAudit;
@@ -25,6 +27,7 @@ using Pos.Application.Security;
 using Pos.Application.Users;
 using Pos.Infrastructure.Activation;
 using Pos.Infrastructure.Authentication;
+using Pos.Infrastructure.InstallationHealth;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Persistence.Repositories;
@@ -127,6 +130,22 @@ public static class DependencyInjection
 
         services.AddSingleton<IInstallationActivationRecordStore, FileInstallationActivationRecordStore>();
         services.AddScoped<IInstallationActivationStateService, InstallationActivationStateService>();
+
+        services.AddSingleton<IApplicationVersionProvider, AssemblyApplicationVersionProvider>();
+
+        // Reutiliza Activation:BaseUrl (ver sección 30 de la tarea): el heartbeat vive en el mismo
+        // pos-cloud que la activación, no en un backend separado.
+        services.AddSingleton<IInstallationHealthClient>(sp =>
+        {
+            var httpClient = new HttpClient
+            {
+                BaseAddress = new Uri(NormalizeBaseUrl(installationActivationBaseUrl), UriKind.Absolute),
+            };
+
+            return ActivatorUtilities.CreateInstance<HttpInstallationHealthClient>(sp, httpClient);
+        });
+
+        services.AddSingleton<IInstallationHeartbeatSender, InstallationHeartbeatSender>();
 
         return services;
     }
