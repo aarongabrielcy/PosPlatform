@@ -2,6 +2,7 @@ using System.Globalization;
 using Pos.Application.Authentication;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
+using Pos.Application.Enforcement;
 using Pos.Application.Inventory;
 using Pos.Application.Products;
 using Pos.Application.RegisterSessions;
@@ -29,6 +30,7 @@ public sealed class CheckoutService : ICheckoutService
     private readonly IInventoryItemRepository _inventoryItemRepository;
     private readonly IInventoryMovementRepository _inventoryMovementRepository;
     private readonly ISaleRepository _saleRepository;
+    private readonly IInstallationEnforcementStateService _enforcementStateService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
@@ -40,6 +42,7 @@ public sealed class CheckoutService : ICheckoutService
         IInventoryItemRepository inventoryItemRepository,
         IInventoryMovementRepository inventoryMovementRepository,
         ISaleRepository saleRepository,
+        IInstallationEnforcementStateService enforcementStateService,
         IUnitOfWork unitOfWork,
         IClock clock)
     {
@@ -50,6 +53,7 @@ public sealed class CheckoutService : ICheckoutService
         _inventoryItemRepository = inventoryItemRepository ?? throw new ArgumentNullException(nameof(inventoryItemRepository));
         _inventoryMovementRepository = inventoryMovementRepository ?? throw new ArgumentNullException(nameof(inventoryMovementRepository));
         _saleRepository = saleRepository ?? throw new ArgumentNullException(nameof(saleRepository));
+        _enforcementStateService = enforcementStateService ?? throw new ArgumentNullException(nameof(enforcementStateService));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
@@ -57,6 +61,14 @@ public sealed class CheckoutService : ICheckoutService
     public async Task<CheckoutResult> CheckoutAsync(CheckoutRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        // Guarda de aplicación (sección 19-20 de la tarea): se evalúa antes que cualquier otra
+        // validación o mutación, para que ninguna venta se persista ni se descuente inventario
+        // mientras la instalación tenga una restricción de enforcement confirmada.
+        if (_enforcementStateService.Current != InstallationEnforcementState.Allowed)
+        {
+            return CheckoutResult.Failure(CheckoutResultStatus.InstallationRestricted);
+        }
 
         var user = _currentUserSession.CurrentUser;
 

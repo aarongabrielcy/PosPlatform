@@ -279,6 +279,7 @@ public class RegisterSessionServiceSqliteIntegrationTests
             new EfRegisterSessionRepository(context),
             new EfUserRepository(context),
             new EfSaleRepository(context),
+            new Enforcement.FakeInstallationEnforcementStateService(),
             context,
             new SystemClock());
 

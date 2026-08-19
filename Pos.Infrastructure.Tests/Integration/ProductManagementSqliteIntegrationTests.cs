@@ -82,7 +82,7 @@ public class ProductManagementSqliteIntegrationTests
         var managementService = new ProductManagementService(
             userSession, registerSession, productRepository, inventoryItemRepository,
             inventoryMovementRepository, productCatalogQuery, productAuditRepository, productAuditQuery,
-            administrativeNotificationWriter, context, clock);
+            administrativeNotificationWriter, new Enforcement.FakeInstallationEnforcementStateService(), context, clock);
 
         var cartService = new SalesCartService(
             userSession, registerSession, new InMemoryCurrentSalesCart(), productRepository, inventoryItemRepository);
@@ -127,7 +127,8 @@ public class ProductManagementSqliteIntegrationTests
 
         var createService = new Pos.Application.Products.CreateProduct.CreateProductService(
             userSession, registerSession, productRepository, inventoryItemRepository,
-            new EfProductAuditRepository(context), context, new SystemClock());
+            new EfProductAuditRepository(context), new Enforcement.FakeInstallationEnforcementStateService(),
+            context, new SystemClock());
 
         var request = new Pos.Application.Products.CreateProduct.CreateProductRequest(
             sku, barcode, "Producto editable", "Descripción original", 10m, 5m,

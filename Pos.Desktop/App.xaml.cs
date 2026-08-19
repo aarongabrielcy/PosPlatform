@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Pos.Application.Activation;
 using Pos.Application.Authentication;
+using Pos.Application.Enforcement;
 using Pos.Application.Inventory;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
@@ -16,6 +17,7 @@ using Pos.Desktop.Configuration;
 using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
+using Pos.Desktop.Enforcement;
 using Pos.Desktop.InstallationHealth;
 using Pos.Desktop.Inventory;
 using Pos.Desktop.Login;
@@ -92,6 +94,12 @@ namespace Pos.Desktop
                         services.AddHostedService<InstallationHeartbeatBackgroundService>();
                         services.AddTransient<ActivationViewModel>();
                         services.AddTransient<ActivationWindow>();
+                        services.AddTransient<SuspensionViewModel>();
+                        services.AddTransient<SuspensionWindow>();
+                        services.AddTransient<CredentialRecoveryViewModel>();
+                        services.AddTransient<CredentialRecoveryWindow>();
+                        services.AddTransient<NewInstallationActivationViewModel>();
+                        services.AddTransient<NewInstallationActivationWindow>();
                         services.AddTransient<MainWindow>();
                         services.AddTransient<MainWindowViewModel>();
                         services.AddTransient<DashboardViewModel>();
@@ -146,6 +154,25 @@ namespace Pos.Desktop
                     var activationCompleted = activationWindow.ShowDialog();
 
                     if (StartupFlowCoordinator.DecideForActivationDialogResult(activationCompleted) == StartupFlowDecision.ShutdownCancelled)
+                    {
+                        Shutdown(0);
+                        return;
+                    }
+                }
+
+                // Puerta de enforcement (sección 21 de la tarea): posterior a la activación y
+                // previa a la configuración/login del negocio local. InitializeAsync carga el
+                // estado persistido exactamente una vez, antes de que StartupFlowCoordinator lo lea.
+                var enforcementStateService = _mainWindowScope.ServiceProvider.GetRequiredService<IInstallationEnforcementStateService>();
+                await enforcementStateService.InitializeAsync(CancellationToken.None);
+
+                var enforcementDecision = StartupFlowCoordinator.DecideForEnforcementState(enforcementStateService.Current);
+
+                if (enforcementDecision != StartupFlowDecision.ContinueAfterEnforcementCheck)
+                {
+                    var restrictedFlowDialogResult = ShowRestrictedFlowDialog(enforcementDecision);
+
+                    if (StartupFlowCoordinator.DecideForRestrictedFlowDialogResult(restrictedFlowDialogResult) == StartupFlowDecision.ShutdownCancelled)
                     {
                         Shutdown(0);
                         return;
@@ -217,6 +244,130 @@ namespace Pos.Desktop
                     MessageBoxImage.Error);
 
                 Shutdown(-1);
+            }
+        }
+
+        // Muestra la ventana correspondiente a un estado de enforcement restrictivo confirmado
+        // (Suspended/CredentialInvalid/Decommissioned). Cada ventana se resuelve por sí misma
+        // (heartbeat exitoso, recuperación de credencial o activación como nueva Installation);
+        // este método solo decide cuál mostrar (sección 21-23 de la tarea). Cada ventana también
+        // expone "Cerrar caja abierta" (corrección: sección 7-9): mientras la ventana restrictiva
+        // sigue abierta, ese evento se atiende con OnRestrictedFlowCloseOpenRegisterRequested sin
+        // resolver el diálogo ni exponer el resto del POS.
+        private bool? ShowRestrictedFlowDialog(StartupFlowDecision decision)
+        {
+            if (_mainWindowScope is null)
+            {
+                throw new InvalidOperationException(
+                    "El scope principal no está disponible para mostrar el flujo de enforcement.");
+            }
+
+            switch (decision)
+            {
+                case StartupFlowDecision.ShowSuspensionDialog:
+                {
+                    var window = _mainWindowScope.ServiceProvider.GetRequiredService<SuspensionWindow>();
+                    window.CloseOpenRegisterRequested += OnRestrictedFlowCloseOpenRegisterRequested;
+
+                    try
+                    {
+                        return window.ShowDialog();
+                    }
+                    finally
+                    {
+                        window.CloseOpenRegisterRequested -= OnRestrictedFlowCloseOpenRegisterRequested;
+                    }
+                }
+
+                case StartupFlowDecision.ShowCredentialRecoveryDialog:
+                {
+                    var window = _mainWindowScope.ServiceProvider.GetRequiredService<CredentialRecoveryWindow>();
+                    window.CloseOpenRegisterRequested += OnRestrictedFlowCloseOpenRegisterRequested;
+
+                    try
+                    {
+                        return window.ShowDialog();
+                    }
+                    finally
+                    {
+                        window.CloseOpenRegisterRequested -= OnRestrictedFlowCloseOpenRegisterRequested;
+                    }
+                }
+
+                case StartupFlowDecision.ShowNewInstallationActivationDialog:
+                {
+                    var window = _mainWindowScope.ServiceProvider.GetRequiredService<NewInstallationActivationWindow>();
+                    window.CloseOpenRegisterRequested += OnRestrictedFlowCloseOpenRegisterRequested;
+
+                    try
+                    {
+                        return window.ShowDialog();
+                    }
+                    finally
+                    {
+                        window.CloseOpenRegisterRequested -= OnRestrictedFlowCloseOpenRegisterRequested;
+                    }
+                }
+
+                default:
+                    return true;
+            }
+        }
+
+        // Corrección (sección 7-9 de la tarea de corrección): permite cerrar una caja que ya
+        // estaba abierta desde una pantalla restrictiva (Suspendido/Credencial inválida/Dado de
+        // baja) mostrada antes del login, sin exponer el resto del POS. Reutiliza exactamente el
+        // mismo LoginWindow (autenticación local existente, con sus mismos permisos) y el mismo
+        // CloseRegisterSessionWindow que el flujo normal (sección 8: "reutilizar autenticación
+        // local y/o UX de cierre de caja existente"). La ventana restrictiva (sender) permanece
+        // abierta como Owner de ambos diálogos anidados y nunca se resuelve como completada: al
+        // volver aquí el usuario sigue viendo la misma pantalla restrictiva (sección 9: "regresar a
+        // la pantalla restrictiva después"). Cerrar la caja nunca invoca ClearAsync ni ninguna otra
+        // vía que levante el enforcement (sección 20): el estado sigue siendo el mismo al volver.
+        private async void OnRestrictedFlowCloseOpenRegisterRequested(object? sender, EventArgs e)
+        {
+            if (_mainWindowScope is null || sender is not Window ownerWindow)
+            {
+                return;
+            }
+
+            var loginWindow = _mainWindowScope.ServiceProvider.GetRequiredService<LoginWindow>();
+            loginWindow.Owner = ownerWindow;
+            var loginResult = loginWindow.ShowDialog();
+
+            if (loginResult != true)
+            {
+                return;
+            }
+
+            try
+            {
+                var registerSessionService = _mainWindowScope.ServiceProvider.GetRequiredService<IRegisterSessionService>();
+                var statusResult = await registerSessionService.GetCurrentAsync();
+
+                if (statusResult.Status == RegisterSessionStatus.Open)
+                {
+                    var closeWindow = _mainWindowScope.ServiceProvider.GetRequiredService<CloseRegisterSessionWindow>();
+                    closeWindow.Owner = ownerWindow;
+                    await closeWindow.LoadAsync();
+                    closeWindow.ShowDialog();
+                }
+                else
+                {
+                    MessageBox.Show(
+                        ownerWindow,
+                        "No hay una caja abierta para cerrar.",
+                        "PosPlatform",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+            }
+            finally
+            {
+                // Nunca se permanece autenticado tras volver a la pantalla restrictiva: esta acción
+                // es exclusivamente "cerrar la caja abierta", no un inicio de sesión normal
+                // (sección 9: "NO exponer funcionalidad normal de venta/inventario/catálogo").
+                ClearRegisterAndUserSessions();
             }
         }
 

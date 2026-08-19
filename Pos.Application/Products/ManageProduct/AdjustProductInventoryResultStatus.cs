@@ -5,6 +5,7 @@ public enum AdjustProductInventoryResultStatus
     Success,
     NotAuthenticated,
     NotAuthorized,
+    InstallationRestricted,
     RegisterSessionRequired,
     ProductNotFound,
     ProductDoesNotTrackInventory,

@@ -91,7 +91,8 @@ public class SalesHistoryCheckoutIntegrationTests
         // 8: ejecutar CheckoutService real (reloj real, no fake) para completar la venta.
         var checkoutService = new CheckoutService(
             userSession, registerSession, cart, productRepository, inventoryItemRepository,
-            inventoryMovementRepository, saleRepository, context, new SystemClock());
+            inventoryMovementRepository, saleRepository, new Enforcement.FakeInstallationEnforcementStateService(),
+            context, new SystemClock());
 
         var checkoutResult = await checkoutService.CheckoutAsync(new CheckoutRequest(20m));
 

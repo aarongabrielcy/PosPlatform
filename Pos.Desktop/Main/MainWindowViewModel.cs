@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows.Input;
 using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
+using Pos.Application.Enforcement;
 using Pos.Application.Inventory;
 using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
@@ -29,7 +30,7 @@ namespace Pos.Desktop.Main;
 // (SalesViewModel/ProductsViewModel/InventoryViewModel/RegisterViewModel/SettingsViewModel), ya
 // construido e inyectado aquí: MainWindowViewModel nunca resuelve servicios ni ventanas por sí
 // mismo (sin Service Locator).
-public sealed class MainWindowViewModel : ViewModelBase
+public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private const double SidebarExpandedWidth = 240d;
     private const double SidebarCollapsedWidth = 68d;
@@ -37,6 +38,15 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly ICurrentUserSession _session;
     private readonly ICurrentRegisterSession _registerSession;
     private readonly ICurrentSalesCart _currentSalesCart;
+    private readonly IInstallationEnforcementStateService _enforcementStateService;
+
+    // Capturado en el hilo que construye este ViewModel (el hilo de UI en producción — ver
+    // App.xaml.cs ShowMainWindow) en vez de depender de System.Windows.Application.Current: evita
+    // que un evento StateChanged disparado por InstallationHeartbeatBackgroundService (hilo
+    // distinto) se pierda silenciosamente, y permite probar el marshaling sin levantar una
+    // System.Windows.Application real en las pruebas (sección 38 de la tarea: "evitar automatización
+    // WPF pesada").
+    private readonly System.Windows.Threading.Dispatcher _dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
     private readonly DashboardViewModel _dashboardViewModel;
     private readonly SalesViewModel _salesViewModel;
     private readonly SalesHistoryViewModel _salesHistoryViewModel;
@@ -57,6 +67,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     private string? _logoutBlockedMessage;
     private string? _closeRegisterBlockedMessage;
+    private string? _enforcementBannerText;
     private object _currentViewModel;
     private NavigationItem? _selectedNavigationItem;
     private bool _isSidebarExpanded = true;
@@ -71,6 +82,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         ICurrentUserSession session,
         ICurrentRegisterSession registerSession,
         ICurrentSalesCart currentSalesCart,
+        IInstallationEnforcementStateService enforcementStateService,
         DashboardViewModel dashboardViewModel,
         SalesViewModel salesViewModel,
         SalesHistoryViewModel salesHistoryViewModel,
@@ -84,6 +96,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _registerSession = registerSession ?? throw new ArgumentNullException(nameof(registerSession));
         _currentSalesCart = currentSalesCart ?? throw new ArgumentNullException(nameof(currentSalesCart));
+        _enforcementStateService = enforcementStateService ?? throw new ArgumentNullException(nameof(enforcementStateService));
         _dashboardViewModel = dashboardViewModel ?? throw new ArgumentNullException(nameof(dashboardViewModel));
         _salesViewModel = salesViewModel ?? throw new ArgumentNullException(nameof(salesViewModel));
         _salesHistoryViewModel = salesHistoryViewModel ?? throw new ArgumentNullException(nameof(salesHistoryViewModel));
@@ -108,6 +121,9 @@ public sealed class MainWindowViewModel : ViewModelBase
         _inventoryViewModel.AdjustInventoryRequested += OnInventoryAdjustInventoryRequested;
         _registerViewModel.CloseRegisterRequested += OnRegisterViewCloseRegisterRequested;
         _notificationCenterViewModel.OpenNotificationRequested += OnNotificationCenterOpenNotificationRequested;
+        _enforcementStateService.StateChanged += OnEnforcementStateChanged;
+
+        UpdateEnforcementBanner(_enforcementStateService.Current);
 
         _topLevelNavigationItems = BuildNavigationItems().ToList();
         NavigationItems = new ObservableCollection<NavigationItem>();
@@ -201,6 +217,23 @@ public sealed class MainWindowViewModel : ViewModelBase
         get => _closeRegisterBlockedMessage;
         private set => SetProperty(ref _closeRegisterBlockedMessage, value);
     }
+
+    // Aviso visible mientras la app sigue abierta y la instalación pasa a tener una restricción de
+    // enforcement confirmada (sección 17/38 de la tarea): la guarda de Application ya bloquea las
+    // mutaciones por sí sola; este banner solo hace visible el motivo sin exigir reiniciar la app.
+    public string? EnforcementBannerText
+    {
+        get => _enforcementBannerText;
+        private set
+        {
+            if (SetProperty(ref _enforcementBannerText, value))
+            {
+                OnPropertyChanged(nameof(HasEnforcementBanner));
+            }
+        }
+    }
+
+    public bool HasEnforcementBanner => !string.IsNullOrEmpty(_enforcementBannerText);
 
     // Items visibles según permisos del usuario actual (TAREA 24C, sección 23): un ítem sin
     // permiso simplemente no aparece en la lista, en vez de mostrarse deshabilitado.
@@ -568,4 +601,27 @@ public sealed class MainWindowViewModel : ViewModelBase
             _notificationCenterViewModel.RefreshCommand.Execute(null);
         }
     }
+
+    private void OnEnforcementStateChanged(object? sender, InstallationEnforcementState state)
+    {
+        // Se dispara desde InstallationHeartbeatBackgroundService (hilo distinto al de UI): los
+        // bindings de WPF exigen que los cambios lleguen desde el hilo de UI.
+        _dispatcher.Invoke(() => UpdateEnforcementBanner(state));
+    }
+
+    private void UpdateEnforcementBanner(InstallationEnforcementState state)
+    {
+        EnforcementBannerText = state switch
+        {
+            InstallationEnforcementState.Suspended =>
+                "La instalación está suspendida. Las operaciones nuevas están restringidas hasta que se resuelva.",
+            InstallationEnforcementState.CredentialInvalid =>
+                "La credencial de esta instalación ya no es válida. Las operaciones nuevas están restringidas.",
+            InstallationEnforcementState.Decommissioned =>
+                "Esta instalación fue dada de baja. Las operaciones nuevas están restringidas.",
+            _ => null,
+        };
+    }
+
+    public void Dispose() => _enforcementStateService.StateChanged -= OnEnforcementStateChanged;
 }

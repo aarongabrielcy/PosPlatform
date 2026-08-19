@@ -183,6 +183,7 @@ public sealed partial class OpenRegisterSessionViewModel : ViewModelBase
             {
                 RegisterSessionResultStatus.NotAuthenticated => "La sesión no está disponible. Inicie sesión nuevamente.",
                 RegisterSessionResultStatus.NotAuthorized => "No tiene permiso para abrir la caja.",
+                RegisterSessionResultStatus.InstallationRestricted => "La operación está restringida. Consulte al administrador.",
                 RegisterSessionResultStatus.InvalidInstallationState => "La instalación presenta una configuración inválida.",
                 RegisterSessionResultStatus.RegisterNotFound => "La caja seleccionada no está disponible.",
                 RegisterSessionResultStatus.RegisterInactive => "La caja seleccionada está inactiva.",

@@ -250,6 +250,7 @@ public sealed partial class CloseRegisterSessionViewModel : ViewModelBase
     {
         RegisterSessionResultStatus.NotAuthenticated => "La sesión no está disponible. Inicie sesión nuevamente.",
         RegisterSessionResultStatus.NotAuthorized => "No tiene permiso para cerrar la caja.",
+        RegisterSessionResultStatus.InstallationRestricted => "La operación está restringida. Consulte al administrador.",
         RegisterSessionResultStatus.SessionNotFound => "No se encontró una caja abierta para cerrar.",
         RegisterSessionResultStatus.SessionAlreadyClosed => "La caja ya fue cerrada.",
         RegisterSessionResultStatus.SessionBelongsToAnotherOrganization => "La caja no pertenece a esta instalación.",

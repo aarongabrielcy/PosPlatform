@@ -103,6 +103,7 @@
     <Grid Background="{StaticResource AppBackgroundBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -165,7 +166,16 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1">
+        <!-- Aviso de enforcement (sección 17/38 de la tarea): visible solo mientras la instalación
+             tiene una restricción confirmada activa; se oculta automáticamente cuando el heartbeat
+             en segundo plano la resuelve, sin requerir reiniciar la aplicación ni sondeo manual. -->
+        <Border Grid.Row="1" Padding="12,8" Background="{StaticResource DangerBrush}"
+                Visibility="{Binding HasEnforcementBanner, Converter={StaticResource BoolToVisibilityConverter}}">
+            <TextBlock Text="{Binding EnforcementBannerText}" Foreground="White" FontWeight="SemiBold"
+                       TextWrapping="Wrap" />
+        </Border>
+
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="{Binding SidebarWidth}" />
                 <ColumnDefinition Width="*" />

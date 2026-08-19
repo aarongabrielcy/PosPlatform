@@ -406,6 +406,7 @@ public sealed partial class EditProductViewModel : ViewModelBase
     {
         UpdateProductResultStatus.NotAuthenticated => "La sesión no está disponible. Inicie sesión nuevamente.",
         UpdateProductResultStatus.NotAuthorized => "No tiene permiso para editar productos.",
+        UpdateProductResultStatus.InstallationRestricted => "La operación está restringida. Consulte al administrador.",
         UpdateProductResultStatus.ProductNotFound => "El producto ya no existe.",
         UpdateProductResultStatus.InvalidName => "El nombre no es válido.",
         UpdateProductResultStatus.InvalidSku => "El SKU no es válido.",

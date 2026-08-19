@@ -5,6 +5,7 @@ public enum RegisterSessionResultStatus
     Success,
     NotAuthenticated,
     NotAuthorized,
+    InstallationRestricted,
     InvalidInstallationState,
     RegisterNotFound,
     RegisterInactive,

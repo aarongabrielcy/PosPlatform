@@ -1,6 +1,7 @@
 using Pos.Application.Authentication;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
+using Pos.Application.Enforcement;
 using Pos.Application.Inventory;
 using Pos.Application.ProductAudit;
 using Pos.Application.RegisterSessions;
@@ -21,6 +22,7 @@ public sealed class CreateProductService : ICreateProductService
     private readonly IProductRepository _productRepository;
     private readonly IInventoryItemRepository _inventoryItemRepository;
     private readonly IProductAuditRepository _productAuditRepository;
+    private readonly IInstallationEnforcementStateService _enforcementStateService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
@@ -30,6 +32,7 @@ public sealed class CreateProductService : ICreateProductService
         IProductRepository productRepository,
         IInventoryItemRepository inventoryItemRepository,
         IProductAuditRepository productAuditRepository,
+        IInstallationEnforcementStateService enforcementStateService,
         IUnitOfWork unitOfWork,
         IClock clock)
     {
@@ -38,6 +41,7 @@ public sealed class CreateProductService : ICreateProductService
         _productRepository = productRepository ?? throw new ArgumentNullException(nameof(productRepository));
         _inventoryItemRepository = inventoryItemRepository ?? throw new ArgumentNullException(nameof(inventoryItemRepository));
         _productAuditRepository = productAuditRepository ?? throw new ArgumentNullException(nameof(productAuditRepository));
+        _enforcementStateService = enforcementStateService ?? throw new ArgumentNullException(nameof(enforcementStateService));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
@@ -46,6 +50,11 @@ public sealed class CreateProductService : ICreateProductService
         CreateProductRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        if (_enforcementStateService.Current != InstallationEnforcementState.Allowed)
+        {
+            return CreateProductResult.Failure(CreateProductResultStatus.InstallationRestricted);
+        }
 
         var user = _currentUserSession.CurrentUser;
 

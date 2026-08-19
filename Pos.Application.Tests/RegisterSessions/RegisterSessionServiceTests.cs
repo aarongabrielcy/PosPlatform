@@ -1,7 +1,9 @@
 using Pos.Application.Authentication;
+using Pos.Application.Enforcement;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Tests.Bootstrap;
 using Pos.Application.Tests.Common.Time;
+using Pos.Application.Tests.Enforcement;
 using FakeSaleRepository = Pos.Application.Tests.Sales.CompleteSale.FakeSaleRepository;
 using Pos.Domain.Branches;
 using Pos.Domain.Common.Identifiers;
@@ -236,6 +238,26 @@ public class RegisterSessionServiceTests
 
         Assert.False(result.Success);
         Assert.Equal(RegisterSessionResultStatus.InvalidAmount, result.Status);
+        Assert.Equal(0, fixture.RegisterSessionRepository.AddCallCount);
+    }
+
+    // ---------- Guarda de enforcement (secciones 19/20/32 de la tarea) ----------
+
+    [Theory]
+    [InlineData(InstallationEnforcementState.Suspended)]
+    [InlineData(InstallationEnforcementState.CredentialInvalid)]
+    [InlineData(InstallationEnforcementState.Decommissioned)]
+    public async Task OpenWhileInstallationIsRestrictedReturnsInstallationRestrictedAndPersistsNothing(
+        InstallationEnforcementState restrictedState)
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.EnforcementStateService.SetCurrentForTest(restrictedState);
+        var service = fixture.BuildService();
+
+        var result = await service.OpenAsync(new OpenRegisterSessionRequest(null, 100m));
+
+        Assert.Equal(RegisterSessionResultStatus.InstallationRestricted, result.Status);
         Assert.Equal(0, fixture.RegisterSessionRepository.AddCallCount);
     }
 
@@ -531,6 +553,94 @@ public class RegisterSessionServiceTests
 
         Assert.True(result.Success);
         Assert.Equal(100m, result.Summary!.ExpectedAmount);
+    }
+
+    // ---------- Excepción de enforcement para cerrar una caja ya abierta (corrección de la tarea:
+    // "Close Register" nunca debe bloquearse por Suspended/CredentialInvalid/Decommissioned,
+    // solo OpenAsync sigue protegido) ----------
+
+    [Theory]
+    [InlineData(InstallationEnforcementState.Suspended)]
+    [InlineData(InstallationEnforcementState.CredentialInvalid)]
+    [InlineData(InstallationEnforcementState.Decommissioned)]
+    public async Task CloseWhileInstallationIsRestrictedSucceedsWhenAnOpenSessionExists(
+        InstallationEnforcementState restrictedState)
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.SeedOpenCurrentSession(100m);
+        fixture.EnforcementStateService.SetCurrentForTest(restrictedState);
+        var service = fixture.BuildService();
+
+        var result = await service.CloseAsync(new CloseRegisterSessionRequest(100m));
+
+        Assert.True(result.Success);
+        Assert.Equal(1, fixture.RegisterSessionRepository.UpdateCallCount);
+        Assert.Equal(1, fixture.UnitOfWork.CommitCallCount);
+    }
+
+    [Theory]
+    [InlineData(InstallationEnforcementState.Suspended)]
+    [InlineData(InstallationEnforcementState.CredentialInvalid)]
+    [InlineData(InstallationEnforcementState.Decommissioned)]
+    public async Task CloseWhileInstallationIsRestrictedReturnsSessionNotFoundWhenThereIsNoOpenSession(
+        InstallationEnforcementState restrictedState)
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.EnforcementStateService.SetCurrentForTest(restrictedState);
+        var service = fixture.BuildService();
+
+        var result = await service.CloseAsync(new CloseRegisterSessionRequest(100m));
+
+        Assert.Equal(RegisterSessionResultStatus.SessionNotFound, result.Status);
+        Assert.Equal(0, fixture.RegisterSessionRepository.UpdateCallCount);
+    }
+
+    [Theory]
+    [InlineData(InstallationEnforcementState.Suspended)]
+    [InlineData(InstallationEnforcementState.CredentialInvalid)]
+    [InlineData(InstallationEnforcementState.Decommissioned)]
+    public async Task CloseWhileInstallationIsRestrictedNeverClearsTheEnforcementState(
+        InstallationEnforcementState restrictedState)
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.SeedOpenCurrentSession(100m);
+        fixture.EnforcementStateService.SetCurrentForTest(restrictedState);
+        var service = fixture.BuildService();
+
+        var result = await service.CloseAsync(new CloseRegisterSessionRequest(100m));
+
+        Assert.True(result.Success);
+        Assert.Equal(0, fixture.EnforcementStateService.ClearCallCount);
+        Assert.Equal(restrictedState, fixture.EnforcementStateService.Current);
+    }
+
+    // TAREA de corrección, integridad financiera: cerrar bajo restricción produce exactamente el
+    // mismo cálculo que un cierre normal (mismas ventas Cash/Card/Gross y mismo ExpectedCash), sin
+    // que el estado de Installation afecte el resultado.
+    [Fact]
+    public async Task CloseWhileInstallationIsRestrictedProducesTheSameFinancialSummaryAsANormalClose()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        fixture.SeedOpenCurrentSession(openingAmount: 500m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 900m;
+        fixture.SaleRepository.CompletedCardTotalToReturn = 600m;
+        fixture.SaleRepository.CompletedGrossTotalToReturn = 1500m;
+        fixture.EnforcementStateService.SetCurrentForTest(InstallationEnforcementState.Suspended);
+        var service = fixture.BuildService();
+
+        var result = await service.CloseAsync(new CloseRegisterSessionRequest(1400m));
+
+        Assert.True(result.Success);
+        Assert.Equal(900m, result.Summary!.CashSales);
+        Assert.Equal(600m, result.Summary.CardSales);
+        Assert.Equal(1500m, result.Summary.GrossSales);
+        Assert.Equal(1400m, result.Summary.ExpectedAmount);
+        Assert.Equal(1400m, result.Summary.ClosingAmount);
+        Assert.Equal(0m, result.Summary.Difference);
     }
 
     [Fact]
@@ -905,6 +1015,7 @@ public class RegisterSessionServiceTests
             CurrentUserSession = new FakeCurrentUserSession();
             CurrentRegisterSession = new FakeCurrentRegisterSession();
             SaleRepository = new FakeSaleRepository(null);
+            EnforcementStateService = new FakeInstallationEnforcementStateService();
             UnitOfWork = new FakeUnitOfWork();
             Clock = new FakeClock(FixedNow.AddHours(1));
         }
@@ -934,6 +1045,8 @@ public class RegisterSessionServiceTests
         public FakeCurrentRegisterSession CurrentRegisterSession { get; }
 
         public FakeSaleRepository SaleRepository { get; set; }
+
+        public FakeInstallationEnforcementStateService EnforcementStateService { get; }
 
         public FakeUnitOfWork UnitOfWork { get; }
 
@@ -975,6 +1088,7 @@ public class RegisterSessionServiceTests
                 RegisterSessionRepository,
                 UserRepository,
                 SaleRepository,
+                EnforcementStateService,
                 UnitOfWork,
                 Clock);
     }

@@ -95,14 +95,15 @@ public class ProductAuditSqliteIntegrationTests
 
         var createService = new CreateProductService(
             userSession, registerSession, productRepository, inventoryItemRepository, productAuditRepository,
-            context, clock);
+            new Enforcement.FakeInstallationEnforcementStateService(), context, clock);
 
         var administrativeNotificationWriter = new AdministrativeNotificationWriter(
             new EfAdministrativeNotificationAudienceQuery(context), new EfAdministrativeNotificationRepository(context), clock);
 
         var managementService = new ProductManagementService(
             userSession, registerSession, productRepository, inventoryItemRepository, inventoryMovementRepository,
-            productCatalogQuery, productAuditRepository, productAuditQuery, administrativeNotificationWriter, context, clock);
+            productCatalogQuery, productAuditRepository, productAuditQuery, administrativeNotificationWriter,
+            new Enforcement.FakeInstallationEnforcementStateService(), context, clock);
 
         // 1. Created
         var createResult = await createService.CreateAsync(new CreateProductRequest(
@@ -230,7 +231,8 @@ public class ProductAuditSqliteIntegrationTests
 
             var service = new CreateProductService(
                 userSession, registerSession, new EfProductRepository(context),
-                new EfInventoryItemRepository(context), productAuditRepository, context, clock);
+                new EfInventoryItemRepository(context), productAuditRepository,
+                new Enforcement.FakeInstallationEnforcementStateService(), context, clock);
 
             var result = await service.CreateAsync(
                 new CreateProductRequest(sku, null, "Producto", null, 10m, null, false, 0m, 0m),
@@ -280,7 +282,7 @@ public class ProductAuditSqliteIntegrationTests
 
         var createService = new CreateProductService(
             userSession, registerSession, new EfProductRepository(context), new EfInventoryItemRepository(context),
-            productAuditRepository, context, clock);
+            productAuditRepository, new Enforcement.FakeInstallationEnforcementStateService(), context, clock);
 
         var administrativeNotificationWriter = new AdministrativeNotificationWriter(
             new EfAdministrativeNotificationAudienceQuery(context), new EfAdministrativeNotificationRepository(context), clock);
@@ -288,7 +290,8 @@ public class ProductAuditSqliteIntegrationTests
         var managementService = new ProductManagementService(
             userSession, registerSession, new EfProductRepository(context), new EfInventoryItemRepository(context),
             new EfInventoryMovementRepository(context), new EfProductCatalogQuery(context), productAuditRepository,
-            productAuditQuery, administrativeNotificationWriter, context, clock);
+            productAuditQuery, administrativeNotificationWriter,
+            new Enforcement.FakeInstallationEnforcementStateService(), context, clock);
 
         var recentProductResult = await createService.CreateAsync(
             new CreateProductRequest("SKU-RECENT", null, "Reciente", null, 10m, null, true, 5m, 1m),

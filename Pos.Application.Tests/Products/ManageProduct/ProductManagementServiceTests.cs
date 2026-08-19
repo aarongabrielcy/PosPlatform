@@ -1,7 +1,9 @@
 using Pos.Application.Authentication;
+using Pos.Application.Enforcement;
 using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Tests.Common.Time;
+using Pos.Application.Tests.Enforcement;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Common.ValueObjects;
 using Pos.Domain.Inventory;
@@ -26,6 +28,7 @@ public class ProductManagementServiceTests
         FakeProductAuditRepository ProductAuditRepository,
         FakeProductAuditQuery ProductAuditQuery,
         FakeAdministrativeNotificationWriter AdministrativeNotificationWriter,
+        FakeInstallationEnforcementStateService EnforcementStateService,
         FakeUnitOfWork UnitOfWork,
         OrganizationId OrganizationId,
         BranchId BranchId);
@@ -35,7 +38,8 @@ public class ProductManagementServiceTests
         bool registerOpen = true,
         IEnumerable<Permission>? permissions = null,
         FakeProductAuditQuery? productAuditQuery = null,
-        FakeProductCatalogQuery? productCatalogQuery = null)
+        FakeProductCatalogQuery? productCatalogQuery = null,
+        InstallationEnforcementState enforcementState = InstallationEnforcementState.Allowed)
     {
         var organizationId = OrganizationId.New();
         var branchId = BranchId.New();
@@ -78,18 +82,19 @@ public class ProductManagementServiceTests
         var productAuditRepository = new FakeProductAuditRepository();
         productAuditQuery ??= new FakeProductAuditQuery();
         var administrativeNotificationWriter = new FakeAdministrativeNotificationWriter();
+        var enforcementStateService = new FakeInstallationEnforcementStateService(enforcementState);
         var unitOfWork = new FakeUnitOfWork();
         var clock = new FakeClock(UtcNow);
 
         var service = new ProductManagementService(
             userSession, registerSession, productRepository, inventoryItemRepository,
             inventoryMovementRepository, productCatalogQuery, productAuditRepository, productAuditQuery,
-            administrativeNotificationWriter, unitOfWork, clock);
+            administrativeNotificationWriter, enforcementStateService, unitOfWork, clock);
 
         return new Fixture(
             service, userSession, registerSession, productRepository, inventoryItemRepository,
             inventoryMovementRepository, productCatalogQuery, productAuditRepository, productAuditQuery,
-            administrativeNotificationWriter, unitOfWork, organizationId, branchId);
+            administrativeNotificationWriter, enforcementStateService, unitOfWork, organizationId, branchId);
     }
 
     private static Product CreateProduct(
@@ -191,6 +196,25 @@ public class ProductManagementServiceTests
         Assert.NotNull(result);
         Assert.False(result!.TracksInventory);
         Assert.Equal(0m, result.CurrentQuantity);
+    }
+
+    // ---------- Guarda de enforcement (secciones 19/20/32 de la tarea) ----------
+
+    [Theory]
+    [InlineData(InstallationEnforcementState.Suspended)]
+    [InlineData(InstallationEnforcementState.CredentialInvalid)]
+    [InlineData(InstallationEnforcementState.Decommissioned)]
+    public async Task UpdateAsyncWhileInstallationIsRestrictedReturnsInstallationRestrictedAndPersistsNothing(
+        InstallationEnforcementState restrictedState)
+    {
+        var fixture = CreateFixture();
+        fixture.EnforcementStateService.SetCurrentForTest(restrictedState);
+
+        var result = await fixture.Service.UpdateAsync(
+            new UpdateProductRequest(ProductId.New(), "SKU-001", null, "Nuevo nombre", null, 12m, null, null));
+
+        Assert.Equal(UpdateProductResultStatus.InstallationRestricted, result.Status);
+        Assert.Equal(0, fixture.UnitOfWork.CommitCallCount);
     }
 
     // ---------- UpdateAsync ----------
@@ -538,7 +562,41 @@ public class ProductManagementServiceTests
         Assert.Equal(UpdateProductResultStatus.NotAuthorized, result.Status);
     }
 
+    [Theory]
+    [InlineData(InstallationEnforcementState.Suspended)]
+    [InlineData(InstallationEnforcementState.CredentialInvalid)]
+    [InlineData(InstallationEnforcementState.Decommissioned)]
+    public async Task SetActiveAsyncWhileInstallationIsRestrictedReturnsInstallationRestrictedAndPersistsNothing(
+        InstallationEnforcementState restrictedState)
+    {
+        var fixture = CreateFixture();
+        fixture.EnforcementStateService.SetCurrentForTest(restrictedState);
+
+        var result = await fixture.Service.SetActiveAsync(ProductId.New(), false);
+
+        Assert.Equal(UpdateProductResultStatus.InstallationRestricted, result.Status);
+        Assert.Equal(0, fixture.UnitOfWork.CommitCallCount);
+    }
+
     // ---------- AdjustInventoryAsync ----------
+
+    [Theory]
+    [InlineData(InstallationEnforcementState.Suspended)]
+    [InlineData(InstallationEnforcementState.CredentialInvalid)]
+    [InlineData(InstallationEnforcementState.Decommissioned)]
+    public async Task AdjustInventoryAsyncWhileInstallationIsRestrictedReturnsInstallationRestrictedAndPersistsNothing(
+        InstallationEnforcementState restrictedState)
+    {
+        var fixture = CreateFixture();
+        fixture.EnforcementStateService.SetCurrentForTest(restrictedState);
+
+        var result = await fixture.Service.AdjustInventoryAsync(
+            new AdjustProductInventoryRequest(ProductId.New(), InventoryAdjustmentType.Increase, 1m));
+
+        Assert.Equal(AdjustProductInventoryResultStatus.InstallationRestricted, result.Status);
+        Assert.Equal(0, fixture.UnitOfWork.CommitCallCount);
+        Assert.Equal(0, fixture.InventoryMovementRepository.AddCallCount);
+    }
 
     [Fact]
     public async Task AdjustInventoryAsyncIncreasesQuantityAndCreatesAManualIncreaseMovement()
