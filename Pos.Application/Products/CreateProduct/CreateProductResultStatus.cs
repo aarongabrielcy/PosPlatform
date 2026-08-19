@@ -5,6 +5,7 @@ public enum CreateProductResultStatus
     Success,
     NotAuthenticated,
     NotAuthorized,
+    InstallationRestricted,
     RegisterSessionRequired,
     InvalidSku,
     InvalidName,

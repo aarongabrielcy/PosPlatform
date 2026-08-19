@@ -5,6 +5,7 @@ public enum CheckoutResultStatus
     Success,
     NotAuthenticated,
     NotAuthorized,
+    InstallationRestricted,
     RegisterSessionRequired,
     EmptyCart,
     CurrencyMismatch,

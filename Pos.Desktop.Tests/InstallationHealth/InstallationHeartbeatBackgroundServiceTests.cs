@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Pos.Application.Enforcement;
 using Pos.Application.InstallationHealth;
 using Pos.Desktop.InstallationHealth;
+using Pos.Desktop.Tests.Enforcement;
 
 namespace Pos.Desktop.Tests.InstallationHealth;
 
@@ -102,6 +104,50 @@ public class InstallationHeartbeatBackgroundServiceTests
         }
     }
 
+    // Puente heartbeat -> enforcement (sección 15/17/38 de la tarea): cada resultado confirmado se
+    // reenvía a IInstallationEnforcementStateService.ApplyHeartbeatOutcomeAsync, de forma que un
+    // estado restrictivo se refleje en la aplicación en ejecución sin esperar un reinicio.
+    [Fact]
+    public async Task ConfirmedSuspendedOutcomeIsAppliedToTheEnforcementStateService()
+    {
+        var sender = new FakeInstallationHeartbeatSender(InstallationHeartbeatSendOutcome.Suspended);
+        var enforcementStateService = new FakeInstallationEnforcementStateService();
+        var service = CreateService(sender, enforcementStateService);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => enforcementStateService.ApplyHeartbeatOutcomeCallCount >= 1);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+
+        Assert.Equal(InstallationHeartbeatSendOutcome.Suspended, enforcementStateService.LastAppliedOutcome);
+        Assert.Equal(InstallationEnforcementState.Suspended, enforcementStateService.Current);
+    }
+
+    [Fact]
+    public async Task NetworkFailureOutcomeIsStillForwardedButDoesNotChangeEnforcementState()
+    {
+        var sender = new FakeInstallationHeartbeatSender(InstallationHeartbeatSendOutcome.NetworkFailure);
+        var enforcementStateService = new FakeInstallationEnforcementStateService();
+        var service = CreateService(sender, enforcementStateService);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => enforcementStateService.ApplyHeartbeatOutcomeCallCount >= 1);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+
+        Assert.Equal(InstallationEnforcementState.Allowed, enforcementStateService.Current);
+    }
+
     [Fact]
     public async Task StoppingTheServiceStopsFurtherScheduling()
     {
@@ -119,8 +165,10 @@ public class InstallationHeartbeatBackgroundServiceTests
         Assert.Equal(countAfterStop, sender.CallCount);
     }
 
-    private static InstallationHeartbeatBackgroundService CreateService(FakeInstallationHeartbeatSender sender) =>
-        new(sender, NullLogger<InstallationHeartbeatBackgroundService>.Instance, TinyInterval);
+    private static InstallationHeartbeatBackgroundService CreateService(
+        FakeInstallationHeartbeatSender sender, FakeInstallationEnforcementStateService? enforcementStateService = null) =>
+        new(sender, enforcementStateService ?? new FakeInstallationEnforcementStateService(),
+            NullLogger<InstallationHeartbeatBackgroundService>.Instance, TinyInterval);
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {

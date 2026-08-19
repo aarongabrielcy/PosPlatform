@@ -11,6 +11,7 @@ using Pos.Desktop.Activation;
 using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
+using Pos.Desktop.Enforcement;
 using Pos.Desktop.Inventory;
 using Pos.Desktop.Login;
 using Pos.Desktop.Main;
@@ -63,6 +64,12 @@ public class DependencyInjectionTests
 
         services.AddTransient<ActivationViewModel>();
         services.AddTransient<ActivationWindow>();
+        services.AddTransient<SuspensionViewModel>();
+        services.AddTransient<SuspensionWindow>();
+        services.AddTransient<CredentialRecoveryViewModel>();
+        services.AddTransient<CredentialRecoveryWindow>();
+        services.AddTransient<NewInstallationActivationViewModel>();
+        services.AddTransient<NewInstallationActivationWindow>();
         services.AddTransient<MainWindow>();
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<DashboardViewModel>();
@@ -197,6 +204,36 @@ public class DependencyInjectionTests
             using var scope = provider.CreateScope();
 
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<IInstallationActivationStateService>());
+        });
+
+    [Fact]
+    public void SuspensionWindowResolvesWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<SuspensionWindow>());
+        });
+
+    [Fact]
+    public void CredentialRecoveryWindowResolvesWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<CredentialRecoveryWindow>());
+        });
+
+    [Fact]
+    public void NewInstallationActivationWindowResolvesWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<NewInstallationActivationWindow>());
         });
 
     [Fact]

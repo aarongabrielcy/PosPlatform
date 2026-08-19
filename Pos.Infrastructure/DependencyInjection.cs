@@ -9,6 +9,7 @@ using Pos.Application.Branches;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
 using Pos.Application.Common.Versioning;
+using Pos.Application.Enforcement;
 using Pos.Application.Installation;
 using Pos.Application.InstallationHealth;
 using Pos.Application.Inventory;
@@ -27,6 +28,7 @@ using Pos.Application.Security;
 using Pos.Application.Users;
 using Pos.Infrastructure.Activation;
 using Pos.Infrastructure.Authentication;
+using Pos.Infrastructure.Enforcement;
 using Pos.Infrastructure.InstallationHealth;
 using Pos.Infrastructure.Persistence;
 using Pos.Infrastructure.Persistence.Initialization;
@@ -129,6 +131,13 @@ public static class DependencyInjection
         }
 
         services.AddSingleton<IInstallationActivationRecordStore, FileInstallationActivationRecordStore>();
+
+        // Singleton: debe observarse de forma idéntica desde InstallationHeartbeatBackgroundService
+        // (ámbito raíz del Host) y desde los servicios Scoped que protegen mutaciones (ver
+        // IInstallationEnforcementStateService).
+        services.AddSingleton<IInstallationEnforcementStateStore, FileInstallationEnforcementStateStore>();
+        services.AddSingleton<IInstallationEnforcementStateService, InstallationEnforcementStateService>();
+
         services.AddScoped<IInstallationActivationStateService, InstallationActivationStateService>();
 
         services.AddSingleton<IApplicationVersionProvider, AssemblyApplicationVersionProvider>();

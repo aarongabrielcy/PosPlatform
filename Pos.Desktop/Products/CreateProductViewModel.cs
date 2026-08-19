@@ -231,6 +231,7 @@ public sealed partial class CreateProductViewModel : ViewModelBase
             {
                 CreateProductResultStatus.NotAuthenticated => "La sesión no está disponible. Inicie sesión nuevamente.",
                 CreateProductResultStatus.NotAuthorized => "No tiene permiso para crear productos.",
+                CreateProductResultStatus.InstallationRestricted => "La operación está restringida. Consulte al administrador.",
                 CreateProductResultStatus.RegisterSessionRequired => "Debe abrir la caja para crear productos.",
                 CreateProductResultStatus.InvalidSku => "El SKU no es válido.",
                 CreateProductResultStatus.InvalidName => "El nombre no es válido.",

@@ -1,4 +1,5 @@
 using Pos.Application.Activation;
+using Pos.Application.Enforcement;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
 using Pos.Desktop.RegisterSessions;
@@ -36,6 +37,50 @@ public class StartupFlowCoordinatorTests
         Assert.Equal(
             StartupFlowDecision.ShutdownCancelled,
             StartupFlowCoordinator.DecideForActivationDialogResult(null));
+
+    // ---------- Puerta de enforcement (sección 21/37 de la tarea) ----------
+
+    [Fact]
+    public void AllowedEnforcementStateDecidesToContinueNotToShowAnyRestrictedDialog() =>
+        Assert.Equal(
+            StartupFlowDecision.ContinueAfterEnforcementCheck,
+            StartupFlowCoordinator.DecideForEnforcementState(InstallationEnforcementState.Allowed));
+
+    [Fact]
+    public void SuspendedEnforcementStateDecidesToShowSuspensionDialog() =>
+        Assert.Equal(
+            StartupFlowDecision.ShowSuspensionDialog,
+            StartupFlowCoordinator.DecideForEnforcementState(InstallationEnforcementState.Suspended));
+
+    [Fact]
+    public void CredentialInvalidEnforcementStateDecidesToShowCredentialRecoveryDialog() =>
+        Assert.Equal(
+            StartupFlowDecision.ShowCredentialRecoveryDialog,
+            StartupFlowCoordinator.DecideForEnforcementState(InstallationEnforcementState.CredentialInvalid));
+
+    [Fact]
+    public void DecommissionedEnforcementStateDecidesToShowNewInstallationActivationDialog() =>
+        Assert.Equal(
+            StartupFlowDecision.ShowNewInstallationActivationDialog,
+            StartupFlowCoordinator.DecideForEnforcementState(InstallationEnforcementState.Decommissioned));
+
+    [Fact]
+    public void ResolvedRestrictedFlowDialogDecidesToContinueAfterEnforcementCheck() =>
+        Assert.Equal(
+            StartupFlowDecision.ContinueAfterEnforcementCheck,
+            StartupFlowCoordinator.DecideForRestrictedFlowDialogResult(true));
+
+    [Fact]
+    public void CancelledRestrictedFlowDialogDecidesToShutdown() =>
+        Assert.Equal(
+            StartupFlowDecision.ShutdownCancelled,
+            StartupFlowCoordinator.DecideForRestrictedFlowDialogResult(false));
+
+    [Fact]
+    public void ClosedRestrictedFlowDialogWithoutResultDecidesToShutdown() =>
+        Assert.Equal(
+            StartupFlowDecision.ShutdownCancelled,
+            StartupFlowCoordinator.DecideForRestrictedFlowDialogResult(null));
 
     [Fact]
     public void RequiresSetupDecidesToShowSetupDialog() =>

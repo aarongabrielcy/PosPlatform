@@ -268,6 +268,8 @@ public sealed partial class CheckoutViewModel : ViewModelBase
     {
         CheckoutResultStatus.NotAuthenticated => "Debes iniciar sesión para continuar.",
         CheckoutResultStatus.NotAuthorized => "No tienes permiso para procesar ventas.",
+        CheckoutResultStatus.InstallationRestricted =>
+            "La operación del punto de venta está restringida. Consulta al administrador.",
         CheckoutResultStatus.RegisterSessionRequired => "Debes abrir la caja para continuar.",
         CheckoutResultStatus.EmptyCart => "El carrito está vacío.",
         CheckoutResultStatus.CurrencyMismatch => "La moneda del carrito no coincide con la de la caja.",

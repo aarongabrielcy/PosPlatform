@@ -1,8 +1,10 @@
 using Pos.Application.Authentication;
+using Pos.Application.Enforcement;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Sales.Checkout;
 using Pos.Application.SalesCart;
 using Pos.Application.Tests.Common.Time;
+using Pos.Application.Tests.Enforcement;
 using Pos.Application.Tests.SalesCart;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Common.ValueObjects;
@@ -20,6 +22,50 @@ namespace Pos.Application.Tests.Sales.Checkout;
 public class CheckoutServiceTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 1, 1, 9, 0, 0, TimeSpan.Zero);
+
+    // ---------- Guarda de enforcement (secciones 19/20/32/33 de la tarea) ----------
+    // La guarda es la primerísima comprobación de CheckoutAsync: ninguna mutación ocurre, ni
+    // siquiera la revalidación del carrito contra Product/InventoryItem (sección 33: "enforcement
+    // se vuelve restrictivo antes del commit final -> el checkout no persiste Sale, no descuenta
+    // inventario, no persiste el pago").
+
+    [Theory]
+    [InlineData(InstallationEnforcementState.Suspended)]
+    [InlineData(InstallationEnforcementState.CredentialInvalid)]
+    [InlineData(InstallationEnforcementState.Decommissioned)]
+    public async Task CheckoutWhileInstallationIsRestrictedReturnsInstallationRestrictedAndPersistsNothing(
+        InstallationEnforcementState restrictedState)
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs([Permission.ProcessSale]);
+        fixture.OpenRegister();
+        var product = fixture.AddProduct();
+        fixture.SeedInventory(product, 10m);
+        fixture.AddCartLine(product, 2m);
+        fixture.EnforcementStateService.SetCurrentForTest(restrictedState);
+        var service = fixture.BuildService();
+
+        var result = await service.CheckoutAsync(new CheckoutRequest(100m));
+
+        Assert.Equal(CheckoutResultStatus.InstallationRestricted, result.Status);
+        AssertNothingPersisted(fixture);
+    }
+
+    [Fact]
+    public async Task CheckoutWhileInstallationIsAllowedIsNotBlockedByTheEnforcementGuard()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs([Permission.ProcessSale]);
+        fixture.OpenRegister();
+        var product = fixture.AddProduct();
+        fixture.SeedInventory(product, 10m);
+        fixture.AddCartLine(product, 2m);
+        var service = fixture.BuildService();
+
+        var result = await service.CheckoutAsync(new CheckoutRequest(100m));
+
+        Assert.NotEqual(CheckoutResultStatus.InstallationRestricted, result.Status);
+    }
 
     // ---------- Precondiciones (sección 6) ----------
 
@@ -520,6 +566,7 @@ public class CheckoutServiceTests
             InventoryItemRepository = new FakeInventoryItemRepository();
             InventoryMovementRepository = new FakeInventoryMovementRepository();
             SaleRepository = new FakeSaleRepository(null);
+            EnforcementStateService = new FakeInstallationEnforcementStateService();
             UnitOfWork = new FakeUnitOfWork();
             Clock = new FakeClock(FixedNow);
         }
@@ -547,6 +594,8 @@ public class CheckoutServiceTests
         public FakeInventoryMovementRepository InventoryMovementRepository { get; }
 
         public FakeSaleRepository SaleRepository { get; }
+
+        public FakeInstallationEnforcementStateService EnforcementStateService { get; }
 
         public FakeUnitOfWork UnitOfWork { get; }
 
@@ -612,6 +661,7 @@ public class CheckoutServiceTests
                 InventoryItemRepository,
                 InventoryMovementRepository,
                 SaleRepository,
+                EnforcementStateService,
                 UnitOfWork,
                 Clock);
     }

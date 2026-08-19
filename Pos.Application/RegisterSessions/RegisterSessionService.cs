@@ -2,6 +2,7 @@ using Pos.Application.Authentication;
 using Pos.Application.Branches;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
+using Pos.Application.Enforcement;
 using Pos.Application.Organizations;
 using Pos.Application.Registers;
 using Pos.Application.Sales;
@@ -32,6 +33,7 @@ public sealed class RegisterSessionService : IRegisterSessionService
     private readonly IRegisterSessionRepository _registerSessionRepository;
     private readonly IUserRepository _userRepository;
     private readonly ISaleRepository _saleRepository;
+    private readonly IInstallationEnforcementStateService _enforcementStateService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
@@ -44,6 +46,7 @@ public sealed class RegisterSessionService : IRegisterSessionService
         IRegisterSessionRepository registerSessionRepository,
         IUserRepository userRepository,
         ISaleRepository saleRepository,
+        IInstallationEnforcementStateService enforcementStateService,
         IUnitOfWork unitOfWork,
         IClock clock)
     {
@@ -55,6 +58,7 @@ public sealed class RegisterSessionService : IRegisterSessionService
         _registerSessionRepository = registerSessionRepository ?? throw new ArgumentNullException(nameof(registerSessionRepository));
         _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
         _saleRepository = saleRepository ?? throw new ArgumentNullException(nameof(saleRepository));
+        _enforcementStateService = enforcementStateService ?? throw new ArgumentNullException(nameof(enforcementStateService));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
@@ -161,6 +165,11 @@ public sealed class RegisterSessionService : IRegisterSessionService
         OpenRegisterSessionRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        if (_enforcementStateService.Current != InstallationEnforcementState.Allowed)
+        {
+            return RegisterSessionResult.Failure(RegisterSessionResultStatus.InstallationRestricted);
+        }
 
         var user = _currentUserSession.CurrentUser;
 
@@ -271,6 +280,12 @@ public sealed class RegisterSessionService : IRegisterSessionService
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        // A diferencia de OpenAsync, CloseAsync no se bloquea por un estado de enforcement
+        // restrictivo (Suspended/CredentialInvalid/Decommissioned): cerrar una caja ya abierta es
+        // contención/reconciliación de un estado de negocio existente, no una nueva operación
+        // comercial, y dejar la caja atrapada exigiría intervención manual fuera de la aplicación
+        // (corrección de TAREA de "Close Register" bajo Installation Enforcement). El enforcement
+        // sigue vigente para OpenAsync y para el resto de mutaciones nuevas.
         var user = _currentUserSession.CurrentUser;
 
         if (user is null)

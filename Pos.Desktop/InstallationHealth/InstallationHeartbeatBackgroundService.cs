@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Pos.Application.Enforcement;
 using Pos.Application.InstallationHealth;
 
 namespace Pos.Desktop.InstallationHealth;
@@ -25,13 +26,15 @@ public sealed partial class InstallationHeartbeatBackgroundService : BackgroundS
     internal static readonly TimeSpan DefaultHeartbeatInterval = TimeSpan.FromSeconds(60);
 
     private readonly IInstallationHeartbeatSender _sender;
+    private readonly IInstallationEnforcementStateService _enforcementStateService;
     private readonly ILogger<InstallationHeartbeatBackgroundService> _logger;
     private readonly TimeSpan _heartbeatInterval;
 
     public InstallationHeartbeatBackgroundService(
         IInstallationHeartbeatSender sender,
+        IInstallationEnforcementStateService enforcementStateService,
         ILogger<InstallationHeartbeatBackgroundService> logger)
-        : this(sender, logger, DefaultHeartbeatInterval)
+        : this(sender, enforcementStateService, logger, DefaultHeartbeatInterval)
     {
     }
 
@@ -40,10 +43,12 @@ public sealed partial class InstallationHeartbeatBackgroundService : BackgroundS
     // Pos.Desktop.Tests.
     internal InstallationHeartbeatBackgroundService(
         IInstallationHeartbeatSender sender,
+        IInstallationEnforcementStateService enforcementStateService,
         ILogger<InstallationHeartbeatBackgroundService> logger,
         TimeSpan heartbeatInterval)
     {
         _sender = sender ?? throw new ArgumentNullException(nameof(sender));
+        _enforcementStateService = enforcementStateService ?? throw new ArgumentNullException(nameof(enforcementStateService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _heartbeatInterval = heartbeatInterval;
     }
@@ -78,6 +83,10 @@ public sealed partial class InstallationHeartbeatBackgroundService : BackgroundS
         {
             var outcome = await _sender.SendHeartbeatAsync(cancellationToken).ConfigureAwait(false);
             LogOutcome(outcome);
+
+            // Puente heartbeat -> enforcement (sección 15/16 de la tarea): el estado de enforcement
+            // en memoria debe reflejar un resultado confirmado sin esperar a un reinicio del proceso.
+            await _enforcementStateService.ApplyHeartbeatOutcomeAsync(outcome, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {

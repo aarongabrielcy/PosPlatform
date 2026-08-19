@@ -1,6 +1,7 @@
 using System.Linq;
 using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
+using Pos.Application.Enforcement;
 using Pos.Application.ProductAudit;
 using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
@@ -38,6 +39,54 @@ public class MainWindowViewModelTests
 
         Assert.Equal("Ana Pérez", viewModel.DisplayName);
         Assert.Equal("Cajero", viewModel.RoleName);
+    }
+
+    // ---------- Aviso de enforcement en la app en ejecución (sección 17/38 de la tarea) ----------
+
+    [Fact]
+    public void StartsWithoutAnEnforcementBannerWhenAllowed()
+    {
+        var viewModel = CreateViewModel();
+
+        Assert.False(viewModel.HasEnforcementBanner);
+        Assert.Null(viewModel.EnforcementBannerText);
+    }
+
+    [Fact]
+    public void SuspensionWhileRunningShowsTheEnforcementBanner()
+    {
+        var enforcementStateService = new Enforcement.FakeInstallationEnforcementStateService();
+        var viewModel = CreateViewModel(enforcementStateService: enforcementStateService);
+
+        enforcementStateService.RaiseStateChanged(Pos.Application.Enforcement.InstallationEnforcementState.Suspended);
+
+        Assert.True(viewModel.HasEnforcementBanner);
+        Assert.Contains("suspendida", viewModel.EnforcementBannerText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RecoveringFromSuspensionWhileRunningClearsTheEnforcementBanner()
+    {
+        var enforcementStateService = new Enforcement.FakeInstallationEnforcementStateService();
+        var viewModel = CreateViewModel(enforcementStateService: enforcementStateService);
+        enforcementStateService.RaiseStateChanged(Pos.Application.Enforcement.InstallationEnforcementState.Suspended);
+
+        enforcementStateService.RaiseStateChanged(Pos.Application.Enforcement.InstallationEnforcementState.Allowed);
+
+        Assert.False(viewModel.HasEnforcementBanner);
+        Assert.Null(viewModel.EnforcementBannerText);
+    }
+
+    [Fact]
+    public void DisposingStopsReactingToFurtherEnforcementStateChanges()
+    {
+        var enforcementStateService = new Enforcement.FakeInstallationEnforcementStateService();
+        var viewModel = CreateViewModel(enforcementStateService: enforcementStateService);
+
+        viewModel.Dispose();
+        enforcementStateService.RaiseStateChanged(Pos.Application.Enforcement.InstallationEnforcementState.Suspended);
+
+        Assert.False(viewModel.HasEnforcementBanner);
     }
 
     [Fact]
@@ -158,6 +207,34 @@ public class MainWindowViewModelTests
 
         Assert.True(raised);
         Assert.Equal(0, registerSession.ClearCallCount);
+    }
+
+    // Corrección de la tarea (sección 10/22): una caja abierta cuando el heartbeat confirma un
+    // estado restrictivo no debe requerir reiniciar la app ni usar SQL/terminal. La guarda
+    // relevante vive en RegisterSessionService.CloseAsync (Application), no aquí: este ViewModel
+    // nunca gateó CloseRegisterCommand por enforcement, así que el evento debe seguir
+    // propagándose sin cambios mientras la instalación está restringida.
+    [Theory]
+    [InlineData(InstallationEnforcementState.Suspended)]
+    [InlineData(InstallationEnforcementState.CredentialInvalid)]
+    [InlineData(InstallationEnforcementState.Decommissioned)]
+    public void CloseRegisterCommandRemainsAvailableWhileInstallationIsRestricted(
+        InstallationEnforcementState restrictedState)
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateAuthenticatedUser("Ana Pérez", "Cajero") };
+        var registerSession = new FakeCurrentRegisterSession { Current = CreateActiveRegisterSession() };
+        var enforcementStateService = new Enforcement.FakeInstallationEnforcementStateService();
+        var viewModel = CreateViewModel(
+            session: session, registerSession: registerSession, enforcementStateService: enforcementStateService);
+
+        enforcementStateService.RaiseStateChanged(restrictedState);
+
+        var raised = false;
+        viewModel.CloseRegisterRequested += (_, _) => raised = true;
+
+        viewModel.CloseRegisterCommand.Execute(null);
+
+        Assert.True(raised);
     }
 
     [Fact]
@@ -830,11 +907,13 @@ public class MainWindowViewModelTests
         InventoryViewModel? inventoryViewModel = null,
         RegisterViewModel? registerViewModel = null,
         FakeAdministrativeNotificationService? notificationService = null,
-        FakeProductAuditService? productAuditService = null)
+        FakeProductAuditService? productAuditService = null,
+        Enforcement.FakeInstallationEnforcementStateService? enforcementStateService = null)
     {
         session ??= new FakeCurrentUserSession();
         registerSession ??= new FakeCurrentRegisterSession();
         currentSalesCart ??= new FakeCurrentSalesCart();
+        enforcementStateService ??= new Enforcement.FakeInstallationEnforcementStateService();
         dashboardViewModel ??= new DashboardViewModel(session, registerSession, currentSalesCart, new CatalogFakeProductManagementService());
         salesViewModel ??= new SalesViewModel(session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
         salesHistoryViewModel ??= new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
@@ -846,7 +925,8 @@ public class MainWindowViewModelTests
         var notificationCenterViewModel = new NotificationCenterViewModel(notificationService ?? new FakeAdministrativeNotificationService());
 
         return new MainWindowViewModel(
-            session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
+            session, registerSession, currentSalesCart, enforcementStateService,
+            dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
             inventoryViewModel, registerViewModel, settingsViewModel, productAuditViewModel, notificationCenterViewModel);
     }
 

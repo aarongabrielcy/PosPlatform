@@ -85,7 +85,8 @@ public class CheckoutSqliteIntegrationTests
 
         var service = new CheckoutService(
             userSession, registerSession, cart, productRepository, inventoryItemRepository,
-            inventoryMovementRepository, saleRepository, context, new SystemClock());
+            inventoryMovementRepository, saleRepository, new Enforcement.FakeInstallationEnforcementStateService(),
+            context, new SystemClock());
 
         return (context, service, cart, graph, userSession, registerSession);
     }
@@ -247,6 +248,7 @@ public class CheckoutSqliteIntegrationTests
                 new EfAdministrativeNotificationAudienceQuery(context),
                 new EfAdministrativeNotificationRepository(context),
                 managementServiceClock),
+            new Enforcement.FakeInstallationEnforcementStateService(),
             context,
             managementServiceClock);
 

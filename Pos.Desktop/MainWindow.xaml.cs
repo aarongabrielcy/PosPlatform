@@ -108,6 +108,7 @@ namespace Pos.Desktop
             _viewModel.AdjustInventoryRequested -= OnViewModelAdjustInventoryRequested;
             Closing -= OnWindowClosing;
             Closed -= OnWindowClosed;
+            _viewModel.Dispose();
         }
     }
 }

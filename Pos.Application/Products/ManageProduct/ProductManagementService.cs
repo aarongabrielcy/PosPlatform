@@ -2,6 +2,7 @@ using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
+using Pos.Application.Enforcement;
 using Pos.Application.Inventory;
 using Pos.Application.ProductAudit;
 using Pos.Application.RegisterSessions;
@@ -32,6 +33,7 @@ public sealed class ProductManagementService : IProductManagementService
     private readonly IProductAuditRepository _productAuditRepository;
     private readonly IProductAuditQuery _productAuditQuery;
     private readonly IAdministrativeNotificationWriter _administrativeNotificationWriter;
+    private readonly IInstallationEnforcementStateService _enforcementStateService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
@@ -45,6 +47,7 @@ public sealed class ProductManagementService : IProductManagementService
         IProductAuditRepository productAuditRepository,
         IProductAuditQuery productAuditQuery,
         IAdministrativeNotificationWriter administrativeNotificationWriter,
+        IInstallationEnforcementStateService enforcementStateService,
         IUnitOfWork unitOfWork,
         IClock clock)
     {
@@ -58,6 +61,7 @@ public sealed class ProductManagementService : IProductManagementService
         _productAuditQuery = productAuditQuery ?? throw new ArgumentNullException(nameof(productAuditQuery));
         _administrativeNotificationWriter = administrativeNotificationWriter
             ?? throw new ArgumentNullException(nameof(administrativeNotificationWriter));
+        _enforcementStateService = enforcementStateService ?? throw new ArgumentNullException(nameof(enforcementStateService));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
@@ -189,6 +193,11 @@ public sealed class ProductManagementService : IProductManagementService
         UpdateProductRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        if (_enforcementStateService.Current != InstallationEnforcementState.Allowed)
+        {
+            return UpdateProductResult.Failure(UpdateProductResultStatus.InstallationRestricted);
+        }
 
         var user = _currentUserSession.CurrentUser;
 
@@ -417,6 +426,11 @@ public sealed class ProductManagementService : IProductManagementService
     public async Task<UpdateProductResult> SetActiveAsync(
         ProductId productId, bool isActive, CancellationToken cancellationToken = default)
     {
+        if (_enforcementStateService.Current != InstallationEnforcementState.Allowed)
+        {
+            return UpdateProductResult.Failure(UpdateProductResultStatus.InstallationRestricted);
+        }
+
         var user = _currentUserSession.CurrentUser;
 
         if (user is null)
@@ -478,6 +492,11 @@ public sealed class ProductManagementService : IProductManagementService
         AdjustProductInventoryRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        if (_enforcementStateService.Current != InstallationEnforcementState.Allowed)
+        {
+            return AdjustProductInventoryResult.Failure(AdjustProductInventoryResultStatus.InstallationRestricted);
+        }
 
         var user = _currentUserSession.CurrentUser;
 

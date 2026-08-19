@@ -201,6 +201,7 @@ public sealed partial class AdjustInventoryViewModel : ViewModelBase
     {
         AdjustProductInventoryResultStatus.NotAuthenticated => "La sesión no está disponible. Inicie sesión nuevamente.",
         AdjustProductInventoryResultStatus.NotAuthorized => "No tiene permiso para ajustar inventario.",
+        AdjustProductInventoryResultStatus.InstallationRestricted => "La operación está restringida. Consulte al administrador.",
         AdjustProductInventoryResultStatus.RegisterSessionRequired => "Debe haber una caja abierta para ajustar inventario.",
         AdjustProductInventoryResultStatus.ProductNotFound => "El producto ya no existe.",
         AdjustProductInventoryResultStatus.ProductDoesNotTrackInventory => "El producto no controla inventario.",

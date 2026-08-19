@@ -173,7 +173,8 @@ public class MainWindowTests
             var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
             var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
             var viewModel = new MainWindowViewModel(
-                session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
+                session, registerSession, currentSalesCart, new Enforcement.FakeInstallationEnforcementStateService(),
+                dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
                 new InventoryViewModel(new FakeInventoryService(), session), new RegisterViewModel(registerSession), new SettingsViewModel(),
                 new ProductAuditViewModel(new FakeProductAuditService()),
                 new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
@@ -287,7 +288,8 @@ public class MainWindowTests
                 session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), new FakeProductManagementService());
             var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
             var viewModel = new MainWindowViewModel(
-                session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), dashboardViewModel, salesViewModel, salesHistoryViewModel,
+                session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), new Enforcement.FakeInstallationEnforcementStateService(),
+                dashboardViewModel, salesViewModel, salesHistoryViewModel,
                 new ProductsViewModel(new CatalogFakeProductManagementService()), new InventoryViewModel(new FakeInventoryService(), session),
                 new RegisterViewModel(new FakeCurrentRegisterSession()), new SettingsViewModel(),
                 new ProductAuditViewModel(new FakeProductAuditService()),
@@ -424,7 +426,8 @@ public class MainWindowTests
         var notificationCenterViewModel = new NotificationCenterViewModel(new FakeAdministrativeNotificationService());
 
         return new MainWindowViewModel(
-            session, registerSession, currentSalesCart, dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
+            session, registerSession, currentSalesCart, new Enforcement.FakeInstallationEnforcementStateService(),
+            dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
             inventoryViewModel, registerViewModel, settingsViewModel, productAuditViewModel, notificationCenterViewModel);
     }
 

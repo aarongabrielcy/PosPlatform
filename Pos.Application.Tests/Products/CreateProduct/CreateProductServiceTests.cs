@@ -1,6 +1,8 @@
 using Pos.Application.Authentication;
+using Pos.Application.Enforcement;
 using Pos.Application.Products.CreateProduct;
 using Pos.Application.RegisterSessions;
+using Pos.Application.Tests.Enforcement;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Security;
 
@@ -17,11 +19,16 @@ public class CreateProductServiceTests
         FakeProductRepository ProductRepository,
         FakeInventoryItemRepository InventoryItemRepository,
         FakeProductAuditRepository ProductAuditRepository,
+        FakeInstallationEnforcementStateService EnforcementStateService,
         FakeUnitOfWork UnitOfWork,
         OrganizationId OrganizationId,
         BranchId BranchId);
 
-    private static Fixture CreateFixture(bool authenticated = true, bool registerOpen = true, bool granted = true)
+    private static Fixture CreateFixture(
+        bool authenticated = true,
+        bool registerOpen = true,
+        bool granted = true,
+        InstallationEnforcementState enforcementState = InstallationEnforcementState.Allowed)
     {
         var organizationId = OrganizationId.New();
         var branchId = BranchId.New();
@@ -60,16 +67,17 @@ public class CreateProductServiceTests
         var productRepository = new FakeProductRepository();
         var inventoryItemRepository = new FakeInventoryItemRepository();
         var productAuditRepository = new FakeProductAuditRepository();
+        var enforcementStateService = new FakeInstallationEnforcementStateService(enforcementState);
         var unitOfWork = new FakeUnitOfWork();
         var clock = new FakeClock(UtcNow);
 
         var service = new CreateProductService(
             userSession, registerSession, productRepository, inventoryItemRepository, productAuditRepository,
-            unitOfWork, clock);
+            enforcementStateService, unitOfWork, clock);
 
         return new Fixture(
             service, userSession, registerSession, productRepository, inventoryItemRepository,
-            productAuditRepository, unitOfWork, organizationId, branchId);
+            productAuditRepository, enforcementStateService, unitOfWork, organizationId, branchId);
     }
 
     private static CreateProductRequest ValidRequestWithoutInventory() =>
@@ -237,6 +245,26 @@ public class CreateProductServiceTests
 
         Assert.False(result.Success);
         Assert.Equal(CreateProductResultStatus.InvalidName, result.Status);
+    }
+
+    // ---------- Guarda de enforcement (secciones 19/20/32 de la tarea) ----------
+
+    [Theory]
+    [InlineData(InstallationEnforcementState.Suspended)]
+    [InlineData(InstallationEnforcementState.CredentialInvalid)]
+    [InlineData(InstallationEnforcementState.Decommissioned)]
+    public async Task CreateAsyncWhileInstallationIsRestrictedReturnsInstallationRestrictedAndPersistsNothing(
+        InstallationEnforcementState restrictedState)
+    {
+        var fixture = CreateFixture();
+        fixture.EnforcementStateService.SetCurrentForTest(restrictedState);
+
+        var result = await fixture.Service.CreateAsync(ValidRequestWithoutInventory(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal(CreateProductResultStatus.InstallationRestricted, result.Status);
+        Assert.Equal(0, fixture.ProductRepository.AddCallCount);
+        Assert.Equal(0, fixture.UnitOfWork.CommitCallCount);
     }
 
     [Fact]

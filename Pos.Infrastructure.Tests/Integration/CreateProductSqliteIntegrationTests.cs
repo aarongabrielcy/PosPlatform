@@ -73,7 +73,7 @@ public class CreateProductSqliteIntegrationTests
 
         var createProductService = new CreateProductService(
             userSession, registerSession, productRepository, inventoryItemRepository, productAuditRepository,
-            context, clock);
+            new Enforcement.FakeInstallationEnforcementStateService(), context, clock);
 
         var cartService = new SalesCartService(
             userSession, registerSession, new InMemoryCurrentSalesCart(), productRepository, inventoryItemRepository);

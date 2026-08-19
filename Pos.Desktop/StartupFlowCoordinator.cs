@@ -1,4 +1,5 @@
 using Pos.Application.Activation;
+using Pos.Application.Enforcement;
 using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
 using Pos.Desktop.RegisterSessions;
@@ -14,6 +15,10 @@ internal enum StartupFlowDecision
 {
     ShowActivationDialog,
     ContinueAfterActivation,
+    ShowSuspensionDialog,
+    ShowCredentialRecoveryDialog,
+    ShowNewInstallationActivationDialog,
+    ContinueAfterEnforcementCheck,
     ShowSetupDialog,
     ShowLogin,
     ContinueAfterLogin,
@@ -38,6 +43,26 @@ internal static class StartupFlowCoordinator
     // resto de la aplicación: termina el proceso igual que un setup o login cancelado.
     public static StartupFlowDecision DecideForActivationDialogResult(bool? dialogResult) =>
         dialogResult == true ? StartupFlowDecision.ContinueAfterActivation : StartupFlowDecision.ShutdownCancelled;
+
+    // Puerta de arranque posterior a la activación y previa a la configuración/login del negocio
+    // local: un estado de enforcement restrictivo confirmado por el backend nunca debe dejar
+    // alcanzar Setup/Login/MainWindow (sección 21 de la tarea). Es deliberadamente independiente de
+    // DecideForInstallationState: Suspended/CredentialInvalid/Decommissioned son estados de la nube
+    // (Installation), no del negocio local (organización/sucursal/caja/administrador).
+    public static StartupFlowDecision DecideForEnforcementState(InstallationEnforcementState enforcementState) =>
+        enforcementState switch
+        {
+            InstallationEnforcementState.Suspended => StartupFlowDecision.ShowSuspensionDialog,
+            InstallationEnforcementState.CredentialInvalid => StartupFlowDecision.ShowCredentialRecoveryDialog,
+            InstallationEnforcementState.Decommissioned => StartupFlowDecision.ShowNewInstallationActivationDialog,
+            _ => StartupFlowDecision.ContinueAfterEnforcementCheck,
+        };
+
+    // Cerrar cualquiera de los tres diálogos restrictivos (Suspensión, Recuperación de credencial,
+    // Activación como nueva Installation) sin resolverlos no debe exponer el POS operativo (sección
+    // 21/37 de la tarea): termina el proceso igual que un setup o login cancelado.
+    public static StartupFlowDecision DecideForRestrictedFlowDialogResult(bool? dialogResult) =>
+        dialogResult == true ? StartupFlowDecision.ContinueAfterEnforcementCheck : StartupFlowDecision.ShutdownCancelled;
 
     public static StartupFlowDecision DecideForInstallationState(InstallationState installationState) =>
         installationState switch

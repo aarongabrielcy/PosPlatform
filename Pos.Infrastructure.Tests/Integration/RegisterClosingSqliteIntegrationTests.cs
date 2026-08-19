@@ -50,6 +50,7 @@ public class RegisterClosingSqliteIntegrationTests
             new EfRegisterSessionRepository(context),
             new EfUserRepository(context),
             new EfSaleRepository(context),
+            new Enforcement.FakeInstallationEnforcementStateService(),
             context,
             new SystemClock());
 
@@ -172,6 +173,7 @@ public class RegisterClosingSqliteIntegrationTests
                 new EfInventoryItemRepository(context),
                 new EfInventoryMovementRepository(context),
                 new EfSaleRepository(context),
+                new Enforcement.FakeInstallationEnforcementStateService(),
                 context,
                 new SystemClock());
 
@@ -288,7 +290,7 @@ public class RegisterClosingSqliteIntegrationTests
                 currentUserSession, currentRegisterSession, cart,
                 new EfProductRepository(context), new EfInventoryItemRepository(context),
                 new EfInventoryMovementRepository(context), new EfSaleRepository(context),
-                context, new SystemClock());
+                new Enforcement.FakeInstallationEnforcementStateService(), context, new SystemClock());
 
             var checkoutResult = await checkoutService.CheckoutAsync(new CheckoutRequest(900m));
 
@@ -307,7 +309,7 @@ public class RegisterClosingSqliteIntegrationTests
                 currentUserSession, currentRegisterSession, cart,
                 new EfProductRepository(context), new EfInventoryItemRepository(context),
                 new EfInventoryMovementRepository(context), new EfSaleRepository(context),
-                context, new SystemClock());
+                new Enforcement.FakeInstallationEnforcementStateService(), context, new SystemClock());
 
             var checkoutResult = await checkoutService.CheckoutAsync(
                 new CheckoutRequest(0m, CheckoutPaymentMethod.Card, "AUTH-9001"));
@@ -410,7 +412,7 @@ public class RegisterClosingSqliteIntegrationTests
                 currentUserSession, currentRegisterSession, cart,
                 new EfProductRepository(context), new EfInventoryItemRepository(context),
                 new EfInventoryMovementRepository(context), new EfSaleRepository(context),
-                context, new SystemClock());
+                new Enforcement.FakeInstallationEnforcementStateService(), context, new SystemClock());
 
             var checkoutResult = await checkoutService.CheckoutAsync(new CheckoutRequest(900m));
 

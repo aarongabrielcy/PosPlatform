@@ -105,6 +105,7 @@ public class AdministrativeNotificationSqliteIntegrationTests
             new EfProductAuditQuery(context),
             new AdministrativeNotificationWriter(
                 new EfAdministrativeNotificationAudienceQuery(context), new EfAdministrativeNotificationRepository(context), clock),
+            new Enforcement.FakeInstallationEnforcementStateService(),
             context,
             clock);
     }
@@ -244,7 +245,8 @@ public class AdministrativeNotificationSqliteIntegrationTests
 
         var createService = new Pos.Application.Products.CreateProduct.CreateProductService(
             userSession, registerSession, new EfProductRepository(context), new EfInventoryItemRepository(context),
-            new EfProductAuditRepository(context), context, new SystemClock());
+            new EfProductAuditRepository(context), new Enforcement.FakeInstallationEnforcementStateService(),
+            context, new SystemClock());
 
         var result = await createService.CreateAsync(
             new Pos.Application.Products.CreateProduct.CreateProductRequest(

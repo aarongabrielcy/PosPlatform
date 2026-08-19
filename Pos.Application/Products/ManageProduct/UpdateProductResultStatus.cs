@@ -5,6 +5,7 @@ public enum UpdateProductResultStatus
     Success,
     NotAuthenticated,
     NotAuthorized,
+    InstallationRestricted,
     ProductNotFound,
     InvalidName,
     InvalidSku,
