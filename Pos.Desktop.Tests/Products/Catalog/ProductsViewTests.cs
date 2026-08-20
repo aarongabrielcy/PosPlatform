@@ -1,4 +1,5 @@
 using System.Threading;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
@@ -69,6 +70,21 @@ public class ProductsViewTests
 
             Assert.NotNull(binding);
             Assert.Equal(nameof(ProductsViewModel.NewProductCommand), binding.Path.Path);
+        });
+
+    // READ-ONLY CORRECTION (sección 8/16 de la tarea): igual patrón que
+    // InventoryView "Ajustar existencia" -> CanAdjustInventory, el botón "+ Nuevo producto" se
+    // oculta para un usuario sin ManageProducts (p. ej. Cashier).
+    [Fact]
+    public void NewProductButtonVisibilityIsBoundToCanManageProducts() =>
+        RunOnStaThread(() =>
+        {
+            var view = new ProductsView();
+
+            var binding = BindingOperations.GetBinding(view.NewProductButton, UIElement.VisibilityProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(nameof(ProductsViewModel.CanManageProducts), binding.Path.Path);
         });
 
     [Fact]

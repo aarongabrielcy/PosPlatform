@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Pos.Application.Common.Exceptions;
 using Pos.Application.Users;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Users;
@@ -56,5 +57,20 @@ public sealed class EfUserRepository : IUserRepository
         var record = UserMapper.ToRecord(user);
 
         await _context.Users.AddAsync(record, cancellationToken);
+    }
+
+    public async Task UpdateAsync(User user, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+
+        var record = await _context.Users
+            .SingleOrDefaultAsync(r => r.Id == user.Id.Value, cancellationToken);
+
+        if (record is null)
+        {
+            throw new EntityNotFoundException("User", user.Id.ToString());
+        }
+
+        UserMapper.UpdateRecord(user, record);
     }
 }

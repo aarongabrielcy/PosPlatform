@@ -15,6 +15,8 @@ internal sealed class FakeRoleRepository : IRoleRepository
 
     public int AddCallCount { get; private set; }
 
+    public int UpdateCallCount { get; private set; }
+
     public Task<Role?> GetByIdAsync(RoleId roleId, CancellationToken cancellationToken) =>
         Task.FromResult(_roles.SingleOrDefault(r => r.Id == roleId));
 
@@ -30,6 +32,16 @@ internal sealed class FakeRoleRepository : IRoleRepository
     {
         AddCallCount++;
         _roles.Add(role);
+
+        return Task.CompletedTask;
+    }
+
+    // El fake ya opera sobre la misma instancia de Role que el servicio mutó (GrantPermission/
+    // RevokePermission): no hay un "record" separado que sincronizar, así que solo se registra la
+    // llamada para que las pruebas puedan verificar cuántas reconciliaciones ocurrieron.
+    public Task UpdateAsync(Role role, CancellationToken cancellationToken)
+    {
+        UpdateCallCount++;
 
         return Task.CompletedTask;
     }

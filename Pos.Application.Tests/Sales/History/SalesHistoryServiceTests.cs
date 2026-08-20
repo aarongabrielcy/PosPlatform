@@ -19,7 +19,7 @@ public class SalesHistoryServiceTests
         {
             session.CurrentUser = new AuthenticatedUser(
                 UserId.New(), organizationId, RoleId.New(), "GERENTE", "Ana Pérez", "Gerente",
-                permissions ?? [Permission.ViewReports]);
+                permissions ?? [Permission.ViewSalesHistory]);
         }
 
         query ??= new FakeSalesHistoryQuery();
@@ -41,7 +41,7 @@ public class SalesHistoryServiceTests
     }
 
     [Fact]
-    public async Task SearchPageAsyncReturnsEmptyWithoutViewReportsPermission()
+    public async Task SearchPageAsyncReturnsEmptyWithoutViewSalesHistoryPermission()
     {
         var fixture = CreateFixture(permissions: [Permission.ProcessSale]);
 
@@ -80,7 +80,7 @@ public class SalesHistoryServiceTests
     }
 
     [Fact]
-    public async Task GetSummaryAsyncReturnsEmptyWithoutViewReportsPermission()
+    public async Task GetSummaryAsyncReturnsEmptyWithoutViewSalesHistoryPermission()
     {
         var fixture = CreateFixture(permissions: [Permission.ProcessSale]);
 
@@ -117,7 +117,7 @@ public class SalesHistoryServiceTests
     }
 
     [Fact]
-    public async Task GetDetailAsyncReturnsNullWithoutViewReportsPermission()
+    public async Task GetDetailAsyncReturnsNullWithoutViewSalesHistoryPermission()
     {
         var fixture = CreateFixture(permissions: [Permission.ProcessSale]);
 
@@ -157,7 +157,7 @@ public class SalesHistoryServiceTests
     }
 
     [Fact]
-    public async Task GetFilterOptionsAsyncReturnsEmptyWithoutViewReportsPermission()
+    public async Task GetFilterOptionsAsyncReturnsEmptyWithoutViewSalesHistoryPermission()
     {
         var fixture = CreateFixture(permissions: [Permission.ProcessSale]);
 
@@ -177,5 +177,43 @@ public class SalesHistoryServiceTests
 
         Assert.Equal(1, fixture.Query.GetFilterOptionsCallCount);
         Assert.Equal(fixture.OrganizationId, fixture.Query.LastFilterOptionsOrganizationId);
+    }
+
+    // ---------- READ-ONLY CORRECTION: ViewSalesHistory != ViewReports (sección 14 de la tarea) ----------
+
+    // Prueba explícita del desacople: Sales History ya NO es "lo mismo que" Administrative
+    // Reports, así que ViewReports por sí solo (sin ViewSalesHistory) no debe autorizar ninguna
+    // consulta de Historial.
+    [Fact]
+    public async Task SearchPageAsyncReturnsEmptyWithOnlyViewReportsPermission()
+    {
+        var fixture = CreateFixture(permissions: [Permission.ViewReports]);
+
+        var result = await fixture.Service.SearchPageAsync(SalesHistoryFilter.Empty, 0, 50);
+
+        Assert.Empty(result.Items);
+        Assert.Equal(0, fixture.Query.SearchPageCallCount);
+    }
+
+    // Un Cashier (ProcessSale + ViewSalesHistory, sin ViewReports) sí puede consultar Historial y
+    // abrir Sale Detail: matriz congelada de la tarea, sección 3/23.
+    [Fact]
+    public async Task SearchPageAsyncDelegatesForACashierWithOnlyViewSalesHistoryPermission()
+    {
+        var fixture = CreateFixture(permissions: [Permission.ProcessSale, Permission.ViewSalesHistory]);
+
+        await fixture.Service.SearchPageAsync(SalesHistoryFilter.Empty, 0, 50);
+
+        Assert.Equal(1, fixture.Query.SearchPageCallCount);
+    }
+
+    [Fact]
+    public async Task GetDetailAsyncDelegatesForACashierWithOnlyViewSalesHistoryPermission()
+    {
+        var fixture = CreateFixture(permissions: [Permission.ProcessSale, Permission.ViewSalesHistory]);
+
+        await fixture.Service.GetDetailAsync(SaleId.New());
+
+        Assert.Equal(1, fixture.Query.GetDetailCallCount);
     }
 }

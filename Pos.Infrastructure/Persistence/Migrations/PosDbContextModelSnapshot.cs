@@ -822,7 +822,8 @@ namespace Pos.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.HasIndex("OrganizationId", "Username");
+                    b.HasIndex("OrganizationId", "Username")
+                        .IsUnique();
 
                     b.ToTable("users", (string)null);
                 });

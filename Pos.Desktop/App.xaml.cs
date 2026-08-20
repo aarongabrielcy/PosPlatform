@@ -12,6 +12,7 @@ using Pos.Application.Installation;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Sales.Checkout;
 using Pos.Application.SalesCart;
+using Pos.Application.Security;
 using Pos.Desktop.Activation;
 using Pos.Desktop.Configuration;
 using Pos.Desktop.AdministrativeNotifications;
@@ -29,8 +30,8 @@ using Pos.Desktop.RegisterSessions;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Sales.Checkout;
 using Pos.Desktop.Sales.History;
-using Pos.Desktop.Settings;
 using Pos.Desktop.Setup;
+using Pos.Desktop.Users;
 using Pos.Domain.Common.Identifiers;
 using Pos.Infrastructure;
 using Pos.Infrastructure.Persistence.Initialization;
@@ -108,7 +109,11 @@ namespace Pos.Desktop
                         services.AddTransient<ProductsViewModel>();
                         services.AddTransient<InventoryViewModel>();
                         services.AddTransient<RegisterViewModel>();
-                        services.AddTransient<SettingsViewModel>();
+                        services.AddTransient<UserManagementViewModel>();
+                        services.AddTransient<CreateUserViewModel>();
+                        services.AddTransient<CreateUserWindow>();
+                        services.AddTransient<EditUserViewModel>();
+                        services.AddTransient<EditUserWindow>();
                         services.AddTransient<ProductAuditViewModel>();
                         services.AddTransient<NotificationCenterViewModel>();
                         services.AddTransient<InitialSetupViewModel>();
@@ -179,6 +184,19 @@ namespace Pos.Desktop
                     }
                 }
 
+                // READ-ONLY CORRECTION: reconcilia los permisos de los Roles canónicos (Administrator/
+                // Manager/Cashier) ANTES de evaluar el estado estructural de la instalación. Necesario
+                // porque InstallationStructureInspector (usado por GetInstallationStateAsync) exige que
+                // el Role administrativo YA PERSISTIDO contenga TODOS los valores actuales de
+                // Permission: sin esta reconciliación aquí, una instalación existente cuyo Administrator
+                // se sembró antes de agregar un Permission nuevo dejaría de detectarse como
+                // administrativa y el arranque fallaría con InvalidState. Es la misma llamada
+                // idempotente que se repite más abajo tras Setup (para crear Manager/Cashier en una
+                // instalación recién configurada); repetirla aquí no tiene efecto donde ya no hay nada
+                // que reconciliar.
+                var earlyRoleSeedingService = _mainWindowScope.ServiceProvider.GetRequiredService<IStandardRoleSeedingService>();
+                await earlyRoleSeedingService.EnsureStandardRolesExistAsync(CancellationToken.None);
+
                 var installationStateService = _mainWindowScope.ServiceProvider.GetRequiredService<IInstallationStateService>();
                 var installationState = await installationStateService.GetInstallationStateAsync(CancellationToken.None);
                 var initialDecision = StartupFlowCoordinator.DecideForInstallationState(installationState);
@@ -209,6 +227,13 @@ namespace Pos.Desktop
                         return;
                     }
                 }
+
+                // BASIC-USR-01: garantiza que los Roles Manager/Cashier existan antes del login,
+                // tanto para una instalación recién configurada (Setup solo crea Administrator) como
+                // para una instalación existente que se actualiza a esta versión. Idempotente y sin
+                // efecto una vez que ambos roles ya existen (ver StandardRoleSeedingService).
+                var roleSeedingService = _mainWindowScope.ServiceProvider.GetRequiredService<IStandardRoleSeedingService>();
+                await roleSeedingService.EnsureStandardRolesExistAsync(CancellationToken.None);
 
                 await RunLoginFlowAsync();
             }
@@ -506,6 +531,8 @@ namespace Pos.Desktop
             mainWindow.EditProductRequested += OnMainWindowEditProductRequested;
             mainWindow.CheckoutRequested += OnMainWindowCheckoutRequested;
             mainWindow.AdjustInventoryRequested += OnMainWindowAdjustInventoryRequested;
+            mainWindow.NewUserRequested += OnMainWindowNewUserRequested;
+            mainWindow.EditUserRequested += OnMainWindowEditUserRequested;
 
             MainWindow = mainWindow;
             ShutdownMode = ShutdownMode.OnMainWindowClose;
@@ -528,6 +555,8 @@ namespace Pos.Desktop
                 mainWindow.EditProductRequested -= OnMainWindowEditProductRequested;
                 mainWindow.CheckoutRequested -= OnMainWindowCheckoutRequested;
                 mainWindow.AdjustInventoryRequested -= OnMainWindowAdjustInventoryRequested;
+                mainWindow.NewUserRequested -= OnMainWindowNewUserRequested;
+                mainWindow.EditUserRequested -= OnMainWindowEditUserRequested;
             }
 
             _mainWindowScope?.ServiceProvider.GetService<ICurrentSalesCart>()?.Clear();
@@ -572,6 +601,8 @@ namespace Pos.Desktop
             mainWindow.EditProductRequested -= OnMainWindowEditProductRequested;
             mainWindow.CheckoutRequested -= OnMainWindowCheckoutRequested;
             mainWindow.AdjustInventoryRequested -= OnMainWindowAdjustInventoryRequested;
+            mainWindow.NewUserRequested -= OnMainWindowNewUserRequested;
+            mainWindow.EditUserRequested -= OnMainWindowEditUserRequested;
 
             // Evita que cerrar la MainWindow actual dispare el apagado automático de
             // ShutdownMode.OnMainWindowClose antes de que OpenRegisterSessionWindow pueda mostrarse.
@@ -649,6 +680,50 @@ namespace Pos.Desktop
             if (dialogResult == true)
             {
                 mainWindow.ApplyInventoryAdjusted();
+            }
+        }
+
+        // Muestra CreateUserWindow sobre MainWindow (que permanece abierta como owner). Un usuario
+        // creado con éxito refresca la lista de UserManagementView; cancelar o cerrar con la X no
+        // tiene efecto alguno.
+        private void OnMainWindowNewUserRequested(object? sender, EventArgs e)
+        {
+            if (_mainWindowScope is null || sender is not MainWindow mainWindow)
+            {
+                return;
+            }
+
+            var createUserWindow = _mainWindowScope.ServiceProvider.GetRequiredService<CreateUserWindow>();
+            createUserWindow.Owner = mainWindow;
+            var dialogResult = createUserWindow.ShowDialog();
+
+            if (dialogResult == true)
+            {
+                mainWindow.ApplyUserChanged();
+            }
+        }
+
+        // Muestra EditUserWindow sobre MainWindow (que permanece abierta como owner). Editar,
+        // activar/desactivar y restablecer contraseña se aplican de inmediato dentro de
+        // EditUserWindow, no al cerrar (mismo patrón que EditProductWindow/ToggleActive): por eso
+        // la lista se refresca siempre que se haya aplicado al menos un cambio
+        // (EditUserWindow.AnyChangeApplied), sin importar cómo se cerró la ventana.
+        private async void OnMainWindowEditUserRequested(object? sender, UserId userId)
+        {
+            if (_mainWindowScope is null || sender is not MainWindow mainWindow)
+            {
+                return;
+            }
+
+            var editUserWindow = _mainWindowScope.ServiceProvider.GetRequiredService<EditUserWindow>();
+            editUserWindow.Owner = mainWindow;
+
+            await editUserWindow.LoadAsync(userId);
+            editUserWindow.ShowDialog();
+
+            if (editUserWindow.AnyChangeApplied)
+            {
+                mainWindow.ApplyUserChanged();
             }
         }
 

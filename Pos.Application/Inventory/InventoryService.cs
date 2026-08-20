@@ -33,7 +33,7 @@ public sealed class InventoryService : IInventoryService
         var user = _currentUserSession.CurrentUser;
         var registerSession = _currentRegisterSession.Current;
 
-        if (user is null || !CanViewInventory(user) || registerSession is null)
+        if (user is null || !user.HasPermission(Permission.ViewInventory) || registerSession is null)
         {
             return InventoryCatalogPageResult.Empty;
         }
@@ -47,7 +47,7 @@ public sealed class InventoryService : IInventoryService
         var user = _currentUserSession.CurrentUser;
         var registerSession = _currentRegisterSession.Current;
 
-        if (user is null || !CanViewInventory(user) || registerSession is null)
+        if (user is null || !user.HasPermission(Permission.ViewInventory) || registerSession is null)
         {
             return InventorySummary.Empty;
         }
@@ -66,7 +66,7 @@ public sealed class InventoryService : IInventoryService
         var user = _currentUserSession.CurrentUser;
         var registerSession = _currentRegisterSession.Current;
 
-        if (user is null || !CanViewInventory(user) || registerSession is null)
+        if (user is null || !user.HasPermission(Permission.ViewInventory) || registerSession is null)
         {
             return InventoryMovementPageResult.Empty;
         }
@@ -74,10 +74,4 @@ public sealed class InventoryService : IInventoryService
         return await _inventoryMovementQuery.SearchPageAsync(
             user.OrganizationId, registerSession.BranchId, filter, skip, take, cancellationToken);
     }
-
-    // Visibilidad del módulo (TAREA 24G, sección 18/32, provisional hasta TAREA 25D): cualquiera
-    // de los dos permisos basta para consultar. AdjustInventoryAsync (fuera de este servicio) sigue
-    // exigiendo AdjustInventory en exclusiva.
-    private static bool CanViewInventory(AuthenticatedUser user) =>
-        user.HasPermission(Permission.ManageProducts) || user.HasPermission(Permission.AdjustInventory);
 }

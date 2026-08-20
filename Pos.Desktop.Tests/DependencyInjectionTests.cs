@@ -20,8 +20,8 @@ using Pos.Desktop.Register;
 using Pos.Desktop.RegisterSessions;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Sales.History;
-using Pos.Desktop.Settings;
 using Pos.Desktop.Setup;
+using Pos.Desktop.Users;
 using Pos.Infrastructure;
 using Pos.Infrastructure.Storage;
 
@@ -78,7 +78,11 @@ public class DependencyInjectionTests
         services.AddTransient<ProductsViewModel>();
         services.AddTransient<InventoryViewModel>();
         services.AddTransient<RegisterViewModel>();
-        services.AddTransient<SettingsViewModel>();
+        services.AddTransient<UserManagementViewModel>();
+        services.AddTransient<CreateUserViewModel>();
+        services.AddTransient<CreateUserWindow>();
+        services.AddTransient<EditUserViewModel>();
+        services.AddTransient<EditUserWindow>();
         services.AddTransient<ProductAuditViewModel>();
         services.AddTransient<NotificationCenterViewModel>();
         services.AddTransient<InitialSetupViewModel>();
@@ -289,9 +293,29 @@ public class DependencyInjectionTests
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<ProductsViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<InventoryViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<RegisterViewModel>());
-            Assert.NotNull(scope.ServiceProvider.GetRequiredService<SettingsViewModel>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<UserManagementViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<ProductAuditViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<NotificationCenterViewModel>());
+        });
+
+    [Fact]
+    public void CreateUserWindowResolvesWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<CreateUserWindow>());
+        });
+
+    [Fact]
+    public void EditUserWindowResolvesWithinAScope() =>
+        RunOnStaThread(() =>
+        {
+            using var provider = BuildProvider(new FakeApplicationPathProvider(CreateTempRoot()));
+            using var scope = provider.CreateScope();
+
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<EditUserWindow>());
         });
 
     [Fact]
@@ -392,6 +416,8 @@ public class DependencyInjectionTests
             scope.ServiceProvider.GetRequiredService<LoginWindow>();
             scope.ServiceProvider.GetRequiredService<OpenRegisterSessionWindow>();
             scope.ServiceProvider.GetRequiredService<CloseRegisterSessionWindow>();
+            scope.ServiceProvider.GetRequiredService<CreateUserWindow>();
+            scope.ServiceProvider.GetRequiredService<EditUserWindow>();
 
             Assert.False(Directory.Exists(pathProvider.DataDirectory));
             Assert.False(File.Exists(pathProvider.DatabasePath));

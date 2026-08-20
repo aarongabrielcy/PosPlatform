@@ -208,6 +208,69 @@ public class EfRoleRepositoryTests
         await Assert.ThrowsAsync<ArgumentNullException>(() => repository.AddAsync(null!, CancellationToken.None));
     }
 
+    // ---------- UpdateAsync (READ-ONLY CORRECTION: usado por StandardRoleSeedingService para
+    // reconciliar Administrator/Manager/Cashier - sección 19/20 de la tarea) ----------
+
+    [Fact]
+    public async Task UpdateAsyncPersistsGrantedAndRevokedPermissionsAcrossACommitAndReload()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var organizationId = await SeedOrganizationAsync(context);
+        var repository = new EfRoleRepository(context);
+        var role = CreateRole(new OrganizationId(organizationId), "Cashier", Permission.ProcessSale, Permission.OpenCashDrawer);
+        await repository.AddAsync(role, CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var reloaded = await repository.GetByIdAsync(role.Id, CancellationToken.None);
+        reloaded!.GrantPermission(Permission.ViewSalesHistory);
+        reloaded.RevokePermission(Permission.OpenCashDrawer);
+
+        await repository.UpdateAsync(reloaded, CancellationToken.None);
+        await context.CommitAsync(CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var afterUpdate = await repository.GetByIdAsync(role.Id, CancellationToken.None);
+        Assert.NotNull(afterUpdate);
+        Assert.Equal(role.Id, afterUpdate!.Id);
+        Assert.Contains(Permission.ProcessSale, afterUpdate.Permissions);
+        Assert.Contains(Permission.ViewSalesHistory, afterUpdate.Permissions);
+        Assert.DoesNotContain(Permission.OpenCashDrawer, afterUpdate.Permissions);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncThrowsWhenTheRoleDoesNotExist()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var organizationId = await SeedOrganizationAsync(context);
+        var repository = new EfRoleRepository(context);
+        var role = CreateRole(new OrganizationId(organizationId), "Cashier", Permission.ProcessSale);
+
+        await Assert.ThrowsAsync<Pos.Application.Common.Exceptions.EntityNotFoundException>(
+            () => repository.UpdateAsync(role, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task UpdateAsyncRejectsNullRole()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var context = CreateContext(connection);
+        await context.Database.EnsureCreatedAsync();
+
+        var repository = new EfRoleRepository(context);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => repository.UpdateAsync(null!, CancellationToken.None));
+    }
+
     [Fact]
     public void ConstructorRejectsNullContext()
     {

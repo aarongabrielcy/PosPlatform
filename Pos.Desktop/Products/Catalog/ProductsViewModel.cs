@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Input;
+using Pos.Application.Authentication;
 using Pos.Application.Products.ManageProduct;
 using Pos.Desktop.Common;
 using Pos.Domain.Common.Identifiers;
+using Pos.Domain.Security;
 
 namespace Pos.Desktop.Products.Catalog;
 
@@ -15,6 +17,7 @@ public sealed class ProductsViewModel : ViewModelBase
     public const int PageSize = 50;
 
     private readonly IProductManagementService _productManagementService;
+    private readonly ICurrentUserSession _currentUserSession;
     private readonly AsyncRelayCommand _loadCommand;
     private readonly AsyncRelayCommand _searchCommand;
     private readonly AsyncRelayCommand _nextPageCommand;
@@ -34,9 +37,13 @@ public sealed class ProductsViewModel : ViewModelBase
     private bool _canGoNext;
     private CancellationTokenSource? _searchCts;
 
-    public ProductsViewModel(IProductManagementService productManagementService, TimeSpan? searchDebounceDelay = null)
+    public ProductsViewModel(
+        IProductManagementService productManagementService,
+        ICurrentUserSession currentUserSession,
+        TimeSpan? searchDebounceDelay = null)
     {
         _productManagementService = productManagementService ?? throw new ArgumentNullException(nameof(productManagementService));
+        _currentUserSession = currentUserSession ?? throw new ArgumentNullException(nameof(currentUserSession));
         _searchDebounceDelay = searchDebounceDelay ?? TimeSpan.FromMilliseconds(250);
 
         // LoadCommand y SearchCommand ejecutan la misma carga inmediata (página 1 con el
@@ -47,9 +54,9 @@ public sealed class ProductsViewModel : ViewModelBase
         _searchCommand = new AsyncRelayCommand(() => ExecuteImmediateSearchAsync(resetToFirstPage: true), onError: HandleUnexpectedError);
         _nextPageCommand = new AsyncRelayCommand(ExecuteNextPageAsync, () => CanGoNext && !IsBusy, HandleUnexpectedError);
         _previousPageCommand = new AsyncRelayCommand(ExecutePreviousPageAsync, () => CanGoPrevious && !IsBusy, HandleUnexpectedError);
-        _newProductCommand = new AsyncRelayCommand(ExecuteNewProductAsync);
+        _newProductCommand = new AsyncRelayCommand(ExecuteNewProductAsync, () => CanManageProducts);
         _editProductCommand = new AsyncRelayCommand<ProductCatalogItem>(
-            ExecuteEditProductAsync, item => item is not null && !IsBusy, HandleUnexpectedError);
+            ExecuteEditProductAsync, item => item is not null && CanManageProducts && !IsBusy, HandleUnexpectedError);
         _viewAuditDetailCommand = new AsyncRelayCommand<ProductCatalogItem>(
             ExecuteViewAuditDetailAsync, item => item is not null && !IsBusy, HandleUnexpectedError);
 
@@ -82,6 +89,13 @@ public sealed class ProductsViewModel : ViewModelBase
     public ICommand ViewAuditDetailCommand => _viewAuditDetailCommand;
 
     public ObservableCollection<ProductCatalogItem> Products { get; }
+
+    // Botones "+ Nuevo producto" / "Editar producto" (READ-ONLY CORRECTION, sección 8/16 de la
+    // tarea): visibles/habilitados solo con ManageProducts, igual patrón que
+    // InventoryViewModel.CanAdjustInventory. Un usuario con solo ViewProducts (p. ej. Cashier)
+    // puede consultar el catálogo pero no mutar productos; ProductManagementService ya rechaza la
+    // mutación del lado servidor si de todos modos se invocara (defensa en profundidad).
+    public bool CanManageProducts => _currentUserSession.CurrentUser?.HasPermission(Permission.ManageProducts) ?? false;
 
     public string SearchText
     {

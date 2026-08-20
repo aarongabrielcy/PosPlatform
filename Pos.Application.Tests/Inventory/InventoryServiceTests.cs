@@ -38,7 +38,7 @@ public class InventoryServiceTests
                 "JPEREZ",
                 "Juan Pérez",
                 "Gerente",
-                permissions ?? [Permission.ManageProducts, Permission.AdjustInventory]);
+                permissions ?? [Permission.ViewInventory, Permission.AdjustInventory]);
         }
 
         var registerSession = new FakeCurrentRegisterSession();
@@ -91,7 +91,7 @@ public class InventoryServiceTests
     }
 
     [Fact]
-    public async Task GetCatalogPageAsyncReturnsEmptyWithoutManageProductsOrAdjustInventoryPermission()
+    public async Task GetCatalogPageAsyncReturnsEmptyWithoutViewInventoryPermission()
     {
         var fixture = CreateFixture(permissions: [Permission.ProcessSale]);
 
@@ -101,13 +101,24 @@ public class InventoryServiceTests
         Assert.Equal(0, fixture.CatalogQuery.SearchPageCallCount);
     }
 
-    // TAREA 24G, sección 18/32: cualquiera de los dos permisos basta para consultar.
-    [Theory]
-    [InlineData(Permission.ManageProducts)]
-    [InlineData(Permission.AdjustInventory)]
-    public async Task GetCatalogPageAsyncDelegatesWhenUserHasEitherPermission(Permission permission)
+    // READ-ONLY CORRECTION (sección 12 de la tarea): "Separate ViewInventory from AdjustInventory.
+    // Queries → ViewInventory." AdjustInventory por sí solo (sin ViewInventory) ya no basta para
+    // consultar - antes (TAREA 24G) cualquiera de los dos permisos bastaba.
+    [Fact]
+    public async Task GetCatalogPageAsyncReturnsEmptyWithOnlyAdjustInventoryPermission()
     {
-        var fixture = CreateFixture(permissions: [permission]);
+        var fixture = CreateFixture(permissions: [Permission.AdjustInventory]);
+
+        var result = await fixture.Service.GetCatalogPageAsync(null, InventoryCatalogStatusFilter.All, 0, 50);
+
+        Assert.Empty(result.Items);
+        Assert.Equal(0, fixture.CatalogQuery.SearchPageCallCount);
+    }
+
+    [Fact]
+    public async Task GetCatalogPageAsyncDelegatesWithOnlyViewInventoryPermission()
+    {
+        var fixture = CreateFixture(permissions: [Permission.ViewInventory]);
 
         await fixture.Service.GetCatalogPageAsync("agua", InventoryCatalogStatusFilter.LowStock, 50, 25);
 
@@ -161,7 +172,7 @@ public class InventoryServiceTests
     }
 
     [Fact]
-    public async Task GetMovementPageAsyncReturnsEmptyWithoutManageProductsOrAdjustInventoryPermission()
+    public async Task GetMovementPageAsyncReturnsEmptyWithoutViewInventoryPermission()
     {
         var fixture = CreateFixture(permissions: [Permission.ProcessSale]);
 

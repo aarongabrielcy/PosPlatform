@@ -18,7 +18,7 @@ using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Sales.History;
-using Pos.Desktop.Settings;
+using Pos.Desktop.Users;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Security;
 
@@ -53,7 +53,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly ProductsViewModel _productsViewModel;
     private readonly InventoryViewModel _inventoryViewModel;
     private readonly RegisterViewModel _registerViewModel;
-    private readonly SettingsViewModel _settingsViewModel;
+    private readonly UserManagementViewModel _userManagementViewModel;
     private readonly ProductAuditViewModel _productAuditViewModel;
     private readonly NotificationCenterViewModel _notificationCenterViewModel;
     private readonly AsyncRelayCommand _logoutCommand;
@@ -89,7 +89,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         ProductsViewModel productsViewModel,
         InventoryViewModel inventoryViewModel,
         RegisterViewModel registerViewModel,
-        SettingsViewModel settingsViewModel,
+        UserManagementViewModel userManagementViewModel,
         ProductAuditViewModel productAuditViewModel,
         NotificationCenterViewModel notificationCenterViewModel)
     {
@@ -103,7 +103,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         _productsViewModel = productsViewModel ?? throw new ArgumentNullException(nameof(productsViewModel));
         _inventoryViewModel = inventoryViewModel ?? throw new ArgumentNullException(nameof(inventoryViewModel));
         _registerViewModel = registerViewModel ?? throw new ArgumentNullException(nameof(registerViewModel));
-        _settingsViewModel = settingsViewModel ?? throw new ArgumentNullException(nameof(settingsViewModel));
+        _userManagementViewModel = userManagementViewModel ?? throw new ArgumentNullException(nameof(userManagementViewModel));
         _productAuditViewModel = productAuditViewModel ?? throw new ArgumentNullException(nameof(productAuditViewModel));
         _notificationCenterViewModel = notificationCenterViewModel ?? throw new ArgumentNullException(nameof(notificationCenterViewModel));
 
@@ -120,6 +120,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         _productsViewModel.AuditRequested += OnProductsAuditRequested;
         _inventoryViewModel.AdjustInventoryRequested += OnInventoryAdjustInventoryRequested;
         _registerViewModel.CloseRegisterRequested += OnRegisterViewCloseRegisterRequested;
+        _userManagementViewModel.NewUserRequested += OnUserManagementNewUserRequested;
+        _userManagementViewModel.EditUserRequested += OnUserManagementEditUserRequested;
         _notificationCenterViewModel.OpenNotificationRequested += OnNotificationCenterOpenNotificationRequested;
         _enforcementStateService.StateChanged += OnEnforcementStateChanged;
 
@@ -162,6 +164,13 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     // desde Inventario (TAREA 24G, sección 16/17): un solo origen posible (InventoryViewModel), sin
     // necesidad de rastrear un "pending source" como en New/EditProductRequested.
     public event EventHandler<InventoryCatalogItem>? AdjustInventoryRequested;
+
+    // Igual patrón que New/EditProductRequested, pero para CreateUserWindow/EditUserWindow.
+    // Usuarios tiene un único origen posible (esta pantalla), así que no necesita rastrear un
+    // "pending source" como New/EditProductRequested.
+    public event EventHandler? NewUserRequested;
+
+    public event EventHandler<UserId>? EditUserRequested;
 
     public ICommand LogoutCommand => _logoutCommand;
 
@@ -293,7 +302,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             NavigationSection.Products => _productsViewModel,
             NavigationSection.Inventory => _inventoryViewModel,
             NavigationSection.Register => _registerViewModel,
-            NavigationSection.Settings => _settingsViewModel,
+            NavigationSection.Settings => _userManagementViewModel,
             NavigationSection.AuditProducts => _productAuditViewModel,
             _ => _dashboardViewModel,
         };
@@ -326,6 +335,13 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         if (section == NavigationSection.SalesHistory && _salesHistoryViewModel.LoadCommand.CanExecute(null))
         {
             _salesHistoryViewModel.LoadCommand.Execute(null);
+        }
+
+        // Consulta la lista de usuarios al entrar a Usuarios (BASIC-USR-01, igual patrón que
+        // Productos/Historial): sin cache permanente, sin polling.
+        if (section == NavigationSection.Settings && _userManagementViewModel.LoadCommand.CanExecute(null))
+        {
+            _userManagementViewModel.LoadCommand.Execute(null);
         }
     }
 
@@ -398,7 +414,13 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             salesChildren.Add(new NavigationItem(NavigationSection.SalesPointOfSale, "Punto de venta"));
         }
 
-        if (user.HasPermission(Permission.ViewReports))
+        // READ-ONLY CORRECTION: Historial/Productos/Inventario ahora se gatean con sus propios
+        // permisos de lectura (ViewSalesHistory/ViewProducts/ViewInventory), separados de
+        // ViewReports/ManageProducts/AdjustInventory (sección 14/15 de la tarea: Sales History no es
+        // lo mismo que Administrative Reports, y READ != MODIFY). Manager/Administrator reciben
+        // estos permisos de lectura además de los de administración (ver StandardRoles/
+        // AdministrativePermissionSet), así que su visibilidad no cambia.
+        if (user.HasPermission(Permission.ViewSalesHistory))
         {
             salesChildren.Add(new NavigationItem(NavigationSection.SalesHistory, "Historial"));
         }
@@ -408,12 +430,12 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             yield return new NavigationItem(NavigationSection.Sales, "Ventas", salesChildren);
         }
 
-        if (user.HasPermission(Permission.ManageProducts))
+        if (user.HasPermission(Permission.ViewProducts))
         {
             yield return new NavigationItem(NavigationSection.Products, "Productos");
         }
 
-        if (user.HasPermission(Permission.ManageProducts) || user.HasPermission(Permission.AdjustInventory))
+        if (user.HasPermission(Permission.ViewInventory))
         {
             yield return new NavigationItem(NavigationSection.Inventory, "Inventario");
         }
@@ -423,12 +445,13 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             yield return new NavigationItem(NavigationSection.Register, "Caja");
         }
 
-        // No existe un permiso administrativo genérico en Domain.Security.Permission: se usa
-        // ManageUsers (el permiso administrativo real más cercano) en vez de inventar uno nuevo o
-        // comparar RoleName=="Administrator" (TAREA 24C, sección 23). Reportado como decisión.
+        // Gate: Permission.ManageUsers (TAREA 24C, sección 23 - decisión original de reutilizar
+        // este permiso ya existente en vez de inventar uno nuevo o comparar RoleName=="Administrator").
+        // BASIC-USR-01: esta sección ahora contiene la administración real de usuarios, en vez del
+        // placeholder "Configuración" anterior.
         if (user.HasPermission(Permission.ManageUsers))
         {
-            yield return new NavigationItem(NavigationSection.Settings, "Configuración");
+            yield return new NavigationItem(NavigationSection.Settings, "Usuarios");
         }
 
         // Auditoría > Productos: visible únicamente con ViewProductAudit, nunca por RoleName
@@ -473,6 +496,12 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void OnRegisterViewCloseRegisterRequested(object? sender, EventArgs e) =>
         _closeRegisterCommand.Execute(null);
+
+    private void OnUserManagementNewUserRequested(object? sender, EventArgs e) =>
+        NewUserRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnUserManagementEditUserRequested(object? sender, UserId userId) =>
+        EditUserRequested?.Invoke(this, userId);
 
     private void OnInventoryAdjustInventoryRequested(object? sender, InventoryCatalogItem item) =>
         AdjustInventoryRequested?.Invoke(this, item);
@@ -588,6 +617,17 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     {
         _inventoryViewModel.ApplyInventoryAdjusted();
         RefreshNotificationBadge();
+    }
+
+    // Llamado desde App.xaml.cs tras cerrar CreateUserWindow/EditUserWindow con al menos un cambio
+    // aplicado (BASIC-USR-01): refresca la lista de usuarios, igual patrón que
+    // ApplyProductCreated/ApplyProductUpdated.
+    public void ApplyUserChanged()
+    {
+        if (_userManagementViewModel.LoadCommand.CanExecute(null))
+        {
+            _userManagementViewModel.LoadCommand.Execute(null);
+        }
     }
 
     // Una operación Product sensible (editar, activar/desactivar, ajustar inventario) puede haber
