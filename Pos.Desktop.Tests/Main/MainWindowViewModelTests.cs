@@ -16,7 +16,7 @@ using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Sales.History;
-using Pos.Desktop.Settings;
+using Pos.Desktop.Users;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.ProductAudit;
 using Pos.Domain.Security;
@@ -24,6 +24,7 @@ using CatalogFakeProductManagementService = Pos.Desktop.Tests.Products.Catalog.F
 using FakeAdministrativeNotificationService = Pos.Desktop.Tests.AdministrativeNotifications.FakeAdministrativeNotificationService;
 using FakeClock = Pos.Desktop.Tests.Sales.History.FakeClock;
 using FakeSalesHistoryService = Pos.Desktop.Tests.Sales.History.FakeSalesHistoryService;
+using FakeUserManagementService = Pos.Desktop.Tests.Users.FakeUserManagementService;
 
 namespace Pos.Desktop.Tests.Main;
 
@@ -379,10 +380,26 @@ public class MainWindowViewModelTests
         Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.Inventory);
     }
 
-    // TAREA 24G, sección 18/49: el módulo Inventario es visible con ManageProducts O
-    // AdjustInventory (cualquiera de los dos basta), pero no sin ninguno.
+    // READ-ONLY CORRECTION (sección 12 de la tarea): el módulo Inventario ahora se gatea
+    // exclusivamente con ViewInventory (lectura), separado de AdjustInventory (mutación) -
+    // "Queries → ViewInventory. Mutations → AdjustInventory". AdjustInventory sin ViewInventory ya
+    // no basta para ver el módulo.
     [Fact]
-    public void NavigationItemsIncludeInventoryForAUserWithOnlyAdjustInventoryPermission()
+    public void NavigationItemsIncludeInventoryForAUserWithViewInventoryPermission()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "USERNAME", "Ana Pérez", "Almacenista",
+                [Permission.ProcessSale, Permission.ViewInventory]),
+        };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.Inventory);
+    }
+
+    [Fact]
+    public void NavigationItemsExcludeInventoryForAUserWithOnlyAdjustInventoryPermission()
     {
         var session = new FakeCurrentUserSession
         {
@@ -392,7 +409,7 @@ public class MainWindowViewModelTests
         };
         var viewModel = CreateViewModel(session: session);
 
-        Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.Inventory);
+        Assert.DoesNotContain(viewModel.NavigationItems, i => i.Section == NavigationSection.Inventory);
     }
 
     [Fact]
@@ -477,7 +494,7 @@ public class MainWindowViewModelTests
     public void ViewAuditDetailFromProductsAppliesTheProductFilterAndNavigatesToAuditProducts()
     {
         var session = new FakeCurrentUserSession { CurrentUser = CreateViewProductAuditUser() };
-        var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
+        var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService(), session);
         var viewModel = CreateViewModel(session: session, productsViewModel: productsViewModel);
         var item = new ProductCatalogItem(
             ProductId.New(), "SKU-001", null, "Agua 1L", 10m, "MXN", true, 5m, 2m, true);
@@ -508,14 +525,16 @@ public class MainWindowViewModelTests
         Assert.DoesNotContain(salesItem.Children!, child => child.Section == NavigationSection.SalesHistory);
     }
 
+    // READ-ONLY CORRECTION (sección 14 de la tarea): Historial se gatea con ViewSalesHistory, no
+    // con ViewReports - "Do NOT equate Sales History with Administrative Reports".
     [Fact]
-    public void UserWithOnlyViewReportsSeesHistoryButNotPointOfSale()
+    public void UserWithOnlyViewSalesHistorySeesHistoryButNotPointOfSale()
     {
         var session = new FakeCurrentUserSession
         {
             CurrentUser = new AuthenticatedUser(
-                UserId.New(), OrganizationId.New(), RoleId.New(), "GERENTE", "Ana Pérez", "Gerente",
-                [Permission.ViewReports]),
+                UserId.New(), OrganizationId.New(), RoleId.New(), "CAJERO", "Ana Pérez", "Cajero",
+                [Permission.ViewSalesHistory]),
         };
         var viewModel = CreateViewModel(session: session);
 
@@ -525,13 +544,27 @@ public class MainWindowViewModelTests
     }
 
     [Fact]
+    public void UserWithOnlyViewReportsDoesNotSeeHistory()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "GERENTE", "Ana Pérez", "Gerente",
+                [Permission.ViewReports]),
+        };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.DoesNotContain(viewModel.NavigationItems, i => i.Section == NavigationSection.Sales);
+    }
+
+    [Fact]
     public void UserWithBothPermissionsSeesBothSalesChildren()
     {
         var session = new FakeCurrentUserSession
         {
             CurrentUser = new AuthenticatedUser(
                 UserId.New(), OrganizationId.New(), RoleId.New(), "GERENTE", "Ana Pérez", "Gerente",
-                [Permission.ProcessSale, Permission.ViewReports]),
+                [Permission.ProcessSale, Permission.ViewSalesHistory]),
         };
         var viewModel = CreateViewModel(session: session);
 
@@ -751,7 +784,7 @@ public class MainWindowViewModelTests
     public void SelectingProductsChangesCurrentViewModelToTheProductsViewModel()
     {
         var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
-        var productsViewModel = new ProductsViewModel(new FakeProductManagementService());
+        var productsViewModel = new ProductsViewModel(new FakeProductManagementService(), session);
         var viewModel = CreateViewModel(session: session, productsViewModel: productsViewModel);
 
         viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Products);
@@ -764,7 +797,7 @@ public class MainWindowViewModelTests
     {
         var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
         var salesViewModel = new SalesViewModel(session, new FakeCurrentRegisterSession(), new FakeSalesCartService(), new FakeProductManagementService(), new FakeCurrentSalesCart());
-        var productsViewModel = new ProductsViewModel(new FakeProductManagementService());
+        var productsViewModel = new ProductsViewModel(new FakeProductManagementService(), session);
         var viewModel = CreateViewModel(session: session, salesViewModel: salesViewModel, productsViewModel: productsViewModel);
 
         viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Products);
@@ -782,7 +815,7 @@ public class MainWindowViewModelTests
         currentSalesCart.SetSnapshot(new SalesCartSnapshot(
             [new SalesCartLine(ProductId.New(), "SKU-001", "Agua 1L", 1m, 10m, 10m, "MXN", 5m, true)], "MXN"));
         var salesViewModel = new SalesViewModel(session, new FakeCurrentRegisterSession(), new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
-        var productsViewModel = new ProductsViewModel(new FakeProductManagementService());
+        var productsViewModel = new ProductsViewModel(new FakeProductManagementService(), session);
         var viewModel = CreateViewModel(
             session: session, currentSalesCart: currentSalesCart, salesViewModel: salesViewModel, productsViewModel: productsViewModel);
 
@@ -870,7 +903,7 @@ public class MainWindowViewModelTests
     {
         var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
         var productManagementService = new CatalogFakeProductManagementService();
-        var productsViewModel = new ProductsViewModel(productManagementService);
+        var productsViewModel = new ProductsViewModel(productManagementService, session);
         var viewModel = CreateViewModel(session: session, productsViewModel: productsViewModel);
 
         productsViewModel.NewProductCommand.Execute(null);
@@ -883,7 +916,7 @@ public class MainWindowViewModelTests
     public void EditProductRequestedFromProductsBubblesUpWithTheProductId()
     {
         var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
-        var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
+        var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService(), session);
         var viewModel = CreateViewModel(session: session, productsViewModel: productsViewModel);
         var item = new ProductCatalogItem(
             ProductId.New(), "SKU-001", null, "Producto", 10m, "MXN", true, 5m, 2m, true);
@@ -917,17 +950,17 @@ public class MainWindowViewModelTests
         dashboardViewModel ??= new DashboardViewModel(session, registerSession, currentSalesCart, new CatalogFakeProductManagementService());
         salesViewModel ??= new SalesViewModel(session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
         salesHistoryViewModel ??= new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
-        productsViewModel ??= new ProductsViewModel(new CatalogFakeProductManagementService());
+        productsViewModel ??= new ProductsViewModel(new CatalogFakeProductManagementService(), session);
         inventoryViewModel ??= new InventoryViewModel(new FakeInventoryService(), session);
         registerViewModel ??= new RegisterViewModel(registerSession);
-        var settingsViewModel = new SettingsViewModel();
+        var userManagementViewModel = new UserManagementViewModel(new FakeUserManagementService());
         var productAuditViewModel = new ProductAuditViewModel(productAuditService ?? new FakeProductAuditService());
         var notificationCenterViewModel = new NotificationCenterViewModel(notificationService ?? new FakeAdministrativeNotificationService());
 
         return new MainWindowViewModel(
             session, registerSession, currentSalesCart, enforcementStateService,
             dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
-            inventoryViewModel, registerViewModel, settingsViewModel, productAuditViewModel, notificationCenterViewModel);
+            inventoryViewModel, registerViewModel, userManagementViewModel, productAuditViewModel, notificationCenterViewModel);
     }
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>
@@ -940,6 +973,11 @@ public class MainWindowViewModelTests
             roleName,
             [Permission.ProcessSale]);
 
+    // READ-ONLY CORRECTION: incluye ViewProducts/ViewInventory además de ManageProducts/
+    // AdjustInventory (Manager, igual que el StandardRoles canónico, recibe ambos - lectura y
+    // administración), para que los muchos tests que reutilizan este helper para navegar a
+    // Productos/Inventario sigan viendo esas secciones bajo el nuevo gate (ViewProducts/
+    // ViewInventory en vez de ManageProducts/AdjustInventory - sección 9/12 de la tarea).
     private static AuthenticatedUser CreateManageProductsUser() =>
         new(
             UserId.New(),
@@ -948,8 +986,12 @@ public class MainWindowViewModelTests
             "GERENTE",
             "Ana Pérez",
             "Gerente",
-            [Permission.ProcessSale, Permission.ManageProducts]);
+            [Permission.ProcessSale, Permission.ManageProducts, Permission.AdjustInventory, Permission.ViewProducts, Permission.ViewInventory]);
 
+    // READ-ONLY CORRECTION: incluye ViewSalesHistory además de ViewReports, para que los tests que
+    // reutilizan este helper para navegar a Ventas > Historial sigan viendo esa sección bajo el
+    // nuevo gate (ViewSalesHistory, decoupled de ViewReports - sección 14 de la tarea: Sales
+    // History no es lo mismo que Administrative Reports).
     private static AuthenticatedUser CreateViewReportsUser() =>
         new(
             UserId.New(),
@@ -958,7 +1000,7 @@ public class MainWindowViewModelTests
             "GERENTE",
             "Ana Pérez",
             "Gerente",
-            [Permission.ViewReports]);
+            [Permission.ViewReports, Permission.ViewSalesHistory]);
 
     private static AuthenticatedUser CreateViewProductAuditUser() =>
         new(

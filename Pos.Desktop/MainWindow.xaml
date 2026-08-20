@@ -12,7 +12,7 @@
         xmlns:catalog="clr-namespace:Pos.Desktop.Products.Catalog"
         xmlns:inventory="clr-namespace:Pos.Desktop.Inventory"
         xmlns:register="clr-namespace:Pos.Desktop.Register"
-        xmlns:settings="clr-namespace:Pos.Desktop.Settings"
+        xmlns:users="clr-namespace:Pos.Desktop.Users"
         xmlns:auditProducts="clr-namespace:Pos.Desktop.Audit.Products"
         xmlns:notifications="clr-namespace:Pos.Desktop.AdministrativeNotifications"
         mc:Ignorable="d"
@@ -46,8 +46,8 @@
             <DataTemplate DataType="{x:Type register:RegisterViewModel}">
                 <register:RegisterView />
             </DataTemplate>
-            <DataTemplate DataType="{x:Type settings:SettingsViewModel}">
-                <settings:SettingsView />
+            <DataTemplate DataType="{x:Type users:UserManagementViewModel}">
+                <users:UserManagementView />
             </DataTemplate>
             <DataTemplate DataType="{x:Type auditProducts:ProductAuditViewModel}">
                 <auditProducts:ProductAuditView />

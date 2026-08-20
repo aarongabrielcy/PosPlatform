@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Pos.Application.Common.Exceptions;
 using Pos.Application.Security;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Security;
@@ -59,5 +60,21 @@ public sealed class EfRoleRepository : IRoleRepository
         var record = RoleMapper.ToRecord(role);
 
         await _context.Roles.AddAsync(record, cancellationToken);
+    }
+
+    public async Task UpdateAsync(Role role, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(role);
+
+        var record = await _context.Roles
+            .Include(r => r.Permissions)
+            .SingleOrDefaultAsync(r => r.Id == role.Id.Value, cancellationToken);
+
+        if (record is null)
+        {
+            throw new EntityNotFoundException("Role", role.Id.ToString());
+        }
+
+        RoleMapper.UpdateRecord(role, record);
     }
 }

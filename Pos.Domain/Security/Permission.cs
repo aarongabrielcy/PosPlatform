@@ -16,4 +16,7 @@ public enum Permission
     ManageUsers,
     ManageRoles,
     ViewProductAudit,
+    ViewSalesHistory,
+    ViewProducts,
+    ViewInventory,
 }

@@ -14,7 +14,7 @@ using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Sales.History;
-using Pos.Desktop.Settings;
+using Pos.Desktop.Users;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Security;
 using CatalogFakeProductManagementService = Pos.Desktop.Tests.Products.Catalog.FakeProductManagementService;
@@ -22,6 +22,7 @@ using FakeAdministrativeNotificationService = Pos.Desktop.Tests.AdministrativeNo
 using FakeInventoryService = Pos.Desktop.Tests.Inventory.FakeInventoryService;
 using FakeClock = Pos.Desktop.Tests.Sales.History.FakeClock;
 using FakeSalesHistoryService = Pos.Desktop.Tests.Sales.History.FakeSalesHistoryService;
+using FakeUserManagementService = Pos.Desktop.Tests.Users.FakeUserManagementService;
 
 namespace Pos.Desktop.Tests.Main;
 
@@ -171,11 +172,12 @@ public class MainWindowTests
             var dashboardViewModel = new DashboardViewModel(session, registerSession, currentSalesCart, new FakeProductManagementService());
             var salesViewModel = new SalesViewModel(session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
             var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
-            var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
+            var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService(), session);
             var viewModel = new MainWindowViewModel(
                 session, registerSession, currentSalesCart, new Enforcement.FakeInstallationEnforcementStateService(),
                 dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
-                new InventoryViewModel(new FakeInventoryService(), session), new RegisterViewModel(registerSession), new SettingsViewModel(),
+                new InventoryViewModel(new FakeInventoryService(), session), new RegisterViewModel(registerSession),
+                new UserManagementViewModel(new FakeUserManagementService()),
                 new ProductAuditViewModel(new FakeProductAuditService()),
                 new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
             _ = new MainWindow(viewModel);
@@ -290,8 +292,9 @@ public class MainWindowTests
             var viewModel = new MainWindowViewModel(
                 session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), new Enforcement.FakeInstallationEnforcementStateService(),
                 dashboardViewModel, salesViewModel, salesHistoryViewModel,
-                new ProductsViewModel(new CatalogFakeProductManagementService()), new InventoryViewModel(new FakeInventoryService(), session),
-                new RegisterViewModel(new FakeCurrentRegisterSession()), new SettingsViewModel(),
+                new ProductsViewModel(new CatalogFakeProductManagementService(), session), new InventoryViewModel(new FakeInventoryService(), session),
+                new RegisterViewModel(new FakeCurrentRegisterSession()),
+                new UserManagementViewModel(new FakeUserManagementService()),
                 new ProductAuditViewModel(new FakeProductAuditService()),
                 new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
             var window = new MainWindow(viewModel);
@@ -418,17 +421,17 @@ public class MainWindowTests
         var salesViewModel = new SalesViewModel(
             session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
         var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
-        var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService());
+        var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService(), session);
         var inventoryViewModel = new InventoryViewModel(new FakeInventoryService(), session);
         var registerViewModel = new RegisterViewModel(registerSession);
-        var settingsViewModel = new SettingsViewModel();
+        var userManagementViewModel = new UserManagementViewModel(new FakeUserManagementService());
         var productAuditViewModel = new ProductAuditViewModel(new FakeProductAuditService());
         var notificationCenterViewModel = new NotificationCenterViewModel(new FakeAdministrativeNotificationService());
 
         return new MainWindowViewModel(
             session, registerSession, currentSalesCart, new Enforcement.FakeInstallationEnforcementStateService(),
             dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
-            inventoryViewModel, registerViewModel, settingsViewModel, productAuditViewModel, notificationCenterViewModel);
+            inventoryViewModel, registerViewModel, userManagementViewModel, productAuditViewModel, notificationCenterViewModel);
     }
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>
@@ -441,6 +444,9 @@ public class MainWindowTests
             roleName,
             [Permission.ProcessSale]);
 
+    // READ-ONLY CORRECTION: incluye ViewProducts/ViewInventory (Manager, igual que el StandardRoles
+    // canónico, recibe lectura y administración) para que la navegación a Productos/Inventario
+    // (gateada ahora por ViewProducts/ViewInventory, sección 9/12 de la tarea) siga funcionando.
     private static AuthenticatedUser CreateManageProductsUser() =>
         new(
             UserId.New(),
@@ -449,5 +455,8 @@ public class MainWindowTests
             "GERENTE",
             "Ana Pérez",
             "Gerente",
-            [Permission.ProcessSale, Permission.ManageProducts, Permission.AdjustInventory]);
+            [
+                Permission.ProcessSale, Permission.ManageProducts, Permission.AdjustInventory,
+                Permission.ViewProducts, Permission.ViewInventory,
+            ]);
 }

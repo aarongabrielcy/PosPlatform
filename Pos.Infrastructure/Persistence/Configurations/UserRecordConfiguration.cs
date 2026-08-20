@@ -51,11 +51,13 @@ internal sealed class UserRecordConfiguration : IEntityTypeConfiguration<UserRec
         builder.HasIndex(record => record.RoleId);
         builder.HasIndex(record => record.IsActive);
 
-        // Unicidad de Username por tenant no está expresada explícitamente en Domain.
-        // Se deja como índice no único hasta que la regla de negocio lo confirme.
+        // Unicidad de Username por tenant confirmada por BASIC-USR-01 (sección 10 de la tarea):
+        // UserManagementService ya valida duplicados a nivel de Application antes de escribir
+        // (comparando contra el mismo valor normalizado que User.NormalizeUsername almacena en
+        // mayúsculas), este índice único es la defensa adicional a nivel de base de datos.
         // No se agrega un índice adicional solo por OrganizationId: este índice compuesto
         // ya cubre ese prefijo.
-        builder.HasIndex(record => new { record.OrganizationId, record.Username });
+        builder.HasIndex(record => new { record.OrganizationId, record.Username }).IsUnique();
 
         builder.HasOne<OrganizationRecord>()
             .WithMany()

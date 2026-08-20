@@ -12,4 +12,6 @@ public interface IUserRepository
     Task<IReadOnlyList<User>> GetByOrganizationAsync(OrganizationId organizationId, CancellationToken cancellationToken);
 
     Task AddAsync(User user, CancellationToken cancellationToken);
+
+    Task UpdateAsync(User user, CancellationToken cancellationToken);
 }

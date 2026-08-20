@@ -15,6 +15,8 @@ internal sealed class FakeUserRepository : IUserRepository
 
     public int AddCallCount { get; private set; }
 
+    public int UpdateCallCount { get; private set; }
+
     public Task<User?> GetByIdAsync(UserId userId, CancellationToken cancellationToken) =>
         Task.FromResult(_users.SingleOrDefault(u => u.Id == userId));
 
@@ -31,6 +33,20 @@ internal sealed class FakeUserRepository : IUserRepository
     {
         AddCallCount++;
         _users.Add(user);
+
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateAsync(User user, CancellationToken cancellationToken)
+    {
+        UpdateCallCount++;
+
+        var index = _users.FindIndex(u => u.Id == user.Id);
+
+        if (index >= 0)
+        {
+            _users[index] = user;
+        }
 
         return Task.CompletedTask;
     }

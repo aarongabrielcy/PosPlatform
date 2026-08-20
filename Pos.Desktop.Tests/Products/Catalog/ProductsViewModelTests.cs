@@ -1,11 +1,29 @@
+using Pos.Application.Authentication;
 using Pos.Application.Products.ManageProduct;
 using Pos.Desktop.Products.Catalog;
 using Pos.Domain.Common.Identifiers;
+using Pos.Domain.Security;
 
 namespace Pos.Desktop.Tests.Products.Catalog;
 
 public class ProductsViewModelTests
 {
+    // Sesión por defecto para las pruebas de este archivo (carga/búsqueda/paginación/comandos):
+    // ManageProducts habilita New/Editar (CanExecute), igual patrón que las pruebas equivalentes
+    // de InventoryViewModel/CanAdjustInventory. La gate READ-ONLY CORRECTION en sí (Cashier sin
+    // ManageProducts) se prueba por separado más abajo.
+    private static FakeCurrentUserSession CreateAuthorizedSession()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "GERENTE", "Ana Pérez", "Gerente",
+                [Permission.ViewProducts, Permission.ManageProducts]),
+        };
+
+        return session;
+    }
+
     private static ProductCatalogItem CreateItem(
         string sku = "SKU-001",
         string name = "Producto de prueba",
@@ -23,7 +41,7 @@ public class ProductsViewModelTests
         var item = CreateItem();
         var service = new FakeProductManagementService(
             (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([item], false)));
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
 
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
@@ -37,7 +55,7 @@ public class ProductsViewModelTests
     public async Task LoadCommandWithNoResultsSetsTheNoResultsMessage()
     {
         var service = new FakeProductManagementService();
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
 
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
@@ -51,7 +69,7 @@ public class ProductsViewModelTests
         var items = new[] { CreateItem("SKU-001"), CreateItem("SKU-002") };
         var service = new FakeProductManagementService(
             (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult(items, false)));
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
 
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
@@ -65,7 +83,7 @@ public class ProductsViewModelTests
     public async Task SearchCommandSendsTheCurrentSearchTextAndFilterToTheService()
     {
         var service = new FakeProductManagementService();
-        var viewModel = new ProductsViewModel(service) { SearchText = "agua" };
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession()) { SearchText = "agua" };
 
         viewModel.SearchCommand.Execute(null);
         await Task.Yield();
@@ -82,7 +100,7 @@ public class ProductsViewModelTests
         var item = CreateItem();
         var service = new FakeProductManagementService(
             (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([item], false)));
-        var viewModel = new ProductsViewModel(service) { SearchText = string.Empty };
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession()) { SearchText = string.Empty };
 
         viewModel.SearchCommand.Execute(null);
         await Task.Yield();
@@ -99,7 +117,7 @@ public class ProductsViewModelTests
         var item = CreateItem();
         var service = new FakeProductManagementService(
             (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([item], false)));
-        var viewModel = new ProductsViewModel(service, searchDebounceDelay: TimeSpan.Zero);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession(), searchDebounceDelay: TimeSpan.Zero);
 
         viewModel.SearchText = "agua";
         await viewModel.PendingSearchTask;
@@ -113,7 +131,7 @@ public class ProductsViewModelTests
     {
         var service = new FakeProductManagementService(
             (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([CreateItem()], true)));
-        var viewModel = new ProductsViewModel(service, searchDebounceDelay: TimeSpan.Zero);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession(), searchDebounceDelay: TimeSpan.Zero);
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
         viewModel.NextPageCommand.Execute(null);
@@ -142,7 +160,7 @@ public class ProductsViewModelTests
 
             return Task.FromResult(new ProductCatalogPageResult([CreateItem("SKU-AG")], false));
         });
-        var viewModel = new ProductsViewModel(service, searchDebounceDelay: TimeSpan.Zero);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession(), searchDebounceDelay: TimeSpan.Zero);
 
         viewModel.SearchText = "a";
         var staleTask = viewModel.PendingSearchTask;
@@ -170,7 +188,7 @@ public class ProductsViewModelTests
     public async Task ChangingTheSelectedFilterReloadsWithTheNewFilter(ProductCatalogStatusFilter filter)
     {
         var service = new FakeProductManagementService();
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
 
         viewModel.SelectedFilter = filter;
         await Task.Yield();
@@ -183,7 +201,7 @@ public class ProductsViewModelTests
     {
         var service = new FakeProductManagementService(
             (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([CreateItem()], true)));
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
         viewModel.NextPageCommand.Execute(null);
@@ -204,7 +222,7 @@ public class ProductsViewModelTests
     {
         var service = new FakeProductManagementService(
             (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([CreateItem()], false)));
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
 
@@ -216,7 +234,7 @@ public class ProductsViewModelTests
     {
         var service = new FakeProductManagementService(
             (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([CreateItem()], true)));
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
 
@@ -231,7 +249,7 @@ public class ProductsViewModelTests
     public void PreviousPageCommandCannotExecuteOnTheFirstPage()
     {
         var service = new FakeProductManagementService();
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
 
         Assert.False(viewModel.PreviousPageCommand.CanExecute(null));
     }
@@ -241,7 +259,7 @@ public class ProductsViewModelTests
     {
         var service = new FakeProductManagementService(
             (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([CreateItem()], true)));
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
         viewModel.NextPageCommand.Execute(null);
@@ -262,7 +280,7 @@ public class ProductsViewModelTests
         var item = CreateItem();
         var service = new FakeProductManagementService(
             (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([item], false)));
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
 
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
@@ -282,7 +300,7 @@ public class ProductsViewModelTests
 
             return Task.FromResult(new ProductCatalogPageResult([edited, other], false));
         });
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
         // LoadPageAsync solo auto-selecciona con un único resultado; con dos, se elige manualmente
@@ -316,7 +334,7 @@ public class ProductsViewModelTests
             // filtro/búsqueda actual).
             return Task.FromResult(new ProductCatalogPageResult([CreateItem("SKU-OTHER")], false));
         });
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
         viewModel.SelectedProduct = viewModel.Products.Single(p => p.ProductId == productId);
@@ -330,7 +348,7 @@ public class ProductsViewModelTests
     [Fact]
     public void EditProductCommandCannotExecuteWithoutAnItem()
     {
-        var viewModel = new ProductsViewModel(new FakeProductManagementService());
+        var viewModel = new ProductsViewModel(new FakeProductManagementService(), CreateAuthorizedSession());
 
         Assert.False(viewModel.EditProductCommand.CanExecute(null));
     }
@@ -339,7 +357,7 @@ public class ProductsViewModelTests
     public void EditProductCommandRaisesEditProductRequestedWithTheItemProductId()
     {
         var item = CreateItem();
-        var viewModel = new ProductsViewModel(new FakeProductManagementService());
+        var viewModel = new ProductsViewModel(new FakeProductManagementService(), CreateAuthorizedSession());
 
         ProductId? raisedProductId = null;
         viewModel.EditProductRequested += (_, productId) => raisedProductId = productId;
@@ -352,7 +370,7 @@ public class ProductsViewModelTests
     [Fact]
     public void NewProductCommandRaisesNewProductRequested()
     {
-        var viewModel = new ProductsViewModel(new FakeProductManagementService());
+        var viewModel = new ProductsViewModel(new FakeProductManagementService(), CreateAuthorizedSession());
 
         var raised = false;
         viewModel.NewProductRequested += (_, _) => raised = true;
@@ -370,7 +388,7 @@ public class ProductsViewModelTests
         var item = CreateItem("SKU-NEW");
         var service = new FakeProductManagementService(
             (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([item], false)));
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
 
         viewModel.ApplyProductCreated("SKU-NEW");
         await Task.Yield();
@@ -386,7 +404,7 @@ public class ProductsViewModelTests
         var item = CreateItem("SKU-EDITED");
         var service = new FakeProductManagementService(
             (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([item], false)));
-        var viewModel = new ProductsViewModel(service);
+        var viewModel = new ProductsViewModel(service, CreateAuthorizedSession());
 
         viewModel.ApplyProductUpdated("SKU-EDITED");
         await Task.Yield();
@@ -400,7 +418,7 @@ public class ProductsViewModelTests
     [Fact]
     public void ViewAuditDetailCommandCannotExecuteWithoutAnItem()
     {
-        var viewModel = new ProductsViewModel(new FakeProductManagementService());
+        var viewModel = new ProductsViewModel(new FakeProductManagementService(), CreateAuthorizedSession());
 
         Assert.False(viewModel.ViewAuditDetailCommand.CanExecute(null));
     }
@@ -409,7 +427,7 @@ public class ProductsViewModelTests
     public void ViewAuditDetailCommandRaisesAuditRequestedWithTheSelectedItem()
     {
         var item = CreateItem();
-        var viewModel = new ProductsViewModel(new FakeProductManagementService());
+        var viewModel = new ProductsViewModel(new FakeProductManagementService(), CreateAuthorizedSession());
 
         ProductCatalogItem? raisedItem = null;
         viewModel.AuditRequested += (_, catalogItem) => raisedItem = catalogItem;
@@ -417,5 +435,87 @@ public class ProductsViewModelTests
         viewModel.ViewAuditDetailCommand.Execute(item);
 
         Assert.Same(item, raisedItem);
+    }
+
+    // ---------- Solo lectura para Cashier (READ-ONLY CORRECTION, sección 8/16/24) ----------
+
+    private static FakeCurrentUserSession CreateReadOnlySession()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "CAJERO01", "Luis Cajero", "Cashier",
+                [Permission.ProcessSale, Permission.ViewProducts]),
+        };
+
+        return session;
+    }
+
+    [Fact]
+    public void CanManageProductsIsTrueOnlyWithManageProductsPermission()
+    {
+        var withManageProducts = new ProductsViewModel(new FakeProductManagementService(), CreateAuthorizedSession());
+        var readOnly = new ProductsViewModel(new FakeProductManagementService(), CreateReadOnlySession());
+
+        Assert.True(withManageProducts.CanManageProducts);
+        Assert.False(readOnly.CanManageProducts);
+    }
+
+    [Fact]
+    public void NewProductCommandCannotExecuteWithoutManageProductsPermission()
+    {
+        var viewModel = new ProductsViewModel(new FakeProductManagementService(), CreateReadOnlySession());
+
+        Assert.False(viewModel.NewProductCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void NewProductCommandDoesNotRaiseNewProductRequestedWithoutManageProductsPermission()
+    {
+        var viewModel = new ProductsViewModel(new FakeProductManagementService(), CreateReadOnlySession());
+
+        var raised = false;
+        viewModel.NewProductRequested += (_, _) => raised = true;
+
+        viewModel.NewProductCommand.Execute(null);
+
+        Assert.False(raised);
+    }
+
+    [Fact]
+    public void EditProductCommandCannotExecuteWithoutManageProductsPermission()
+    {
+        var item = CreateItem();
+        var viewModel = new ProductsViewModel(new FakeProductManagementService(), CreateReadOnlySession());
+
+        Assert.False(viewModel.EditProductCommand.CanExecute(item));
+    }
+
+    [Fact]
+    public void EditProductCommandDoesNotRaiseEditProductRequestedWithoutManageProductsPermission()
+    {
+        var item = CreateItem();
+        var viewModel = new ProductsViewModel(new FakeProductManagementService(), CreateReadOnlySession());
+
+        ProductId? raisedProductId = null;
+        viewModel.EditProductRequested += (_, productId) => raisedProductId = productId;
+
+        viewModel.EditProductCommand.Execute(item);
+
+        Assert.Null(raisedProductId);
+    }
+
+    [Fact]
+    public async Task LoadCommandStillPopulatesProductsWithOnlyViewProductsPermission()
+    {
+        var item = CreateItem();
+        var service = new FakeProductManagementService(
+            (_, _, _, _, _) => Task.FromResult(new ProductCatalogPageResult([item], false)));
+        var viewModel = new ProductsViewModel(service, CreateReadOnlySession());
+
+        viewModel.LoadCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Single(viewModel.Products);
     }
 }

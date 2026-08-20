@@ -66,16 +66,18 @@ public sealed class ProductManagementService : IProductManagementService
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
-    // Requiere ManageProducts porque es la búsqueda que alimenta la pantalla administrativa (con
-    // opción de incluir inactivos), a diferencia de SalesCartService.SearchProductsAsync, que
-    // cualquier usuario autenticado con caja abierta puede usar para vender.
+    // Requiere ViewProducts (READ-ONLY CORRECTION, sección 9 de la tarea: "Read-only Product
+    // queries must not require ManageProducts") porque es la búsqueda que alimenta la pantalla
+    // administrativa (con opción de incluir inactivos), a diferencia de
+    // SalesCartService.SearchProductsAsync, que cualquier usuario autenticado con caja abierta
+    // puede usar para vender.
     public async Task<IReadOnlyList<ProductSearchResult>> SearchAsync(
         string searchTerm, bool includeInactive, CancellationToken cancellationToken = default)
     {
         var user = _currentUserSession.CurrentUser;
         var registerSession = _currentRegisterSession.Current;
 
-        if (user is null || !user.HasPermission(Permission.ManageProducts) || registerSession is null)
+        if (user is null || !user.HasPermission(Permission.ViewProducts) || registerSession is null)
         {
             return Array.Empty<ProductSearchResult>();
         }
@@ -114,7 +116,7 @@ public sealed class ProductManagementService : IProductManagementService
     {
         var user = _currentUserSession.CurrentUser;
 
-        if (user is null || !user.HasPermission(Permission.ManageProducts))
+        if (user is null || !user.HasPermission(Permission.ViewProducts))
         {
             return null;
         }
@@ -139,7 +141,7 @@ public sealed class ProductManagementService : IProductManagementService
         var user = _currentUserSession.CurrentUser;
         var registerSession = _currentRegisterSession.Current;
 
-        if (user is null || !user.HasPermission(Permission.ManageProducts) || registerSession is null)
+        if (user is null || !user.HasPermission(Permission.ViewProducts) || registerSession is null)
         {
             return ProductCatalogPageResult.Empty;
         }
@@ -181,7 +183,7 @@ public sealed class ProductManagementService : IProductManagementService
         var user = _currentUserSession.CurrentUser;
         var registerSession = _currentRegisterSession.Current;
 
-        if (user is null || !user.HasPermission(Permission.ManageProducts) || registerSession is null)
+        if (user is null || !user.HasPermission(Permission.ViewProducts) || registerSession is null)
         {
             return ProductCatalogSummary.Empty;
         }

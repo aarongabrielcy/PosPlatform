@@ -22,7 +22,7 @@ public sealed class SalesHistoryService : ISalesHistoryService
 
         var user = _currentUserSession.CurrentUser;
 
-        if (user is null || !user.HasPermission(Permission.ViewReports))
+        if (user is null || !user.HasPermission(Permission.ViewSalesHistory))
         {
             return SalesHistoryPageResult.Empty;
         }
@@ -37,7 +37,7 @@ public sealed class SalesHistoryService : ISalesHistoryService
 
         var user = _currentUserSession.CurrentUser;
 
-        if (user is null || !user.HasPermission(Permission.ViewReports))
+        if (user is null || !user.HasPermission(Permission.ViewSalesHistory))
         {
             return SalesHistorySummary.Empty;
         }
@@ -49,7 +49,7 @@ public sealed class SalesHistoryService : ISalesHistoryService
     {
         var user = _currentUserSession.CurrentUser;
 
-        if (user is null || !user.HasPermission(Permission.ViewReports))
+        if (user is null || !user.HasPermission(Permission.ViewSalesHistory))
         {
             return null;
         }
@@ -61,7 +61,7 @@ public sealed class SalesHistoryService : ISalesHistoryService
     {
         var user = _currentUserSession.CurrentUser;
 
-        if (user is null || !user.HasPermission(Permission.ViewReports))
+        if (user is null || !user.HasPermission(Permission.ViewSalesHistory))
         {
             return SalesHistoryFilterOptions.Empty;
         }

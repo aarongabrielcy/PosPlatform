@@ -1410,8 +1410,12 @@ public class PosDbContextModelTests
         Assert.Null(redundantIndex);
     }
 
+    // BASIC-USR-01, sección 10: la unicidad de Username por tenant ya está confirmada por la
+    // regla de negocio (UserManagementService valida duplicados en Application, este índice único
+    // es la defensa adicional a nivel de base de datos) - invierte la expectativa que tenía este
+    // mismo test antes de esta fase (ver AddUniqueUsernameIndex).
     [Fact]
-    public void UserRecordShouldNotHaveUniqueIndexOnOrganizationIdAndUsername()
+    public void UserRecordShouldHaveUniqueIndexOnOrganizationIdAndUsername()
     {
         var entityType = BuildModel().FindEntityType(typeof(UserRecord))!;
 
@@ -1423,7 +1427,7 @@ public class PosDbContextModelTests
                 nameof(UserRecord.Username),
             ]));
 
-        Assert.Null(uniqueIndex);
+        Assert.NotNull(uniqueIndex);
     }
 
     // ---------- RegisterSessionRecord ----------

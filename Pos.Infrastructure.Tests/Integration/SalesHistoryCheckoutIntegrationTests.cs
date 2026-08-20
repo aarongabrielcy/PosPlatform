@@ -63,7 +63,7 @@ public class SalesHistoryCheckoutIntegrationTests
             "JPEREZ",
             "Juan Pérez",
             "Cajero",
-            [Permission.ProcessSale, Permission.ViewReports]));
+            [Permission.ProcessSale, Permission.ViewReports, Permission.ViewSalesHistory]));
 
         var registerSession = new InMemoryCurrentRegisterSession();
         registerSession.SetActiveSession(new ActiveRegisterSession(

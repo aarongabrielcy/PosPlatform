@@ -54,7 +54,7 @@ public class ProductManagementSqliteIntegrationTests
             "JPEREZ",
             "Juan Pérez",
             "Gerente",
-            new HashSet<Permission> { Permission.ManageProducts, Permission.AdjustInventory }));
+            new HashSet<Permission> { Permission.ManageProducts, Permission.AdjustInventory, Permission.ViewProducts }));
 
         var registerSession = new InMemoryCurrentRegisterSession();
         registerSession.SetActiveSession(new ActiveRegisterSession(
@@ -110,7 +110,7 @@ public class ProductManagementSqliteIntegrationTests
             "JPEREZ",
             "Juan Pérez",
             "Gerente",
-            new HashSet<Permission> { Permission.ManageProducts }));
+            new HashSet<Permission> { Permission.ManageProducts, Permission.ViewProducts }));
 
         var registerSession = new InMemoryCurrentRegisterSession();
         registerSession.SetActiveSession(new ActiveRegisterSession(

@@ -55,7 +55,7 @@ public class ProductManagementServiceTests
                 "JPEREZ",
                 "Juan Pérez",
                 "Gerente",
-                permissions ?? [Permission.ManageProducts, Permission.AdjustInventory]);
+                permissions ?? [Permission.ManageProducts, Permission.AdjustInventory, Permission.ViewProducts]);
         }
 
         var registerSession = new FakeCurrentRegisterSession();
@@ -137,7 +137,7 @@ public class ProductManagementServiceTests
     }
 
     [Fact]
-    public async Task GetByIdAsyncReturnsNullWithoutManageProductsPermission()
+    public async Task GetByIdAsyncReturnsNullWithoutViewProductsPermission()
     {
         var fixture = CreateFixture(permissions: [Permission.ProcessSale]);
 
@@ -795,7 +795,7 @@ public class ProductManagementServiceTests
     }
 
     [Fact]
-    public async Task GetCatalogPageAsyncReturnsEmptyWithoutManageProductsPermission()
+    public async Task GetCatalogPageAsyncReturnsEmptyWithoutViewProductsPermission()
     {
         var fixture = CreateFixture(permissions: [Permission.ProcessSale]);
 
@@ -846,7 +846,7 @@ public class ProductManagementServiceTests
     }
 
     [Fact]
-    public async Task GetDashboardSummaryAsyncReturnsEmptyWithoutManageProductsPermission()
+    public async Task GetDashboardSummaryAsyncReturnsEmptyWithoutViewProductsPermission()
     {
         var fixture = CreateFixture(permissions: [Permission.ProcessSale]);
 
@@ -876,6 +876,84 @@ public class ProductManagementServiceTests
         Assert.Equal(1, fixture.ProductCatalogQuery.GetSummaryCallCount);
         Assert.Equal(fixture.OrganizationId, fixture.ProductCatalogQuery.LastOrganizationId);
         Assert.Equal(fixture.BranchId, fixture.ProductCatalogQuery.LastBranchId);
+    }
+
+    // ---------- READ-ONLY CORRECTION: Cashier lee, no muta (sección 8/9/24 de la tarea) ----------
+
+    private static readonly Permission[] CashierReadOnlyPermissions =
+        [Permission.ProcessSale, Permission.ViewProducts];
+
+    [Fact]
+    public async Task SearchAsyncDelegatesForACashierWithOnlyViewProductsPermission()
+    {
+        var fixture = CreateFixture(permissions: CashierReadOnlyPermissions);
+        var product = CreateProduct(fixture.OrganizationId, sku: "SKU-AGUA");
+        fixture.ProductRepository.Add(product);
+
+        var results = await fixture.Service.SearchAsync("SKU-AGUA", includeInactive: false);
+
+        Assert.Single(results);
+    }
+
+    [Fact]
+    public async Task GetByIdAsyncReturnsDetailsForACashierWithOnlyViewProductsPermission()
+    {
+        var fixture = CreateFixture(permissions: CashierReadOnlyPermissions);
+        var product = CreateProduct(fixture.OrganizationId);
+        fixture.ProductRepository.Add(product);
+
+        var result = await fixture.Service.GetByIdAsync(product.Id);
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task GetCatalogPageAsyncDelegatesForACashierWithOnlyViewProductsPermission()
+    {
+        var fixture = CreateFixture(permissions: CashierReadOnlyPermissions);
+
+        await fixture.Service.GetCatalogPageAsync(null, ProductCatalogStatusFilter.All, 0, 50);
+
+        Assert.Equal(1, fixture.ProductCatalogQuery.SearchPageCallCount);
+    }
+
+    [Fact]
+    public async Task UpdateAsyncFailsForACashierWithOnlyViewProductsPermission()
+    {
+        var fixture = CreateFixture(permissions: CashierReadOnlyPermissions);
+        var product = CreateProduct(fixture.OrganizationId);
+        fixture.ProductRepository.Add(product);
+
+        var result = await fixture.Service.UpdateAsync(
+            new UpdateProductRequest(product.Id, "SKU-001", null, "Nuevo nombre", null, 12m, null, null));
+
+        Assert.Equal(UpdateProductResultStatus.NotAuthorized, result.Status);
+    }
+
+    [Fact]
+    public async Task SetActiveAsyncFailsForACashierWithOnlyViewProductsPermission()
+    {
+        var fixture = CreateFixture(permissions: CashierReadOnlyPermissions);
+        var product = CreateProduct(fixture.OrganizationId);
+        fixture.ProductRepository.Add(product);
+
+        var result = await fixture.Service.SetActiveAsync(product.Id, isActive: false);
+
+        Assert.Equal(UpdateProductResultStatus.NotAuthorized, result.Status);
+    }
+
+    [Fact]
+    public async Task AdjustInventoryAsyncFailsForACashierWithOnlyViewProductsPermission()
+    {
+        var fixture = CreateFixture(permissions: CashierReadOnlyPermissions);
+        var product = CreateProduct(fixture.OrganizationId, tracksInventory: true);
+        fixture.ProductRepository.Add(product);
+        fixture.InventoryItemRepository.Add(CreateInventoryItem(fixture.BranchId, product.Id));
+
+        var result = await fixture.Service.AdjustInventoryAsync(
+            new AdjustProductInventoryRequest(product.Id, InventoryAdjustmentType.Increase, 5m));
+
+        Assert.Equal(AdjustProductInventoryResultStatus.NotAuthorized, result.Status);
     }
 
     // ---------- Product audit (TAREA 24D) ----------
@@ -1148,7 +1226,7 @@ public class ProductManagementServiceTests
             new Dictionary<ProductId, Pos.Application.ProductAudit.ProductRecentActivity> { [productId] = recentActivity });
 
         var fixture = CreateFixture(
-            permissions: [Permission.ManageProducts, Permission.ViewProductAudit],
+            permissions: [Permission.ManageProducts, Permission.ViewProductAudit, Permission.ViewProducts],
             productAuditQuery: auditQuery,
             productCatalogQuery: catalogQuery);
 

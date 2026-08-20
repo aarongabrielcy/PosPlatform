@@ -26,6 +26,7 @@ using Pos.Application.Sales.History;
 using Pos.Application.SalesCart;
 using Pos.Application.Security;
 using Pos.Application.Users;
+using Pos.Application.Users.UserManagement;
 using Pos.Infrastructure.Activation;
 using Pos.Infrastructure.Authentication;
 using Pos.Infrastructure.Enforcement;
@@ -91,6 +92,8 @@ public static class DependencyInjection
 
         services.AddScoped<IInitialBusinessBootstrapService, InitialBusinessBootstrapService>();
         services.AddScoped<IInstallationStateService, InstallationStateService>();
+        services.AddScoped<IStandardRoleSeedingService, StandardRoleSeedingService>();
+        services.AddScoped<IUserManagementService, UserManagementService>();
 
         services.AddSingleton<InMemoryCurrentUserSession>();
         services.AddSingleton<ICurrentUserSession>(sp => sp.GetRequiredService<InMemoryCurrentUserSession>());

@@ -12,4 +12,6 @@ public interface IRoleRepository
     Task<IReadOnlyList<Role>> GetByOrganizationAsync(OrganizationId organizationId, CancellationToken cancellationToken);
 
     Task AddAsync(Role role, CancellationToken cancellationToken);
+
+    Task UpdateAsync(Role role, CancellationToken cancellationToken);
 }

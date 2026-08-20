@@ -65,6 +65,15 @@ public sealed class User
         DateTimeOffset createdAtUtc) =>
         new(id, organizationId, roleId, username, displayName, passwordHash, isActive, createdAtUtc);
 
+    // Permite editar Username desde administración de usuarios (BASIC-USR-01, sección 17): nunca
+    // regenera UserId ni afecta referencias históricas (Sale/RegisterSession ya solo guardan
+    // UserId, nunca Username - ver ProductAuditEvent.ActorUsernameSnapshot para el único lugar del
+    // proyecto que sí conserva una copia textual, y solo como snapshot histórico, no como clave).
+    public void ChangeUsername(string username)
+    {
+        Username = NormalizeUsername(username);
+    }
+
     public void ChangeDisplayName(string displayName)
     {
         DisplayName = NormalizeDisplayName(displayName);

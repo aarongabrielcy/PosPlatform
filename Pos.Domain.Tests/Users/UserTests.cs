@@ -115,6 +115,34 @@ public class UserTests
     }
 
     [Fact]
+    public void ChangeUsernameValidatesNormalizesAndUpdates()
+    {
+        var user = CreateUser();
+
+        user.ChangeUsername("  mlopez  ");
+
+        Assert.Equal("MLOPEZ", user.Username);
+        Assert.Throws<DomainValidationException>(() => user.ChangeUsername("a"));
+    }
+
+    [Fact]
+    public void ChangeUsernameDoesNotRegenerateUserIdOrOtherFields()
+    {
+        var user = CreateUser();
+        var id = user.Id;
+        var displayName = user.DisplayName;
+        var roleId = user.RoleId;
+        var createdAtUtc = user.CreatedAtUtc;
+
+        user.ChangeUsername("mlopez");
+
+        Assert.Equal(id, user.Id);
+        Assert.Equal(displayName, user.DisplayName);
+        Assert.Equal(roleId, user.RoleId);
+        Assert.Equal(createdAtUtc, user.CreatedAtUtc);
+    }
+
+    [Fact]
     public void ChangeDisplayNameValidatesAndUpdates()
     {
         var user = CreateUser();
