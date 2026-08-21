@@ -29,6 +29,7 @@ internal static class StandardRoles
         Permission.OpenRegisterSession,
         Permission.CloseRegisterSession,
         Permission.ViewCashTotals,
+        Permission.ManageCashMovements,
         Permission.ManageProducts,
         Permission.AdjustInventory,
         Permission.ViewReports,

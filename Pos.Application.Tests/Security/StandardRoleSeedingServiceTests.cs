@@ -67,9 +67,9 @@ public class StandardRoleSeedingServiceTests
             [
                 Permission.ProcessSale, Permission.ApplyDiscount, Permission.CancelSale, Permission.ProcessReturn,
                 Permission.OpenCashDrawer, Permission.OpenRegisterSession, Permission.CloseRegisterSession,
-                Permission.ViewCashTotals, Permission.ManageProducts, Permission.AdjustInventory,
-                Permission.ViewReports, Permission.ViewProductAudit, Permission.ViewSalesHistory,
-                Permission.ViewProducts, Permission.ViewInventory,
+                Permission.ViewCashTotals, Permission.ManageCashMovements, Permission.ManageProducts,
+                Permission.AdjustInventory, Permission.ViewReports, Permission.ViewProductAudit,
+                Permission.ViewSalesHistory, Permission.ViewProducts, Permission.ViewInventory,
             ]);
         var cashierRole = new Role(
             RoleId.New(), organization.Id, "Cashier", UtcNow,
@@ -378,6 +378,67 @@ public class StandardRoleSeedingServiceTests
         Assert.False(cashier.HasPermission(Permission.ViewReports));
         Assert.False(cashier.HasPermission(Permission.ManageUsers));
         Assert.False(cashier.HasPermission(Permission.ManageRoles));
+    }
+
+    // BASIC-CASH-01 (sección 16/32): Manager/Admin pueden registrar CashIn/CashOut, Cashier no.
+    [Fact]
+    public async Task ManagerReceivesManageCashMovementsButCashierDoesNot()
+    {
+        var (roleRepository, organization) = await SeedAsync();
+
+        var roles = await roleRepository.GetByOrganizationAsync(organization.Id, CancellationToken.None);
+        var manager = roles.Single(r => r.Name == "Manager");
+        var cashier = roles.Single(r => r.Name == "Cashier");
+
+        Assert.True(manager.HasPermission(Permission.ManageCashMovements));
+        Assert.False(cashier.HasPermission(Permission.ManageCashMovements));
+    }
+
+    // Reconciliación (sección 32/45): un Manager ya persistido antes de que ManageCashMovements
+    // existiera debe ganarlo en el próximo arranque, conservando su RoleId; Cashier nunca lo gana.
+    [Fact]
+    public async Task ReconciliationAddsManageCashMovementsToAnExistingManagerButNeverToCashier()
+    {
+        var organization = CreateOrganization();
+        var managerRoleId = RoleId.New();
+        var managerRole = new Role(managerRoleId, organization.Id, "Manager", UtcNow, OldManagerPermissions);
+        var cashierRoleId = RoleId.New();
+        var cashierRole = new Role(cashierRoleId, organization.Id, "Cashier", UtcNow, OldCashierPermissions);
+        var organizationRepository = new FakeOrganizationRepository([organization]);
+        var roleRepository = new FakeRoleRepository([managerRole, cashierRole]);
+        var unitOfWork = new FakeUnitOfWork();
+        var service = new StandardRoleSeedingService(
+            organizationRepository, roleRepository, unitOfWork, new Common.Time.FakeClock(UtcNow));
+
+        await service.EnsureStandardRolesExistAsync(CancellationToken.None);
+
+        var reconciledManager = await roleRepository.GetByIdAsync(managerRoleId, CancellationToken.None);
+        var reconciledCashier = await roleRepository.GetByIdAsync(cashierRoleId, CancellationToken.None);
+        Assert.Equal(managerRoleId, reconciledManager!.Id);
+        Assert.True(reconciledManager.HasPermission(Permission.ManageCashMovements));
+        Assert.Equal(cashierRoleId, reconciledCashier!.Id);
+        Assert.False(reconciledCashier.HasPermission(Permission.ManageCashMovements));
+    }
+
+    // Administrator siempre tiene todos los permisos, incluido ManageCashMovements, vía
+    // AdministrativePermissionSet.All() (sección 32).
+    [Fact]
+    public async Task AdministratorAlwaysHasManageCashMovements()
+    {
+        var organization = CreateOrganization();
+        var administratorRoleId = RoleId.New();
+        var administratorRole = new Role(
+            administratorRoleId, organization.Id, "Administrator", UtcNow, OldAdministratorPermissions);
+        var organizationRepository = new FakeOrganizationRepository([organization]);
+        var roleRepository = new FakeRoleRepository([administratorRole]);
+        var unitOfWork = new FakeUnitOfWork();
+        var service = new StandardRoleSeedingService(
+            organizationRepository, roleRepository, unitOfWork, new Common.Time.FakeClock(UtcNow));
+
+        await service.EnsureStandardRolesExistAsync(CancellationToken.None);
+
+        var reconciled = await roleRepository.GetByIdAsync(administratorRoleId, CancellationToken.None);
+        Assert.True(reconciled!.HasPermission(Permission.ManageCashMovements));
     }
 
     private static async Task<(FakeRoleRepository RoleRepository, Organization Organization)> SeedAsync()

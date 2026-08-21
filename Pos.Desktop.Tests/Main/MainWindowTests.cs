@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using Microsoft.Extensions.Logging.Abstractions;
 using Pos.Application.Authentication;
 using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
@@ -176,7 +177,10 @@ public class MainWindowTests
             var viewModel = new MainWindowViewModel(
                 session, registerSession, currentSalesCart, new Enforcement.FakeInstallationEnforcementStateService(),
                 dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
-                new InventoryViewModel(new FakeInventoryService(), session), new RegisterViewModel(registerSession),
+                new InventoryViewModel(new FakeInventoryService(), session),
+                new RegisterViewModel(
+                    registerSession, session, new Pos.Desktop.Tests.Register.FakeCashMovementService(),
+                    NullLogger<RegisterViewModel>.Instance),
                 new UserManagementViewModel(new FakeUserManagementService()),
                 new ProductAuditViewModel(new FakeProductAuditService()),
                 new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
@@ -293,7 +297,9 @@ public class MainWindowTests
                 session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), new Enforcement.FakeInstallationEnforcementStateService(),
                 dashboardViewModel, salesViewModel, salesHistoryViewModel,
                 new ProductsViewModel(new CatalogFakeProductManagementService(), session), new InventoryViewModel(new FakeInventoryService(), session),
-                new RegisterViewModel(new FakeCurrentRegisterSession()),
+                new RegisterViewModel(
+                    new FakeCurrentRegisterSession(), session, new Pos.Desktop.Tests.Register.FakeCashMovementService(),
+                    NullLogger<RegisterViewModel>.Instance),
                 new UserManagementViewModel(new FakeUserManagementService()),
                 new ProductAuditViewModel(new FakeProductAuditService()),
                 new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
@@ -423,7 +429,9 @@ public class MainWindowTests
         var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
         var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService(), session);
         var inventoryViewModel = new InventoryViewModel(new FakeInventoryService(), session);
-        var registerViewModel = new RegisterViewModel(registerSession);
+        var registerViewModel = new RegisterViewModel(
+            registerSession, session, new Pos.Desktop.Tests.Register.FakeCashMovementService(),
+            NullLogger<RegisterViewModel>.Instance);
         var userManagementViewModel = new UserManagementViewModel(new FakeUserManagementService());
         var productAuditViewModel = new ProductAuditViewModel(new FakeProductAuditService());
         var notificationCenterViewModel = new NotificationCenterViewModel(new FakeAdministrativeNotificationService());

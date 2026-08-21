@@ -26,6 +26,8 @@ namespace Pos.Desktop
             _viewModel.AdjustInventoryRequested += OnViewModelAdjustInventoryRequested;
             _viewModel.NewUserRequested += OnViewModelNewUserRequested;
             _viewModel.EditUserRequested += OnViewModelEditUserRequested;
+            _viewModel.CashInRequested += OnViewModelCashInRequested;
+            _viewModel.CashOutRequested += OnViewModelCashOutRequested;
 
             DataContext = _viewModel;
 
@@ -48,6 +50,10 @@ namespace Pos.Desktop
         public event EventHandler? NewUserRequested;
 
         public event EventHandler<UserId>? EditUserRequested;
+
+        public event EventHandler? CashInRequested;
+
+        public event EventHandler? CashOutRequested;
 
         private void OnViewModelLogoutRequested(object? sender, EventArgs e) =>
             LogoutRequested?.Invoke(this, EventArgs.Empty);
@@ -73,6 +79,12 @@ namespace Pos.Desktop
         private void OnViewModelEditUserRequested(object? sender, UserId e) =>
             EditUserRequested?.Invoke(this, e);
 
+        private void OnViewModelCashInRequested(object? sender, EventArgs e) =>
+            CashInRequested?.Invoke(this, EventArgs.Empty);
+
+        private void OnViewModelCashOutRequested(object? sender, EventArgs e) =>
+            CashOutRequested?.Invoke(this, EventArgs.Empty);
+
         // Llamado desde App.xaml.cs tras crear un producto exitosamente en CreateProductWindow.
         public void ApplyProductCreated(string sku) => _viewModel.ApplyProductCreated(sku);
 
@@ -90,6 +102,10 @@ namespace Pos.Desktop
         // Llamado desde App.xaml.cs tras cerrar CreateUserWindow/EditUserWindow con al menos un
         // cambio aplicado.
         public void ApplyUserChanged() => _viewModel.ApplyUserChanged();
+
+        // Llamado desde App.xaml.cs tras cerrar RecordCashMovementWindow con un movimiento
+        // registrado con éxito.
+        public void ApplyCashMovementRecorded() => _viewModel.ApplyCashMovementRecorded();
 
         // Nunca permite terminar el proceso silenciosamente con una caja abierta: cierra la
         // ventana con la X requiere primero confirmar o completar el cierre de caja.
@@ -124,6 +140,8 @@ namespace Pos.Desktop
             _viewModel.AdjustInventoryRequested -= OnViewModelAdjustInventoryRequested;
             _viewModel.NewUserRequested -= OnViewModelNewUserRequested;
             _viewModel.EditUserRequested -= OnViewModelEditUserRequested;
+            _viewModel.CashInRequested -= OnViewModelCashInRequested;
+            _viewModel.CashOutRequested -= OnViewModelCashOutRequested;
             Closing -= OnWindowClosing;
             Closed -= OnWindowClosed;
             _viewModel.Dispose();

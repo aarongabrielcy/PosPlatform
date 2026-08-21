@@ -10,10 +10,12 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/Pos.Desktop;component/Themes/AppColors.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         </ResourceDictionary>
     </UserControl.Resources>
     <Grid Background="{StaticResource AppBackgroundBrush}" Margin="24">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -59,8 +61,44 @@
                                Foreground="{StaticResource PrimaryTextBrush}" Text="{Binding StatusText}" />
                 </Grid>
 
+                <StackPanel Orientation="Horizontal" Margin="0,16,0,0"
+                            Visibility="{Binding CanManageCashMovements, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <Button x:Name="CashInButton" Content="Entrada de efectivo" Margin="0,0,8,0"
+                            Style="{StaticResource SecondaryButtonStyle}" Command="{Binding CashInCommand}" />
+                    <Button x:Name="CashOutButton" Content="Salida de efectivo"
+                            Style="{StaticResource SecondaryButtonStyle}" Command="{Binding CashOutCommand}" />
+                </StackPanel>
+
                 <Button x:Name="CloseRegisterButton" Content="Cerrar caja" HorizontalAlignment="Left" Margin="0,16,0,0"
                         Style="{StaticResource PrimaryButtonStyle}" Command="{Binding CloseRegisterCommand}" />
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="2" Style="{StaticResource CardStyle}" MaxWidth="720" HorizontalAlignment="Left" Margin="0,16,0,0"
+                Visibility="{Binding CanViewCashMovements, Converter={StaticResource BoolToVisibilityConverter}}">
+            <StackPanel>
+                <TextBlock Text="Movimientos de caja" FontWeight="Bold" Margin="0,0,0,8" />
+                <TextBlock Text="{Binding MovementsError}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <ItemsControl ItemsSource="{Binding Movements}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="90" />
+                                    <ColumnDefinition Width="110" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="140" />
+                                    <ColumnDefinition Width="140" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding TypeText}" />
+                                <TextBlock Grid.Column="1" Text="{Binding AmountText}" />
+                                <TextBlock Grid.Column="2" Text="{Binding Reason}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Column="3" Text="{Binding ActorDisplayName}" />
+                                <TextBlock Grid.Column="4" Text="{Binding CreatedAtText}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
         </Border>
     </Grid>

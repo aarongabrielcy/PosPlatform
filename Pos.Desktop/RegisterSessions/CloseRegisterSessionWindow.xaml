@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Cierre de caja — PosPlatform"
-        Height="600" Width="480"
+        Height="660" Width="480"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
     <Window.Resources>
@@ -34,6 +34,8 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -85,16 +87,30 @@
                 <Run Text="{Binding Currency, Mode=OneWay}" />
             </TextBlock>
 
-            <Label Grid.Row="7" Grid.Column="0" Content="Efectivo esperado" />
-            <TextBlock Grid.Row="7" Grid.Column="1" Margin="0,8" VerticalAlignment="Center" FontWeight="Bold">
+            <Label Grid.Row="7" Grid.Column="0" Content="Entradas de efectivo" />
+            <TextBlock Grid.Row="7" Grid.Column="1" Margin="0,8" VerticalAlignment="Center">
+                <Run Text="{Binding CashInAmountText, Mode=OneWay}" />
+                <Run Text=" " />
+                <Run Text="{Binding Currency, Mode=OneWay}" />
+            </TextBlock>
+
+            <Label Grid.Row="8" Grid.Column="0" Content="Salidas de efectivo" />
+            <TextBlock Grid.Row="8" Grid.Column="1" Margin="0,8" VerticalAlignment="Center">
+                <Run Text="{Binding CashOutAmountText, Mode=OneWay}" />
+                <Run Text=" " />
+                <Run Text="{Binding Currency, Mode=OneWay}" />
+            </TextBlock>
+
+            <Label Grid.Row="9" Grid.Column="0" Content="Efectivo esperado" />
+            <TextBlock Grid.Row="9" Grid.Column="1" Margin="0,8" VerticalAlignment="Center" FontWeight="Bold">
                 <Run Text="{Binding ExpectedAmountText, Mode=OneWay}" />
                 <Run Text=" " />
                 <Run Text="{Binding Currency, Mode=OneWay}" />
             </TextBlock>
 
-            <Label Grid.Row="8" Grid.Column="0" Content="Efectivo contado"
+            <Label Grid.Row="10" Grid.Column="0" Content="Efectivo contado"
                     Target="{Binding ElementName=ClosingAmountTextBox}" />
-            <TextBox x:Name="ClosingAmountTextBox" Grid.Row="8" Grid.Column="1"
+            <TextBox x:Name="ClosingAmountTextBox" Grid.Row="10" Grid.Column="1"
                     Margin="0,6" Padding="6,4" TabIndex="0"
                     Text="{Binding ClosingAmountText, UpdateSourceTrigger=PropertyChanged}" />
         </Grid>

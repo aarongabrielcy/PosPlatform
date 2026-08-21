@@ -11,6 +11,9 @@ namespace Pos.Application.RegisterSessions;
 // varios Payment por venta y el dominio ya define métodos además de Cash/Card (p. ej.
 // BankTransfer), así que derivarlo del desglose por método subcontaría o duplicaría según cómo
 // evolucione el pago de una venta.
+// BASIC-CASH-01 (sección 10-11): CashIn/CashOut son movimientos manuales de efectivo, nunca ventas
+// - no afectan GrossSales/CompletedCashSales/CompletedCardSales. ExpectedCash ya incluye
+// + CashIn - CashOut (ver RegisterSessionService.GetClosingSummaryAsync).
 public sealed class RegisterClosingSummary
 {
     public decimal OpeningFloat { get; }
@@ -21,6 +24,10 @@ public sealed class RegisterClosingSummary
 
     public decimal GrossSales { get; }
 
+    public decimal CashIn { get; }
+
+    public decimal CashOut { get; }
+
     public decimal ExpectedCash { get; }
 
     public string Currency { get; }
@@ -30,6 +37,8 @@ public sealed class RegisterClosingSummary
         decimal completedCashSales,
         decimal completedCardSales,
         decimal grossSales,
+        decimal cashIn,
+        decimal cashOut,
         decimal expectedCash,
         string currency)
     {
@@ -39,6 +48,8 @@ public sealed class RegisterClosingSummary
         CompletedCashSales = completedCashSales;
         CompletedCardSales = completedCardSales;
         GrossSales = grossSales;
+        CashIn = cashIn;
+        CashOut = cashOut;
         ExpectedCash = expectedCash;
         Currency = currency;
     }

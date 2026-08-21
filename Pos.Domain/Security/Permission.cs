@@ -10,6 +10,7 @@ public enum Permission
     OpenRegisterSession,
     CloseRegisterSession,
     ViewCashTotals,
+    ManageCashMovements,
     ManageProducts,
     AdjustInventory,
     ViewReports,

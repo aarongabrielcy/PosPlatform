@@ -6,6 +6,7 @@ using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Bootstrap;
 using Pos.Application.Branches;
+using Pos.Application.CashMovements;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
 using Pos.Application.Common.Versioning;
@@ -78,6 +79,7 @@ public static class DependencyInjection
         services.AddScoped<IRoleRepository, EfRoleRepository>();
         services.AddScoped<IUserRepository, EfUserRepository>();
         services.AddScoped<IRegisterSessionRepository, EfRegisterSessionRepository>();
+        services.AddScoped<ICashMovementRepository, EfCashMovementRepository>();
         services.AddScoped<ICreateProductService, CreateProductService>();
         services.AddScoped<IProductManagementService, ProductManagementService>();
         services.AddScoped<IProductAuditRepository, EfProductAuditRepository>();
@@ -103,6 +105,7 @@ public static class DependencyInjection
         services.AddSingleton<InMemoryCurrentRegisterSession>();
         services.AddSingleton<ICurrentRegisterSession>(sp => sp.GetRequiredService<InMemoryCurrentRegisterSession>());
         services.AddScoped<IRegisterSessionService, RegisterSessionService>();
+        services.AddScoped<ICashMovementService, CashMovementService>();
 
         services.AddSingleton<InMemoryCurrentSalesCart>();
         services.AddSingleton<ICurrentSalesCart>(sp => sp.GetRequiredService<InMemoryCurrentSalesCart>());

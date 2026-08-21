@@ -1,5 +1,6 @@
 using Pos.Application.Authentication;
 using Pos.Application.Branches;
+using Pos.Application.CashMovements;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
 using Pos.Application.Enforcement;
@@ -33,6 +34,7 @@ public sealed class RegisterSessionService : IRegisterSessionService
     private readonly IRegisterSessionRepository _registerSessionRepository;
     private readonly IUserRepository _userRepository;
     private readonly ISaleRepository _saleRepository;
+    private readonly ICashMovementRepository _cashMovementRepository;
     private readonly IInstallationEnforcementStateService _enforcementStateService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
@@ -46,6 +48,7 @@ public sealed class RegisterSessionService : IRegisterSessionService
         IRegisterSessionRepository registerSessionRepository,
         IUserRepository userRepository,
         ISaleRepository saleRepository,
+        ICashMovementRepository cashMovementRepository,
         IInstallationEnforcementStateService enforcementStateService,
         IUnitOfWork unitOfWork,
         IClock clock)
@@ -58,6 +61,7 @@ public sealed class RegisterSessionService : IRegisterSessionService
         _registerSessionRepository = registerSessionRepository ?? throw new ArgumentNullException(nameof(registerSessionRepository));
         _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
         _saleRepository = saleRepository ?? throw new ArgumentNullException(nameof(saleRepository));
+        _cashMovementRepository = cashMovementRepository ?? throw new ArgumentNullException(nameof(cashMovementRepository));
         _enforcementStateService = enforcementStateService ?? throw new ArgumentNullException(nameof(enforcementStateService));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
@@ -329,10 +333,10 @@ public sealed class RegisterSessionService : IRegisterSessionService
 
         var now = _clock.UtcNow;
 
-        // ExpectedCash = OpeningFloat + ventas en efectivo completadas durante esta sesión de
-        // caja. No existe todavía un ledger de movimientos de caja (entradas/salidas manuales):
-        // solo se suman las ventas Cash ya persistidas, tal como exige TAREA 25A sección 23. Las
-        // ventas Card (TAREA 25C) nunca se suman: no son efectivo físico en el cajón.
+        // ExpectedCash = OpeningFloat + ventas en efectivo completadas + CashIn - CashOut durante
+        // esta sesión de caja (BASIC-CASH-01 sección 10). Las ventas Card (TAREA 25C) nunca se
+        // suman: no son efectivo físico en el cajón. CashIn/CashOut (ledger de movimientos
+        // manuales, BASIC-CASH-01) tampoco son ventas: no afectan GrossSales/CashSales/CardSales.
         var cashSalesTotal = await _saleRepository.GetCompletedCashTotalByRegisterSessionAsync(
             session.Id, cancellationToken);
         var cardSalesTotal = await _saleRepository.GetCompletedCardTotalByRegisterSessionAsync(
@@ -342,7 +346,12 @@ public sealed class RegisterSessionService : IRegisterSessionService
         // además de Cash/Card, así que derivarlo de los desgloses por método subcontaría/duplicaría.
         var grossSalesTotal = await _saleRepository.GetCompletedGrossTotalByRegisterSessionAsync(
             session.Id, cancellationToken);
-        var expectedCash = new Money(session.OpeningFloat.Amount + cashSalesTotal, session.OpeningFloat.Currency);
+        var cashInTotal = await _cashMovementRepository.GetCashInTotalByRegisterSessionAsync(
+            session.Id, cancellationToken);
+        var cashOutTotal = await _cashMovementRepository.GetCashOutTotalByRegisterSessionAsync(
+            session.Id, cancellationToken);
+        var expectedCash = new Money(
+            session.OpeningFloat.Amount + cashSalesTotal + cashInTotal - cashOutTotal, session.OpeningFloat.Currency);
 
         try
         {
@@ -369,6 +378,8 @@ public sealed class RegisterSessionService : IRegisterSessionService
             cashSalesTotal,
             cardSalesTotal,
             grossSalesTotal,
+            cashInTotal,
+            cashOutTotal,
             session.CountedCash!.Amount,
             session.ExpectedCash!.Amount,
             session.CashDifference!.Amount,
@@ -422,13 +433,19 @@ public sealed class RegisterSessionService : IRegisterSessionService
             session.Id, cancellationToken);
         var grossSalesTotal = await _saleRepository.GetCompletedGrossTotalByRegisterSessionAsync(
             session.Id, cancellationToken);
+        var cashInTotal = await _cashMovementRepository.GetCashInTotalByRegisterSessionAsync(
+            session.Id, cancellationToken);
+        var cashOutTotal = await _cashMovementRepository.GetCashOutTotalByRegisterSessionAsync(
+            session.Id, cancellationToken);
 
         var summary = new RegisterClosingSummary(
             session.OpeningFloat.Amount,
             cashSalesTotal,
             cardSalesTotal,
             grossSalesTotal,
-            session.OpeningFloat.Amount + cashSalesTotal,
+            cashInTotal,
+            cashOutTotal,
+            session.OpeningFloat.Amount + cashSalesTotal + cashInTotal - cashOutTotal,
             session.OpeningFloat.Currency);
 
         return RegisterClosingSummaryResult.SuccessResult(summary);

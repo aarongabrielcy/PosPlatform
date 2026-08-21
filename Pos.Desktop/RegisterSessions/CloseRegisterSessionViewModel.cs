@@ -68,6 +68,12 @@ public sealed partial class CloseRegisterSessionViewModel : ViewModelBase
 
     public string GrossSalesAmountText => FormatAmount(_summary?.GrossSales);
 
+    // BASIC-CASH-01 (sección 22): CashIn/CashOut deben incorporarse antes de calcular Difference,
+    // visibles junto al resto del desglose — el operador nunca debe calcularlos a mano.
+    public string CashInAmountText => FormatAmount(_summary?.CashIn);
+
+    public string CashOutAmountText => FormatAmount(_summary?.CashOut);
+
     public string ExpectedAmountText => FormatAmount(_summary?.ExpectedCash);
 
     public string ClosingAmountText
@@ -158,6 +164,8 @@ public sealed partial class CloseRegisterSessionViewModel : ViewModelBase
             OnPropertyChanged(nameof(CashSalesAmountText));
             OnPropertyChanged(nameof(CardSalesAmountText));
             OnPropertyChanged(nameof(GrossSalesAmountText));
+            OnPropertyChanged(nameof(CashInAmountText));
+            OnPropertyChanged(nameof(CashOutAmountText));
             OnPropertyChanged(nameof(ExpectedAmountText));
             OnPropertyChanged(nameof(DifferenceText));
             IsBusy = false;

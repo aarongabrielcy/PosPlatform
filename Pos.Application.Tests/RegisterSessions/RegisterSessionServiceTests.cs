@@ -2,10 +2,12 @@ using Pos.Application.Authentication;
 using Pos.Application.Enforcement;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Tests.Bootstrap;
+using Pos.Application.Tests.CashMovements;
 using Pos.Application.Tests.Common.Time;
 using Pos.Application.Tests.Enforcement;
 using FakeSaleRepository = Pos.Application.Tests.Sales.CompleteSale.FakeSaleRepository;
 using Pos.Domain.Branches;
+using Pos.Domain.CashMovements;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Common.ValueObjects;
 using Pos.Domain.Organizations;
@@ -555,6 +557,118 @@ public class RegisterSessionServiceTests
         Assert.Equal(100m, result.Summary!.ExpectedAmount);
     }
 
+    // ---------- CloseAsync: ExpectedCash incluye CashIn/CashOut (BASIC-CASH-01, secciones 10/35-38) ----------
+
+    // OpeningAmount=500, CashSales=200, CashIn=100 -> ExpectedCash=800. CashIn nunca incrementa
+    // GrossSales.
+    [Fact]
+    public async Task CloseAddsCashInToExpectedCashWithoutAffectingGrossSales()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        var session = fixture.SeedOpenCurrentSession(openingAmount: 500m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 200m;
+        fixture.SaleRepository.CompletedGrossTotalToReturn = 200m;
+        fixture.CashMovementRepository = new FakeCashMovementRepository(
+        [
+            CashMovement.CreateCashIn(
+                CashMovementId.New(), session.Id, fixture.User.Id, new Money(100m, "MXN"), "Reposición", FixedNow),
+        ]);
+        var service = fixture.BuildService();
+
+        var result = await service.CloseAsync(new CloseRegisterSessionRequest(800m));
+
+        Assert.True(result.Success);
+        Assert.Equal(800m, result.Summary!.ExpectedAmount);
+        Assert.Equal(200m, result.Summary.GrossSales);
+        Assert.Equal(200m, result.Summary.CashSales);
+        Assert.Equal(100m, result.Summary.CashIn);
+        Assert.Equal(0m, result.Summary.CashOut);
+        Assert.Equal(0m, result.Summary.Difference);
+    }
+
+    // OpeningAmount=500, CashSales=300, CashOut=200 -> ExpectedCash=600. CashOut nunca reduce
+    // GrossSales.
+    [Fact]
+    public async Task CloseSubtractsCashOutFromExpectedCashWithoutAffectingGrossSales()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        var session = fixture.SeedOpenCurrentSession(openingAmount: 500m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 300m;
+        fixture.SaleRepository.CompletedGrossTotalToReturn = 300m;
+        fixture.CashMovementRepository = new FakeCashMovementRepository(
+        [
+            CashMovement.CreateCashOut(
+                CashMovementId.New(), session.Id, fixture.User.Id, new Money(200m, "MXN"), "Pago mensajería", FixedNow),
+        ]);
+        var service = fixture.BuildService();
+
+        var result = await service.CloseAsync(new CloseRegisterSessionRequest(600m));
+
+        Assert.True(result.Success);
+        Assert.Equal(600m, result.Summary!.ExpectedAmount);
+        Assert.Equal(300m, result.Summary.GrossSales);
+        Assert.Equal(200m, result.Summary.CashOut);
+        Assert.Equal(0m, result.Summary.Difference);
+    }
+
+    // Escenario combinado: OpeningAmount=500, CashSales=800, CardSales=300, CashIn=100, CashOut=200
+    // -> ExpectedCash=1200, GrossSales=1100 (CardSales contribuye a GrossSales pero nunca a
+    // ExpectedCash).
+    [Fact]
+    public async Task CloseCombinesCashSalesCardSalesCashInAndCashOutCorrectly()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        var session = fixture.SeedOpenCurrentSession(openingAmount: 500m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 800m;
+        fixture.SaleRepository.CompletedCardTotalToReturn = 300m;
+        fixture.SaleRepository.CompletedGrossTotalToReturn = 1100m;
+        fixture.CashMovementRepository = new FakeCashMovementRepository(
+        [
+            CashMovement.CreateCashIn(
+                CashMovementId.New(), session.Id, fixture.User.Id, new Money(100m, "MXN"), "Reposición", FixedNow),
+            CashMovement.CreateCashOut(
+                CashMovementId.New(), session.Id, fixture.User.Id, new Money(200m, "MXN"), "Pago mensajería", FixedNow),
+        ]);
+        var service = fixture.BuildService();
+
+        // ExpectedCash = 500 + 800 + 100 - 200 = 1200. ClosingAmount=1190 -> Difference=-10.
+        var result = await service.CloseAsync(new CloseRegisterSessionRequest(1190m));
+
+        Assert.True(result.Success);
+        Assert.Equal(1200m, result.Summary!.ExpectedAmount);
+        Assert.Equal(1100m, result.Summary.GrossSales);
+        Assert.Equal(300m, result.Summary.CardSales);
+        Assert.Equal(-10m, result.Summary.Difference);
+    }
+
+    // Mismo escenario combinado, pero ClosingAmount=1210 -> Difference=+10 (sección 38).
+    [Fact]
+    public async Task ClosePositiveDifferenceWithCashInAndCashOutInTheMix()
+    {
+        var fixture = new Fixture();
+        fixture.AuthenticateAs(fixture.User);
+        var session = fixture.SeedOpenCurrentSession(openingAmount: 500m);
+        fixture.SaleRepository.CompletedCashTotalToReturn = 800m;
+        fixture.SaleRepository.CompletedCardTotalToReturn = 300m;
+        fixture.SaleRepository.CompletedGrossTotalToReturn = 1100m;
+        fixture.CashMovementRepository = new FakeCashMovementRepository(
+        [
+            CashMovement.CreateCashIn(
+                CashMovementId.New(), session.Id, fixture.User.Id, new Money(100m, "MXN"), "Reposición", FixedNow),
+            CashMovement.CreateCashOut(
+                CashMovementId.New(), session.Id, fixture.User.Id, new Money(200m, "MXN"), "Pago mensajería", FixedNow),
+        ]);
+        var service = fixture.BuildService();
+
+        var result = await service.CloseAsync(new CloseRegisterSessionRequest(1210m));
+
+        Assert.True(result.Success);
+        Assert.Equal(10m, result.Summary!.Difference);
+    }
+
     // ---------- Excepción de enforcement para cerrar una caja ya abierta (corrección de la tarea:
     // "Close Register" nunca debe bloquearse por Suspended/CredentialInvalid/Decommissioned,
     // solo OpenAsync sigue protegido) ----------
@@ -1015,6 +1129,7 @@ public class RegisterSessionServiceTests
             CurrentUserSession = new FakeCurrentUserSession();
             CurrentRegisterSession = new FakeCurrentRegisterSession();
             SaleRepository = new FakeSaleRepository(null);
+            CashMovementRepository = new FakeCashMovementRepository();
             EnforcementStateService = new FakeInstallationEnforcementStateService();
             UnitOfWork = new FakeUnitOfWork();
             Clock = new FakeClock(FixedNow.AddHours(1));
@@ -1046,6 +1161,8 @@ public class RegisterSessionServiceTests
 
         public FakeSaleRepository SaleRepository { get; set; }
 
+        public FakeCashMovementRepository CashMovementRepository { get; set; }
+
         public FakeInstallationEnforcementStateService EnforcementStateService { get; }
 
         public FakeUnitOfWork UnitOfWork { get; }
@@ -1070,12 +1187,14 @@ public class RegisterSessionServiceTests
                 session.OpenedByUserId, User.DisplayName, session.OpenedAtUtc,
                 session.OpeningFloat.Amount, session.OpeningFloat.Currency);
 
-        public void SeedOpenCurrentSession(decimal openingAmount)
+        public RegisterSession SeedOpenCurrentSession(decimal openingAmount)
         {
             var session = new RegisterSession(
                 RegisterSessionId.New(), Register.Id, User.Id, new Money(openingAmount, "MXN"), FixedNow);
             RegisterSessionRepository = new FakeRegisterSessionRepository([session]);
             CurrentRegisterSession.SetActiveSession(ToActiveRegisterSession(session));
+
+            return session;
         }
 
         public RegisterSessionService BuildService() =>
@@ -1088,6 +1207,7 @@ public class RegisterSessionServiceTests
                 RegisterSessionRepository,
                 UserRepository,
                 SaleRepository,
+                CashMovementRepository,
                 EnforcementStateService,
                 UnitOfWork,
                 Clock);

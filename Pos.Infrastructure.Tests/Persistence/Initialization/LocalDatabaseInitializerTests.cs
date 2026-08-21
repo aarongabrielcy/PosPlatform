@@ -66,6 +66,7 @@ public sealed class LocalDatabaseInitializerTests : IDisposable
             "administrative_notification_recipients",
             "administrative_notifications",
             "branches",
+            "cash_movements",
             "inventory_items",
             "inventory_movements",
             "organizations",
