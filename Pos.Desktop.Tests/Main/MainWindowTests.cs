@@ -13,6 +13,7 @@ using Pos.Desktop.Inventory;
 using Pos.Desktop.Main;
 using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
+using Pos.Desktop.Reports;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Sales.History;
 using Pos.Desktop.Users;
@@ -183,6 +184,7 @@ public class MainWindowTests
                     NullLogger<RegisterViewModel>.Instance),
                 new UserManagementViewModel(new FakeUserManagementService()),
                 new ProductAuditViewModel(new FakeProductAuditService()),
+                new ReportsViewModel(new Pos.Desktop.Tests.Reports.FakeOperationalReportsService(), new FakeClock(DateTimeOffset.UtcNow)),
                 new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
             _ = new MainWindow(viewModel);
 
@@ -302,6 +304,7 @@ public class MainWindowTests
                     NullLogger<RegisterViewModel>.Instance),
                 new UserManagementViewModel(new FakeUserManagementService()),
                 new ProductAuditViewModel(new FakeProductAuditService()),
+                new ReportsViewModel(new Pos.Desktop.Tests.Reports.FakeOperationalReportsService(), new FakeClock(DateTimeOffset.UtcNow)),
                 new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
             var window = new MainWindow(viewModel);
 
@@ -434,12 +437,15 @@ public class MainWindowTests
             NullLogger<RegisterViewModel>.Instance);
         var userManagementViewModel = new UserManagementViewModel(new FakeUserManagementService());
         var productAuditViewModel = new ProductAuditViewModel(new FakeProductAuditService());
+        var reportsViewModel = new ReportsViewModel(
+            new Pos.Desktop.Tests.Reports.FakeOperationalReportsService(), new FakeClock(DateTimeOffset.UtcNow));
         var notificationCenterViewModel = new NotificationCenterViewModel(new FakeAdministrativeNotificationService());
 
         return new MainWindowViewModel(
             session, registerSession, currentSalesCart, new Enforcement.FakeInstallationEnforcementStateService(),
             dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
-            inventoryViewModel, registerViewModel, userManagementViewModel, productAuditViewModel, notificationCenterViewModel);
+            inventoryViewModel, registerViewModel, userManagementViewModel, productAuditViewModel,
+            reportsViewModel, notificationCenterViewModel);
     }
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>

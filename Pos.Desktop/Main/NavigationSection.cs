@@ -14,4 +14,8 @@ public enum NavigationSection
     Settings,
     Audit,
     AuditProducts,
+    // Reportes operativos (BASIC-RPT-01): un único módulo con tabs internas (Sales Summary,
+    // Register Closures, Cash Movements, Product Sales, Low Stock, Operator Activity), no seis
+    // entradas de navegación separadas (sección 7 de la tarea).
+    Reports,
 }

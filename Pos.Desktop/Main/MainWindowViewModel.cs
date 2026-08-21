@@ -16,6 +16,7 @@ using Pos.Desktop.Dashboard;
 using Pos.Desktop.Inventory;
 using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
+using Pos.Desktop.Reports;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Sales.History;
 using Pos.Desktop.Users;
@@ -55,6 +56,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly RegisterViewModel _registerViewModel;
     private readonly UserManagementViewModel _userManagementViewModel;
     private readonly ProductAuditViewModel _productAuditViewModel;
+    private readonly ReportsViewModel _reportsViewModel;
     private readonly NotificationCenterViewModel _notificationCenterViewModel;
     private readonly AsyncRelayCommand _logoutCommand;
     private readonly AsyncRelayCommand _closeRegisterCommand;
@@ -91,6 +93,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         RegisterViewModel registerViewModel,
         UserManagementViewModel userManagementViewModel,
         ProductAuditViewModel productAuditViewModel,
+        ReportsViewModel reportsViewModel,
         NotificationCenterViewModel notificationCenterViewModel)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -105,6 +108,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         _registerViewModel = registerViewModel ?? throw new ArgumentNullException(nameof(registerViewModel));
         _userManagementViewModel = userManagementViewModel ?? throw new ArgumentNullException(nameof(userManagementViewModel));
         _productAuditViewModel = productAuditViewModel ?? throw new ArgumentNullException(nameof(productAuditViewModel));
+        _reportsViewModel = reportsViewModel ?? throw new ArgumentNullException(nameof(reportsViewModel));
         _notificationCenterViewModel = notificationCenterViewModel ?? throw new ArgumentNullException(nameof(notificationCenterViewModel));
 
         _logoutCommand = new AsyncRelayCommand(ExecuteLogoutAsync);
@@ -312,6 +316,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             NavigationSection.Register => _registerViewModel,
             NavigationSection.Settings => _userManagementViewModel,
             NavigationSection.AuditProducts => _productAuditViewModel,
+            NavigationSection.Reports => _reportsViewModel,
             _ => _dashboardViewModel,
         };
 
@@ -357,6 +362,13 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         if (section == NavigationSection.Settings && _userManagementViewModel.LoadCommand.CanExecute(null))
         {
             _userManagementViewModel.LoadCommand.Execute(null);
+        }
+
+        // Consulta las 6 áreas de Reportes al entrar (BASIC-RPT-01, igual patrón que
+        // Historial/Inventario/Usuarios): sin cache permanente, sin polling.
+        if (section == NavigationSection.Reports && _reportsViewModel.LoadCommand.CanExecute(null))
+        {
+            _reportsViewModel.LoadCommand.Execute(null);
         }
     }
 
@@ -477,6 +489,14 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             [
                 new NavigationItem(NavigationSection.AuditProducts, "Productos"),
             ]);
+        }
+
+        // Reportes (BASIC-RPT-01, sección 6): visible únicamente con ViewReports. Manager/
+        // Administrator lo reciben (StandardRoles/AdministrativePermissionSet); Cashier nunca
+        // (sección 29 de la tarea).
+        if (user.HasPermission(Permission.ViewReports))
+        {
+            yield return new NavigationItem(NavigationSection.Reports, "Reportes");
         }
     }
 
