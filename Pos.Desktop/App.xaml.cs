@@ -14,6 +14,7 @@ using Pos.Application.Sales.Checkout;
 using Pos.Application.SalesCart;
 using Pos.Application.Security;
 using Pos.Desktop.Activation;
+using Pos.Desktop.CashMovements;
 using Pos.Desktop.Configuration;
 using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
@@ -32,6 +33,7 @@ using Pos.Desktop.Sales.Checkout;
 using Pos.Desktop.Sales.History;
 using Pos.Desktop.Setup;
 using Pos.Desktop.Users;
+using Pos.Domain.CashMovements;
 using Pos.Domain.Common.Identifiers;
 using Pos.Infrastructure;
 using Pos.Infrastructure.Persistence.Initialization;
@@ -132,6 +134,8 @@ namespace Pos.Desktop
                         services.AddTransient<AdjustInventoryWindow>();
                         services.AddTransient<CheckoutViewModel>();
                         services.AddTransient<CheckoutWindow>();
+                        services.AddTransient<RecordCashMovementViewModel>();
+                        services.AddTransient<RecordCashMovementWindow>();
                     })
                     .Build();
 
@@ -533,6 +537,8 @@ namespace Pos.Desktop
             mainWindow.AdjustInventoryRequested += OnMainWindowAdjustInventoryRequested;
             mainWindow.NewUserRequested += OnMainWindowNewUserRequested;
             mainWindow.EditUserRequested += OnMainWindowEditUserRequested;
+            mainWindow.CashInRequested += OnMainWindowCashInRequested;
+            mainWindow.CashOutRequested += OnMainWindowCashOutRequested;
 
             MainWindow = mainWindow;
             ShutdownMode = ShutdownMode.OnMainWindowClose;
@@ -557,6 +563,8 @@ namespace Pos.Desktop
                 mainWindow.AdjustInventoryRequested -= OnMainWindowAdjustInventoryRequested;
                 mainWindow.NewUserRequested -= OnMainWindowNewUserRequested;
                 mainWindow.EditUserRequested -= OnMainWindowEditUserRequested;
+                mainWindow.CashInRequested -= OnMainWindowCashInRequested;
+                mainWindow.CashOutRequested -= OnMainWindowCashOutRequested;
             }
 
             _mainWindowScope?.ServiceProvider.GetService<ICurrentSalesCart>()?.Clear();
@@ -603,6 +611,8 @@ namespace Pos.Desktop
             mainWindow.AdjustInventoryRequested -= OnMainWindowAdjustInventoryRequested;
             mainWindow.NewUserRequested -= OnMainWindowNewUserRequested;
             mainWindow.EditUserRequested -= OnMainWindowEditUserRequested;
+            mainWindow.CashInRequested -= OnMainWindowCashInRequested;
+            mainWindow.CashOutRequested -= OnMainWindowCashOutRequested;
 
             // Evita que cerrar la MainWindow actual dispare el apagado automático de
             // ShutdownMode.OnMainWindowClose antes de que OpenRegisterSessionWindow pueda mostrarse.
@@ -724,6 +734,35 @@ namespace Pos.Desktop
             if (editUserWindow.AnyChangeApplied)
             {
                 mainWindow.ApplyUserChanged();
+            }
+        }
+
+        // Muestra RecordCashMovementWindow sobre MainWindow (que permanece abierta como owner),
+        // configurada para "Entrada de efectivo" (BASIC-CASH-01, sección 19-20). Un movimiento
+        // registrado con éxito refresca el historial de Caja; cancelar o cerrar con la X no tiene
+        // efecto alguno.
+        private void OnMainWindowCashInRequested(object? sender, EventArgs e) =>
+            ShowRecordCashMovementWindow(sender, CashMovementType.CashIn);
+
+        // Igual patrón que OnMainWindowCashInRequested, pero para "Salida de efectivo".
+        private void OnMainWindowCashOutRequested(object? sender, EventArgs e) =>
+            ShowRecordCashMovementWindow(sender, CashMovementType.CashOut);
+
+        private void ShowRecordCashMovementWindow(object? sender, CashMovementType type)
+        {
+            if (_mainWindowScope is null || sender is not MainWindow mainWindow)
+            {
+                return;
+            }
+
+            var recordWindow = _mainWindowScope.ServiceProvider.GetRequiredService<RecordCashMovementWindow>();
+            recordWindow.Owner = mainWindow;
+            recordWindow.Load(type);
+            var dialogResult = recordWindow.ShowDialog();
+
+            if (dialogResult == true)
+            {
+                mainWindow.ApplyCashMovementRecorded();
             }
         }
 

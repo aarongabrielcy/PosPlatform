@@ -120,6 +120,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         _productsViewModel.AuditRequested += OnProductsAuditRequested;
         _inventoryViewModel.AdjustInventoryRequested += OnInventoryAdjustInventoryRequested;
         _registerViewModel.CloseRegisterRequested += OnRegisterViewCloseRegisterRequested;
+        _registerViewModel.CashInRequested += OnRegisterViewCashInRequested;
+        _registerViewModel.CashOutRequested += OnRegisterViewCashOutRequested;
         _userManagementViewModel.NewUserRequested += OnUserManagementNewUserRequested;
         _userManagementViewModel.EditUserRequested += OnUserManagementEditUserRequested;
         _notificationCenterViewModel.OpenNotificationRequested += OnNotificationCenterOpenNotificationRequested;
@@ -171,6 +173,12 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     public event EventHandler? NewUserRequested;
 
     public event EventHandler<UserId>? EditUserRequested;
+
+    // Igual patrón que CloseRegisterRequested, pero para RecordCashMovementWindow (BASIC-CASH-01,
+    // sección 19-20): un único origen posible (RegisterViewModel).
+    public event EventHandler? CashInRequested;
+
+    public event EventHandler? CashOutRequested;
 
     public ICommand LogoutCommand => _logoutCommand;
 
@@ -328,6 +336,13 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         if (section == NavigationSection.Inventory && _inventoryViewModel.LoadCommand.CanExecute(null))
         {
             _inventoryViewModel.LoadCommand.Execute(null);
+        }
+
+        // Refresca el historial de movimientos de caja al entrar a Caja (BASIC-CASH-01, sección
+        // 21): sin cache permanente, mismo patrón que el resto de LoadCommand por sección.
+        if (section == NavigationSection.Register && _registerViewModel.RefreshMovementsCommand.CanExecute(null))
+        {
+            _registerViewModel.RefreshMovementsCommand.Execute(null);
         }
 
         // Consulta la DB al entrar a Historial (TAREA 25B, sección 33): sin cache permanente, sin
@@ -497,6 +512,12 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private void OnRegisterViewCloseRegisterRequested(object? sender, EventArgs e) =>
         _closeRegisterCommand.Execute(null);
 
+    private void OnRegisterViewCashInRequested(object? sender, EventArgs e) =>
+        CashInRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnRegisterViewCashOutRequested(object? sender, EventArgs e) =>
+        CashOutRequested?.Invoke(this, EventArgs.Empty);
+
     private void OnUserManagementNewUserRequested(object? sender, EventArgs e) =>
         NewUserRequested?.Invoke(this, EventArgs.Empty);
 
@@ -627,6 +648,16 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         if (_userManagementViewModel.LoadCommand.CanExecute(null))
         {
             _userManagementViewModel.LoadCommand.Execute(null);
+        }
+    }
+
+    // Llamado desde App.xaml.cs tras cerrar RecordCashMovementWindow con un movimiento registrado
+    // con éxito (BASIC-CASH-01, sección 20-21): refresca el historial de movimientos de Caja.
+    public void ApplyCashMovementRecorded()
+    {
+        if (_registerViewModel.RefreshMovementsCommand.CanExecute(null))
+        {
+            _registerViewModel.RefreshMovementsCommand.Execute(null);
         }
     }
 

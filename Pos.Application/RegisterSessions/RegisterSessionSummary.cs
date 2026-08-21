@@ -25,6 +25,12 @@ public sealed class RegisterSessionSummary
 
     public decimal GrossSales { get; }
 
+    // BASIC-CASH-01 (sección 11): CashIn/CashOut nunca son ventas, no afectan GrossSales; solo
+    // entran en ExpectedAmount (ExpectedAmount = OpeningAmount + CashSales + CashIn - CashOut).
+    public decimal CashIn { get; }
+
+    public decimal CashOut { get; }
+
     public decimal ClosingAmount { get; }
 
     public decimal ExpectedAmount { get; }
@@ -43,6 +49,8 @@ public sealed class RegisterSessionSummary
         decimal cashSales,
         decimal cardSales,
         decimal grossSales,
+        decimal cashIn,
+        decimal cashOut,
         decimal closingAmount,
         decimal expectedAmount,
         decimal difference,
@@ -62,6 +70,8 @@ public sealed class RegisterSessionSummary
         CashSales = cashSales;
         CardSales = cardSales;
         GrossSales = grossSales;
+        CashIn = cashIn;
+        CashOut = cashOut;
         ClosingAmount = closingAmount;
         ExpectedAmount = expectedAmount;
         Difference = difference;

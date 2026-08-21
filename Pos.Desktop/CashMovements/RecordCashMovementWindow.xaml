@@ -1,0 +1,65 @@
+<Window x:Class="Pos.Desktop.CashMovements.RecordCashMovementWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Movimiento de caja — PosPlatform"
+        Height="360" Width="420"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    </Window.Resources>
+    <Grid Margin="32" IsEnabled="{Binding IsNotBusy}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                    Text="{Binding Title}"
+                    FontSize="20" FontWeight="Bold" Margin="0,0,0,16" />
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="160" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Label Grid.Row="0" Grid.Column="0" Content="Monto" Target="{Binding ElementName=AmountTextBox}" />
+            <TextBox x:Name="AmountTextBox" Grid.Row="0" Grid.Column="1"
+                    Margin="0,6" Padding="6,4" TabIndex="0"
+                    Text="{Binding AmountText, UpdateSourceTrigger=PropertyChanged}" />
+
+            <Label Grid.Row="1" Grid.Column="0" Content="Motivo" Target="{Binding ElementName=ReasonTextBox}" />
+            <TextBox x:Name="ReasonTextBox" Grid.Row="1" Grid.Column="1"
+                    Margin="0,6" Padding="6,4" TabIndex="1"
+                    TextWrapping="Wrap" AcceptsReturn="True" Height="60"
+                    Text="{Binding ReasonText, UpdateSourceTrigger=PropertyChanged}" />
+        </Grid>
+
+        <TextBlock Grid.Row="2" Text="{Binding GeneralError}"
+                    Foreground="Red" TextWrapping="Wrap" Margin="0,12,0,0" />
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,8,0,0"
+                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}">
+            <ProgressBar IsIndeterminate="True" Width="160" Height="6" VerticalAlignment="Center" />
+            <TextBlock Text="Registrando…" Margin="8,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Cancelar" Width="120" Margin="0,0,8,0" TabIndex="3"
+                    Command="{Binding CancelCommand}" />
+            <Button Content="{Binding ConfirmButtonText}" Width="150" TabIndex="2"
+                    IsDefault="True" Command="{Binding ConfirmCommand}" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,4 +1,5 @@
 using System.Linq;
+using Microsoft.Extensions.Logging.Abstractions;
 using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Enforcement;
@@ -261,7 +262,9 @@ public class MainWindowViewModelTests
         var currentSalesCart = new FakeCurrentSalesCart();
         currentSalesCart.SetSnapshot(new SalesCartSnapshot(
             [new SalesCartLine(ProductId.New(), "SKU-001", "Agua 1L", 1m, 10m, 10m, "MXN", 5m, true)], "MXN"));
-        var registerViewModel = new RegisterViewModel(new FakeCurrentRegisterSession());
+        var registerViewModel = new RegisterViewModel(
+            new FakeCurrentRegisterSession(), new FakeCurrentUserSession(),
+            new Pos.Desktop.Tests.Register.FakeCashMovementService(), NullLogger<RegisterViewModel>.Instance);
         var viewModel = CreateViewModel(currentSalesCart: currentSalesCart, registerViewModel: registerViewModel);
 
         var raised = false;
@@ -952,7 +955,9 @@ public class MainWindowViewModelTests
         salesHistoryViewModel ??= new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
         productsViewModel ??= new ProductsViewModel(new CatalogFakeProductManagementService(), session);
         inventoryViewModel ??= new InventoryViewModel(new FakeInventoryService(), session);
-        registerViewModel ??= new RegisterViewModel(registerSession);
+        registerViewModel ??= new RegisterViewModel(
+            registerSession, session, new Pos.Desktop.Tests.Register.FakeCashMovementService(),
+            NullLogger<RegisterViewModel>.Instance);
         var userManagementViewModel = new UserManagementViewModel(new FakeUserManagementService());
         var productAuditViewModel = new ProductAuditViewModel(productAuditService ?? new FakeProductAuditService());
         var notificationCenterViewModel = new NotificationCenterViewModel(notificationService ?? new FakeAdministrativeNotificationService());
