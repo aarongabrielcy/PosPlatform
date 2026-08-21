@@ -30,6 +30,11 @@ public sealed class NavigationSectionIconConverter : IValueConverter
     private static readonly Geometry AuditIcon = Geometry.Parse(
         "M3,1 H10 L13,4 V15 H3 Z M10,1 V4 H13 Z M5,7 H11 V8 H5 Z M5,10 H11 V11 H5 Z M5,4 H8 V5 H5 Z");
 
+    // Gráfica de barras simple (BASIC-RPT-01, sección 7): distinta de InventoryIcon/AuditIcon,
+    // reconocible como "reportes" sin depender únicamente del texto de la etiqueta.
+    private static readonly Geometry ReportsIcon = Geometry.Parse(
+        "M1,14 H15 V15.5 H1 Z M2,9 H5 V14 H2 Z M6.5,5 H9.5 V14 H6.5 Z M11,2 H14 V14 H11 Z");
+
     // Mismo trazo que IconHistory en Icons.xaml (TAREA 25B, sección 9): reloj/historial, ya usado
     // para "Ver movimientos de stock" en Inventario, reutilizado aquí para el ítem de navegación
     // "Historial" en vez de duplicar geometría.
@@ -53,6 +58,7 @@ public sealed class NavigationSectionIconConverter : IValueConverter
             NavigationSection.Register => RegisterIcon,
             NavigationSection.Settings => SettingsIcon,
             NavigationSection.Audit or NavigationSection.AuditProducts => AuditIcon,
+            NavigationSection.Reports => ReportsIcon,
             _ => DashboardIcon,
         };
     }

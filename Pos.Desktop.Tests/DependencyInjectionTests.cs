@@ -18,6 +18,7 @@ using Pos.Desktop.Main;
 using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
 using Pos.Desktop.RegisterSessions;
+using Pos.Desktop.Reports;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Sales.History;
 using Pos.Desktop.Setup;
@@ -84,6 +85,7 @@ public class DependencyInjectionTests
         services.AddTransient<EditUserViewModel>();
         services.AddTransient<EditUserWindow>();
         services.AddTransient<ProductAuditViewModel>();
+        services.AddTransient<ReportsViewModel>();
         services.AddTransient<NotificationCenterViewModel>();
         services.AddTransient<InitialSetupViewModel>();
         services.AddTransient<InitialSetupWindow>();

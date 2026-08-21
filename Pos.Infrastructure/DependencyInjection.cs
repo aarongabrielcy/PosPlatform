@@ -21,6 +21,7 @@ using Pos.Application.Products.CreateProduct;
 using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Registers;
+using Pos.Application.Reports;
 using Pos.Application.Sales;
 using Pos.Application.Sales.Checkout;
 using Pos.Application.Sales.History;
@@ -85,6 +86,9 @@ public static class DependencyInjection
         services.AddScoped<IProductAuditRepository, EfProductAuditRepository>();
         services.AddScoped<IProductAuditQuery, EfProductAuditQuery>();
         services.AddScoped<IProductAuditService, ProductAuditService>();
+
+        services.AddScoped<IOperationalReportsQuery, EfOperationalReportsQuery>();
+        services.AddScoped<IOperationalReportsService, OperationalReportsService>();
 
         services.AddScoped<IAdministrativeNotificationRepository, EfAdministrativeNotificationRepository>();
         services.AddScoped<IAdministrativeNotificationQuery, EfAdministrativeNotificationQuery>();

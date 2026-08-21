@@ -15,6 +15,7 @@ using Pos.Desktop.Main;
 using FakeInventoryService = Pos.Desktop.Tests.Inventory.FakeInventoryService;
 using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
+using Pos.Desktop.Reports;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Sales.History;
 using Pos.Desktop.Users;
@@ -642,6 +643,62 @@ public class MainWindowViewModelTests
         Assert.True(salesHistoryViewModel.IsShowingList);
     }
 
+    // ---------- Reportes (BASIC-RPT-01, sección 6/7) ----------
+
+    [Fact]
+    public void NavigationItemsIncludeReportsForAUserWithViewReportsPermission()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewReportsUser() };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.Reports);
+    }
+
+    // Cashier (ProcessSale + ViewSalesHistory, sin ViewReports) no debe ver Reportes: matriz
+    // congelada de la tarea, sección 6/29.
+    [Fact]
+    public void NavigationItemsExcludeReportsForACashierWithoutViewReportsPermission()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "CAJERO", "Ana Pérez", "Cajero",
+                [Permission.ProcessSale, Permission.ViewSalesHistory]),
+        };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.DoesNotContain(viewModel.NavigationItems, i => i.Section == NavigationSection.Reports);
+    }
+
+    [Fact]
+    public void SelectingReportsNavigatesToTheReportsViewModel()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewReportsUser() };
+        var viewModel = CreateViewModel(session: session);
+
+        viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Reports);
+
+        Assert.IsType<Pos.Desktop.Reports.ReportsViewModel>(viewModel.CurrentViewModel);
+    }
+
+    [Fact]
+    public void NavigatingToReportsTriggersItsLoadCommand()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateViewReportsUser() };
+        var reportsService = new Pos.Desktop.Tests.Reports.FakeOperationalReportsService();
+        var reportsViewModel = new Pos.Desktop.Reports.ReportsViewModel(reportsService, new FakeClock(DateTimeOffset.UtcNow));
+        var viewModel = CreateViewModel(session: session, reportsViewModel: reportsViewModel);
+
+        viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Reports);
+
+        Assert.Equal(1, reportsService.GetSalesSummaryCallCount);
+        Assert.Equal(1, reportsService.GetRegisterClosuresCallCount);
+        Assert.Equal(1, reportsService.GetCashMovementsCallCount);
+        Assert.Equal(1, reportsService.GetProductSalesCallCount);
+        Assert.Equal(1, reportsService.GetLowStockCallCount);
+        Assert.Equal(1, reportsService.GetOperatorActivityCallCount);
+    }
+
     // ---------- Centro de notificaciones (TAREA 24E, sección 29/30) ----------
 
     [Fact]
@@ -942,6 +999,7 @@ public class MainWindowViewModelTests
         ProductsViewModel? productsViewModel = null,
         InventoryViewModel? inventoryViewModel = null,
         RegisterViewModel? registerViewModel = null,
+        ReportsViewModel? reportsViewModel = null,
         FakeAdministrativeNotificationService? notificationService = null,
         FakeProductAuditService? productAuditService = null,
         Enforcement.FakeInstallationEnforcementStateService? enforcementStateService = null)
@@ -958,6 +1016,8 @@ public class MainWindowViewModelTests
         registerViewModel ??= new RegisterViewModel(
             registerSession, session, new Pos.Desktop.Tests.Register.FakeCashMovementService(),
             NullLogger<RegisterViewModel>.Instance);
+        reportsViewModel ??= new ReportsViewModel(
+            new Pos.Desktop.Tests.Reports.FakeOperationalReportsService(), new FakeClock(DateTimeOffset.UtcNow));
         var userManagementViewModel = new UserManagementViewModel(new FakeUserManagementService());
         var productAuditViewModel = new ProductAuditViewModel(productAuditService ?? new FakeProductAuditService());
         var notificationCenterViewModel = new NotificationCenterViewModel(notificationService ?? new FakeAdministrativeNotificationService());
@@ -965,7 +1025,8 @@ public class MainWindowViewModelTests
         return new MainWindowViewModel(
             session, registerSession, currentSalesCart, enforcementStateService,
             dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
-            inventoryViewModel, registerViewModel, userManagementViewModel, productAuditViewModel, notificationCenterViewModel);
+            inventoryViewModel, registerViewModel, userManagementViewModel, productAuditViewModel,
+            reportsViewModel, notificationCenterViewModel);
     }
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>

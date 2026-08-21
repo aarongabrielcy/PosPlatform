@@ -15,6 +15,7 @@
         xmlns:users="clr-namespace:Pos.Desktop.Users"
         xmlns:auditProducts="clr-namespace:Pos.Desktop.Audit.Products"
         xmlns:notifications="clr-namespace:Pos.Desktop.AdministrativeNotifications"
+        xmlns:reports="clr-namespace:Pos.Desktop.Reports"
         mc:Ignorable="d"
         Title="PosPlatform" Height="768" Width="1366" MinHeight="720" MinWidth="1280"
         WindowStartupLocation="CenterScreen">
@@ -51,6 +52,9 @@
             </DataTemplate>
             <DataTemplate DataType="{x:Type auditProducts:ProductAuditViewModel}">
                 <auditProducts:ProductAuditView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type reports:ReportsViewModel}">
+                <reports:ReportsView />
             </DataTemplate>
 
             <!-- Ítem del sidebar: icono siempre visible + texto/ToolTip. El texto se oculta con

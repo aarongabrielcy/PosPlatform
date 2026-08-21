@@ -1,0 +1,415 @@
+<UserControl x:Class="Pos.Desktop.Reports.ReportsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="760" d:DesignWidth="1200">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Pos.Desktop;component/Themes/AppColors.xaml" />
+                <ResourceDictionary Source="/Pos.Desktop;component/Themes/Icons.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+
+            <Style x:Key="FilterLabelStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Margin" Value="0,0,0,4" />
+            </Style>
+
+            <Style x:Key="DetailLabelStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}" />
+                <Setter Property="FontSize" Value="12" />
+            </Style>
+
+            <Style x:Key="DetailValueStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource PrimaryTextBrush}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Margin" Value="0,0,0,12" />
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid Background="{StaticResource AppBackgroundBrush}" Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="Reportes" Style="{StaticResource PageTitleStyle}" />
+            <TextBlock Text="Reportes operativos de ventas, caja e inventario para el período seleccionado." Style="{StaticResource PageSubtitleStyle}" />
+        </StackPanel>
+
+        <!-- Filtro común Desde/Hasta (sección 8 de la tarea): aplica a todas las pestañas salvo
+             Stock bajo (estado actual, sin rango de fechas - sección 16). -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="170" MinWidth="150" />
+                    <ColumnDefinition Width="170" MinWidth="150" />
+                    <ColumnDefinition Width="*" MinWidth="16" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                    <TextBlock Text="Desde" Style="{StaticResource FilterLabelStyle}" />
+                    <DatePicker x:Name="FromDatePicker" Language="es-MX" Loaded="DatePicker_Loaded"
+                                SelectedDate="{Binding FromDate}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                    <TextBlock Text="Hasta" Style="{StaticResource FilterLabelStyle}" />
+                    <DatePicker x:Name="ToDatePicker" Language="es-MX" Loaded="DatePicker_Loaded"
+                                SelectedDate="{Binding ToDate}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <Button x:Name="ClearFiltersButton" Content="Limpiar filtros" Style="{StaticResource SecondaryButtonStyle}"
+                            Command="{Binding ClearFiltersCommand}" />
+                </StackPanel>
+            </Grid>
+
+            <TextBlock x:Name="DateRangeErrorText" Margin="0,8,0,0" TextWrapping="Wrap"
+                       Foreground="{StaticResource DangerBrush}" Text="{Binding DateRangeError}" />
+            <TextBlock x:Name="GeneralErrorText" Margin="0,4,0,0" TextWrapping="Wrap"
+                       Foreground="{StaticResource DangerBrush}" Text="{Binding GeneralError}" />
+        </StackPanel>
+
+        <TabControl x:Name="ReportsTabControl" Grid.Row="2" SelectedIndex="{Binding SelectedTabIndex}"
+                    Background="Transparent" BorderThickness="0">
+
+            <!-- Ventas resumen (sección 9/10) -->
+            <TabItem Header="Ventas">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <UniformGrid Grid.Row="0" Rows="1" Margin="0,0,0,12">
+                        <Border Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+                            <StackPanel>
+                                <TextBlock Text="Ventas" Style="{StaticResource PageSubtitleStyle}" Margin="0" />
+                                <TextBlock Text="{Binding SummarySaleCount}" FontSize="28" FontWeight="Bold"
+                                           Foreground="{StaticResource PrimaryTextBrush}" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+                            <StackPanel>
+                                <TextBlock Text="Total vendido" Style="{StaticResource PageSubtitleStyle}" Margin="0" />
+                                <TextBlock Text="{Binding SummaryGrossSalesText}" FontSize="24" FontWeight="Bold"
+                                           Foreground="{StaticResource SuccessBrush}" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+                            <StackPanel>
+                                <TextBlock Text="Efectivo" Style="{StaticResource PageSubtitleStyle}" Margin="0" />
+                                <TextBlock Text="{Binding SummaryCashSalesText}" FontSize="20" FontWeight="Bold"
+                                           Foreground="{StaticResource PrimaryTextBrush}" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="Tarjeta" Style="{StaticResource PageSubtitleStyle}" Margin="0" />
+                                <TextBlock Text="{Binding SummaryCardSalesText}" FontSize="20" FontWeight="Bold"
+                                           Foreground="{StaticResource PrimaryTextBrush}" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <TextBlock Grid.Row="1" TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}"
+                               Text="{Binding SalesSummaryStatusMessage}" />
+                </Grid>
+            </TabItem>
+
+            <!-- Cierres de caja (RPT-CASH-01, sección 11/12) -->
+            <TabItem Header="Cierres de caja">
+                <Grid Margin="0,12,0,0">
+
+                    <!-- LISTA -->
+                    <Grid Visibility="{Binding IsShowingClosureList, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Margin="0,0,0,8" TextWrapping="Wrap"
+                                   Foreground="{StaticResource SecondaryTextBrush}" Text="{Binding RegisterClosuresStatusMessage}" />
+
+                        <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="0">
+                            <DataGrid x:Name="RegisterClosuresGrid" BorderThickness="0" Background="Transparent"
+                                      ItemsSource="{Binding RegisterClosures}" SelectedItem="{Binding SelectedClosure}"
+                                      AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                                      SelectionMode="Single" SelectionUnit="FullRow">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Caja" Binding="{Binding RegisterName}" Width="110" MinWidth="100" />
+                                    <DataGridTextColumn Header="Apertura" Binding="{Binding OpenedAtLocalText}" Width="140" MinWidth="130" />
+                                    <DataGridTextColumn Header="Cierre" Binding="{Binding ClosedAtLocalText}" Width="140" MinWidth="130" />
+                                    <DataGridTextColumn Header="Abierta por" Binding="{Binding OpenedByDisplayName}" Width="120" MinWidth="110" />
+                                    <DataGridTextColumn Header="Cerrada por" Binding="{Binding ClosedByDisplayName}" Width="120" MinWidth="110" />
+                                    <DataGridTextColumn Header="Fondo inicial" Binding="{Binding OpeningFloatText}" Width="110" MinWidth="100" />
+                                    <DataGridTextColumn Header="Esperado" Binding="{Binding ExpectedCashText}" Width="110" MinWidth="100" />
+                                    <DataGridTextColumn Header="Contado" Binding="{Binding CountedCashText}" Width="110" MinWidth="100" />
+                                    <DataGridTextColumn Header="Diferencia" Binding="{Binding DifferenceText}" Width="110" MinWidth="100" />
+                                    <DataGridTemplateColumn Header="Acciones" Width="70" MinWidth="60">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource TableIconButtonStyle}"
+                                                        ToolTip="Ver detalle"
+                                                        AutomationProperties.Name="Ver detalle"
+                                                        Command="{Binding DataContext.OpenClosureDetailCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        CommandParameter="{Binding}">
+                                                    <Path Width="16" Height="16" Stretch="Uniform"
+                                                          Fill="{StaticResource PrimaryTextBrush}" Data="{StaticResource IconHistory}" />
+                                                </Button>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
+                    </Grid>
+
+                    <!-- DETALLE: reconciliación de efectivo separada de las ventas (sección 12). -->
+                    <Grid Visibility="{Binding IsShowingClosureDetail, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+                            <Button Content="&#8592; Volver a cierres" Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding CloseClosureDetailCommand}" />
+                        </StackPanel>
+
+                        <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="0,0,0,16" DataContext="{Binding SelectedClosureDetail}">
+                            <UniformGrid Rows="1">
+                                <StackPanel Margin="0,0,12,0">
+                                    <TextBlock Text="Caja" Style="{StaticResource DetailLabelStyle}" />
+                                    <TextBlock Text="{Binding RegisterName}" Style="{StaticResource DetailValueStyle}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,0">
+                                    <TextBlock Text="Apertura" Style="{StaticResource DetailLabelStyle}" />
+                                    <TextBlock Text="{Binding OpenedAtLocalText}" Style="{StaticResource DetailValueStyle}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,0">
+                                    <TextBlock Text="Cierre" Style="{StaticResource DetailLabelStyle}" />
+                                    <TextBlock Text="{Binding ClosedAtLocalText}" Style="{StaticResource DetailValueStyle}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,12,0">
+                                    <TextBlock Text="Abierta por" Style="{StaticResource DetailLabelStyle}" />
+                                    <TextBlock Text="{Binding OpenedByDisplayName}" Style="{StaticResource DetailValueStyle}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="Cerrada por" Style="{StaticResource DetailLabelStyle}" />
+                                    <TextBlock Text="{Binding ClosedByDisplayName}" Style="{StaticResource DetailValueStyle}" />
+                                </StackPanel>
+                            </UniformGrid>
+                        </Border>
+
+                        <!-- Reconciliación de efectivo (nunca mezclada con las ventas, sección 12). -->
+                        <Border Grid.Row="2" Style="{StaticResource CardStyle}" Margin="0,0,0,16" DataContext="{Binding SelectedClosureDetail}">
+                            <StackPanel>
+                                <TextBlock Text="Reconciliación de efectivo" FontWeight="Bold" FontSize="14" Margin="0,0,0,12"
+                                           Foreground="{StaticResource PrimaryTextBrush}" />
+                                <Grid HorizontalAlignment="Left" MinWidth="320">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" MinWidth="180" />
+                                        <ColumnDefinition Width="Auto" MinWidth="140" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Fondo inicial" Margin="0,0,24,6" Foreground="{StaticResource SecondaryTextBrush}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding OpeningFloatText}" Margin="0,0,0,6" HorizontalAlignment="Right" Foreground="{StaticResource PrimaryTextBrush}" />
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="+ Entradas de efectivo" Margin="0,0,24,6" Foreground="{StaticResource SecondaryTextBrush}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CashInText}" Margin="0,0,0,6" HorizontalAlignment="Right" Foreground="{StaticResource PrimaryTextBrush}" />
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="- Salidas de efectivo" Margin="0,0,24,6" Foreground="{StaticResource SecondaryTextBrush}" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CashOutText}" Margin="0,0,0,6" HorizontalAlignment="Right" Foreground="{StaticResource PrimaryTextBrush}" />
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="= Efectivo esperado" Margin="0,0,24,12" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" />
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ExpectedCashText}" Margin="0,0,0,12" HorizontalAlignment="Right" FontWeight="Bold" Foreground="{StaticResource PrimaryTextBrush}" />
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Efectivo contado" Margin="0,0,24,6" Foreground="{StaticResource SecondaryTextBrush}" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding CountedCashText}" Margin="0,0,0,6" HorizontalAlignment="Right" Foreground="{StaticResource PrimaryTextBrush}" />
+
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Diferencia" Margin="0,0,24,0" FontWeight="Bold" FontSize="16" Foreground="{StaticResource PrimaryTextBrush}" />
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding DifferenceText}" HorizontalAlignment="Right" FontWeight="Bold" FontSize="16" Foreground="{StaticResource PrimaryTextBrush}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Ventas: nunca mezcladas con el balance del cajón (sección 12). -->
+                        <Border Grid.Row="3" Style="{StaticResource CardStyle}" DataContext="{Binding SelectedClosureDetail}">
+                            <StackPanel>
+                                <TextBlock Text="Ventas" FontWeight="Bold" FontSize="14" Margin="0,0,0,12"
+                                           Foreground="{StaticResource PrimaryTextBrush}" />
+                                <UniformGrid Rows="1">
+                                    <StackPanel Margin="0,0,12,0">
+                                        <TextBlock Text="Efectivo" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock Text="{Binding CashSalesText}" Style="{StaticResource DetailValueStyle}" />
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,12,0">
+                                        <TextBlock Text="Tarjeta" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock Text="{Binding CardSalesText}" Style="{StaticResource DetailValueStyle}" />
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Text="Total vendido" Style="{StaticResource DetailLabelStyle}" />
+                                        <TextBlock Text="{Binding GrossSalesText}" Style="{StaticResource DetailValueStyle}" FontSize="16" />
+                                    </StackPanel>
+                                </UniformGrid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- Movimientos de caja (sección 13) -->
+            <TabItem Header="Movimientos de caja">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <UniformGrid Grid.Row="0" Rows="1" Margin="0,0,0,12">
+                        <Border Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+                            <StackPanel>
+                                <TextBlock Text="Total entradas" Style="{StaticResource PageSubtitleStyle}" Margin="0" />
+                                <TextBlock Text="{Binding CashInTotalText}" FontSize="20" FontWeight="Bold"
+                                           Foreground="{StaticResource SuccessBrush}" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <TextBlock Text="Total salidas" Style="{StaticResource PageSubtitleStyle}" Margin="0" />
+                                <TextBlock Text="{Binding CashOutTotalText}" FontSize="20" FontWeight="Bold"
+                                           Foreground="{StaticResource DangerBrush}" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <TextBlock Grid.Row="1" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Foreground="{StaticResource SecondaryTextBrush}" Text="{Binding CashMovementsStatusMessage}" />
+
+                    <Border Grid.Row="2" Style="{StaticResource CardStyle}" Padding="0">
+                        <DataGrid x:Name="CashMovementsGrid" BorderThickness="0" Background="Transparent"
+                                  ItemsSource="{Binding CashMovements}"
+                                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                                  SelectionMode="Single" SelectionUnit="FullRow">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Fecha/Hora" Binding="{Binding CreatedAtLocalText}" Width="140" MinWidth="130" />
+                                <DataGridTextColumn Header="Tipo" Binding="{Binding TypeText}" Width="90" MinWidth="80" />
+                                <DataGridTextColumn Header="Monto" Binding="{Binding AmountText}" Width="110" MinWidth="100" />
+                                <DataGridTextColumn Header="Motivo" Binding="{Binding Reason}" Width="*" MinWidth="160" />
+                                <DataGridTextColumn Header="Operador" Binding="{Binding ActorDisplayName}" Width="140" MinWidth="120" />
+                                <DataGridTextColumn Header="Caja" Binding="{Binding RegisterName}" Width="110" MinWidth="100" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- Ventas por producto (sección 14) -->
+            <TabItem Header="Ventas por producto">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Foreground="{StaticResource SecondaryTextBrush}" Text="{Binding ProductSalesStatusMessage}" />
+
+                    <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="0">
+                        <DataGrid x:Name="ProductSalesGrid" BorderThickness="0" Background="Transparent"
+                                  ItemsSource="{Binding ProductSales}"
+                                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                                  SelectionMode="Single" SelectionUnit="FullRow">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120" MinWidth="100" />
+                                <DataGridTextColumn Header="Producto" Binding="{Binding ProductName}" Width="*" MinWidth="180" />
+                                <DataGridTextColumn Header="Cantidad vendida" Binding="{Binding QuantityText}" Width="140" MinWidth="120" />
+                                <DataGridTextColumn Header="Total vendido" Binding="{Binding AmountText}" Width="140" MinWidth="120" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- Stock bajo (sección 16, sin rango de fechas) -->
+            <TabItem Header="Stock bajo">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Foreground="{StaticResource SecondaryTextBrush}" Text="{Binding LowStockStatusMessage}" />
+
+                    <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="0">
+                        <DataGrid x:Name="LowStockGrid" BorderThickness="0" Background="Transparent"
+                                  ItemsSource="{Binding LowStockItems}"
+                                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                                  SelectionMode="Single" SelectionUnit="FullRow">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="SKU" Binding="{Binding Item.Sku}" Width="110" MinWidth="90" />
+                                <DataGridTextColumn Header="Producto" Binding="{Binding Item.ProductName}" Width="*" MinWidth="160" />
+                                <DataGridTextColumn Header="Existencia" Binding="{Binding Item.Quantity}" Width="100" MinWidth="90" />
+                                <DataGridTextColumn Header="Stock mínimo" Binding="{Binding Item.ReorderPoint}" Width="110" MinWidth="100" />
+                                <DataGridTextColumn Header="Estado" Binding="{Binding StockStatusText}" Width="120" MinWidth="110" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <!-- Actividad por operador (sección 17) -->
+            <TabItem Header="Actividad por operador">
+                <Grid Margin="0,12,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Margin="0,0,0,8" TextWrapping="Wrap"
+                               Foreground="{StaticResource SecondaryTextBrush}" Text="{Binding OperatorActivityStatusMessage}" />
+
+                    <Border Grid.Row="1" Style="{StaticResource CardStyle}" Padding="0">
+                        <DataGrid x:Name="OperatorActivityGrid" BorderThickness="0" Background="Transparent"
+                                  ItemsSource="{Binding OperatorActivity}"
+                                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                                  SelectionMode="Single" SelectionUnit="FullRow">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Operador" Binding="{Binding DisplayName}" Width="*" MinWidth="160" />
+                                <DataGridTextColumn Header="Ventas completadas" Binding="{Binding CompletedSaleCount}" Width="150" MinWidth="130" />
+                                <DataGridTextColumn Header="Total vendido" Binding="{Binding GrossSalesText}" Width="130" MinWidth="110" />
+                                <DataGridTextColumn Header="Efectivo" Binding="{Binding CashSalesText}" Width="120" MinWidth="100" />
+                                <DataGridTextColumn Header="Tarjeta" Binding="{Binding CardSalesText}" Width="120" MinWidth="100" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</UserControl>

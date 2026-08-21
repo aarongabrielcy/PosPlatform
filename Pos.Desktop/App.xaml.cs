@@ -28,6 +28,7 @@ using Pos.Desktop.Products;
 using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
 using Pos.Desktop.RegisterSessions;
+using Pos.Desktop.Reports;
 using Pos.Desktop.Sales;
 using Pos.Desktop.Sales.Checkout;
 using Pos.Desktop.Sales.History;
@@ -117,6 +118,7 @@ namespace Pos.Desktop
                         services.AddTransient<EditUserViewModel>();
                         services.AddTransient<EditUserWindow>();
                         services.AddTransient<ProductAuditViewModel>();
+                        services.AddTransient<ReportsViewModel>();
                         services.AddTransient<NotificationCenterViewModel>();
                         services.AddTransient<InitialSetupViewModel>();
                         services.AddTransient<InitialSetupWindow>();
