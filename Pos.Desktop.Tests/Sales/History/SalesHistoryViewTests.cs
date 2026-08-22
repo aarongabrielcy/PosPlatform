@@ -57,7 +57,7 @@ public class SalesHistoryViewTests
         var saleId = SaleId.New();
         var detail = CreateDetail(saleId);
         var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         var row = new SalesHistoryRowViewModel(new SalesHistoryItem(
             saleId, Now, UserId.New(), "Ana Pérez", RegisterId.New(), "Caja 1", RegisterSessionId.New(),
             1m, 116m, "MXN", [new SalesHistoryPaymentAmount(PaymentMethod.Cash, 116m)]));

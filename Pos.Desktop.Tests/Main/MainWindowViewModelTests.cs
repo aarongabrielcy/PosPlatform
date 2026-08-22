@@ -627,7 +627,7 @@ public class MainWindowViewModelTests
     {
         var session = new FakeCurrentUserSession { CurrentUser = CreateViewReportsUser() };
         var salesHistoryService = new FakeSalesHistoryService();
-        var salesHistoryViewModel = new SalesHistoryViewModel(salesHistoryService, new FakeClock(DateTimeOffset.UtcNow));
+        var salesHistoryViewModel = new SalesHistoryViewModel(salesHistoryService, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(DateTimeOffset.UtcNow));
         var viewModel = CreateViewModel(session: session, salesHistoryViewModel: salesHistoryViewModel);
         var salesItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.Sales);
         viewModel.SelectedNavigationItem = salesItem;
@@ -1010,7 +1010,7 @@ public class MainWindowViewModelTests
         enforcementStateService ??= new Enforcement.FakeInstallationEnforcementStateService();
         dashboardViewModel ??= new DashboardViewModel(session, registerSession, currentSalesCart, new CatalogFakeProductManagementService());
         salesViewModel ??= new SalesViewModel(session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
-        salesHistoryViewModel ??= new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
+        salesHistoryViewModel ??= new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(DateTimeOffset.UtcNow));
         productsViewModel ??= new ProductsViewModel(new CatalogFakeProductManagementService(), session);
         inventoryViewModel ??= new InventoryViewModel(new FakeInventoryService(), session);
         registerViewModel ??= new RegisterViewModel(

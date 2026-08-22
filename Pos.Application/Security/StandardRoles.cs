@@ -37,6 +37,7 @@ internal static class StandardRoles
         Permission.ViewSalesHistory,
         Permission.ViewProducts,
         Permission.ViewInventory,
+        Permission.ReprintReceipt,
     ];
 
     // Ventas y caja, más lectura operativa de Historial/Productos/Inventario - NUNCA
@@ -53,5 +54,6 @@ internal static class StandardRoles
         Permission.ViewSalesHistory,
         Permission.ViewProducts,
         Permission.ViewInventory,
+        Permission.ReprintReceipt,
     ];
 }

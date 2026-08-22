@@ -9,6 +9,7 @@ using Pos.Application.Authentication;
 using Pos.Application.Enforcement;
 using Pos.Application.Inventory;
 using Pos.Application.Installation;
+using Pos.Application.Receipts;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Sales.Checkout;
 using Pos.Application.SalesCart;
@@ -36,6 +37,8 @@ using Pos.Desktop.Setup;
 using Pos.Desktop.Users;
 using Pos.Domain.CashMovements;
 using Pos.Domain.Common.Identifiers;
+using Pos.Hardware.EscPos;
+using Pos.Hardware.Printing;
 using Pos.Infrastructure;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Storage;
@@ -96,6 +99,23 @@ namespace Pos.Desktop
 
                         services.AddPosInfrastructure(activationBaseUrl);
                         services.AddHostedService<InstallationHeartbeatBackgroundService>();
+
+                        // BASIC-PRN-01: opciones leídas una sola vez al arrancar (appsettings.json +
+                        // appsettings.Local.json, ver ReceiptPrinterOptionsFactory). El formateador
+                        // ESC/POS y el transporte de spooler son singletons de Pos.Hardware; Desktop es
+                        // el único proyecto con permiso de referenciarlo y con Microsoft.Extensions.
+                        // DependencyInjection disponible (Pos.Hardware no puede tener PackageReference).
+                        var receiptPrinterOptions = ReceiptPrinterOptionsFactory.Create(context.Configuration);
+                        services.AddSingleton(receiptPrinterOptions);
+                        services.AddSingleton<IReceiptFormatter, EscPosReceiptFormatter>();
+                        services.AddSingleton<IReceiptPrinter, WindowsSpoolReceiptPrinter>();
+
+                        // IReceiptPrintingService se registra aquí (no en AddPosInfrastructure) porque
+                        // depende de IReceiptFormatter/IReceiptPrinter, exclusivos de Pos.Hardware/
+                        // Pos.Desktop: AddPosInfrastructureBuildsContainerWithScopeAndBuildValidationEnabled
+                        // (Pos.Infrastructure.Tests) exige que el contenedor de AddPosInfrastructure sea
+                        // válido por sí solo, sin depender de registros que solo aporta este proyecto.
+                        services.AddScoped<IReceiptPrintingService, ReceiptPrintingService>();
                         services.AddTransient<ActivationViewModel>();
                         services.AddTransient<ActivationWindow>();
                         services.AddTransient<SuspensionViewModel>();
@@ -772,7 +792,7 @@ namespace Pos.Desktop
         // exitoso refresca SalesViewModel (carrito ya vacío: CheckoutService lo limpió dentro de su
         // único commit) y muestra el resumen de la venta; cancelar o cerrar con la X no tiene
         // efecto alguno sobre el carrito ni la caja.
-        private void OnMainWindowCheckoutRequested(object? sender, EventArgs e)
+        private async void OnMainWindowCheckoutRequested(object? sender, EventArgs e)
         {
             if (_mainWindowScope is null || sender is not MainWindow mainWindow)
             {
@@ -797,15 +817,60 @@ namespace Pos.Desktop
                 : $"\n\nForma de pago:\nTarjeta — manual" +
                   $"\n\nReferencia/autorización:\n{summary.CardReference}";
 
+            // Impresión automática (sección 21-22 de la tarea): SIEMPRE después de que el checkout ya
+            // confirmó su commit financiero (CompletedSummary solo existe si ICheckoutService tuvo
+            // éxito). Un fallo de impresora aquí NUNCA deshace la venta ni sugiere reintentar el cobro
+            // (sección 4): solo agrega una advertencia no destructiva al mismo mensaje de éxito.
+            var printResult = await TryPrintReceiptAfterSaleAsync(summary);
+            var printWarning = ToPrintWarningText(printResult);
+
             MessageBox.Show(
                 "Venta completada correctamente." +
                 $"\n\nVenta: {summary.SaleId}" +
                 $"\n\nTotal:\n{summary.TotalAmount.ToString("N2", CultureInfo.CurrentCulture)} {summary.Currency}" +
-                paymentDetail,
+                paymentDetail +
+                printWarning,
                 "PosPlatform",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
         }
+
+        private async Task<ReceiptPrintResult> TryPrintReceiptAfterSaleAsync(CheckoutSummary summary)
+        {
+            if (_mainWindowScope is null)
+            {
+                return ReceiptPrintResult.Of(ReceiptPrintResultStatus.Skipped);
+            }
+
+            var printingService = _mainWindowScope.ServiceProvider.GetRequiredService<IReceiptPrintingService>();
+
+            decimal? cashTendered = summary.PaymentMethod == CheckoutPaymentMethod.Cash ? summary.CashTendered : null;
+            decimal? changeDue = summary.PaymentMethod == CheckoutPaymentMethod.Cash ? summary.ChangeAmount : null;
+
+            try
+            {
+                return await printingService.PrintAfterSaleAsync(summary.SaleId, cashTendered, changeDue);
+            }
+            catch (Exception ex)
+            {
+                LogReceiptPrintFailed(_mainWindowScope.ServiceProvider.GetRequiredService<ILogger<App>>(), ex);
+                return ReceiptPrintResult.Of(ReceiptPrintResultStatus.PrintFailed);
+            }
+        }
+
+        // Nunca "Venta fallida" (sección 4 de la tarea): el ticket se puede reimprimir desde
+        // Historial, así que el mensaje siempre remite ahí en vez de sugerir repetir el cobro.
+        private static string ToPrintWarningText(ReceiptPrintResult printResult) => printResult.Status switch
+        {
+            ReceiptPrintResultStatus.Success => string.Empty,
+            ReceiptPrintResultStatus.Skipped => string.Empty,
+            ReceiptPrintResultStatus.PrinterUnavailable or ReceiptPrintResultStatus.PrintFailed =>
+                "\n\nNo fue posible imprimir el ticket. Puede reimprimirlo desde Historial de ventas.",
+            _ => "\n\nNo fue posible imprimir el ticket. Puede reimprimirlo desde Historial de ventas.",
+        };
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Error inesperado al imprimir el ticket tras el cobro.")]
+        private static partial void LogReceiptPrintFailed(ILogger logger, Exception exception);
 
         protected override void OnExit(ExitEventArgs e)
         {

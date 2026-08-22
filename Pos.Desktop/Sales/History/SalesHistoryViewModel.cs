@@ -2,9 +2,12 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Input;
+using Pos.Application.Authentication;
 using Pos.Application.Common.Time;
+using Pos.Application.Receipts;
 using Pos.Application.Sales.History;
 using Pos.Desktop.Common;
+using Pos.Domain.Security;
 using Pos.Domain.Sales;
 
 namespace Pos.Desktop.Sales.History;
@@ -17,6 +20,8 @@ public sealed class SalesHistoryViewModel : ViewModelBase
     public const int PageSize = 50;
 
     private readonly ISalesHistoryService _salesHistoryService;
+    private readonly ICurrentUserSession _currentUserSession;
+    private readonly IReceiptPrintingService _receiptPrintingService;
     private readonly IClock _clock;
     private readonly TimeSpan _searchDebounceDelay;
 
@@ -28,6 +33,7 @@ public sealed class SalesHistoryViewModel : ViewModelBase
     private readonly AsyncRelayCommand _previousPageCommand;
     private readonly AsyncRelayCommand<SalesHistoryRowViewModel> _openDetailCommand;
     private readonly AsyncRelayCommand _closeDetailCommand;
+    private readonly AsyncRelayCommand _reprintCommand;
 
     private CancellationTokenSource? _searchCts;
     private bool _filterOptionsLoaded;
@@ -53,11 +59,19 @@ public sealed class SalesHistoryViewModel : ViewModelBase
     private bool _isShowingDetailRequested;
     private SaleHistoryDetailViewModel? _selectedSaleDetail;
     private SalesHistoryRowViewModel? _selectedItem;
+    private string? _reprintStatusMessage;
+    private string? _reprintErrorMessage;
 
     public SalesHistoryViewModel(
-        ISalesHistoryService salesHistoryService, IClock clock, TimeSpan? searchDebounceDelay = null)
+        ISalesHistoryService salesHistoryService,
+        ICurrentUserSession currentUserSession,
+        IReceiptPrintingService receiptPrintingService,
+        IClock clock,
+        TimeSpan? searchDebounceDelay = null)
     {
         _salesHistoryService = salesHistoryService ?? throw new ArgumentNullException(nameof(salesHistoryService));
+        _currentUserSession = currentUserSession ?? throw new ArgumentNullException(nameof(currentUserSession));
+        _receiptPrintingService = receiptPrintingService ?? throw new ArgumentNullException(nameof(receiptPrintingService));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _searchDebounceDelay = searchDebounceDelay ?? TimeSpan.FromMilliseconds(250);
 
@@ -75,6 +89,8 @@ public sealed class SalesHistoryViewModel : ViewModelBase
         _openDetailCommand = new AsyncRelayCommand<SalesHistoryRowViewModel>(
             ExecuteOpenDetailAsync, row => row is not null && !IsBusy, HandleUnexpectedError);
         _closeDetailCommand = new AsyncRelayCommand(ExecuteCloseDetailAsync, onError: HandleUnexpectedError);
+        _reprintCommand = new AsyncRelayCommand(
+            ExecuteReprintAsync, () => CanReprint && SelectedSaleDetail is not null && !IsBusy, HandleUnexpectedError);
 
         Items = new ObservableCollection<SalesHistoryRowViewModel>();
         CashierOptions = new ObservableCollection<CashierFilterOption> { CashierFilterOption.All };
@@ -96,6 +112,8 @@ public sealed class SalesHistoryViewModel : ViewModelBase
     public ICommand OpenDetailCommand => _openDetailCommand;
 
     public ICommand CloseDetailCommand => _closeDetailCommand;
+
+    public ICommand ReprintCommand => _reprintCommand;
 
     public ObservableCollection<SalesHistoryRowViewModel> Items { get; }
 
@@ -190,11 +208,29 @@ public sealed class SalesHistoryViewModel : ViewModelBase
                 _nextPageCommand.RaiseCanExecuteChanged();
                 _previousPageCommand.RaiseCanExecuteChanged();
                 _openDetailCommand.RaiseCanExecuteChanged();
+                _reprintCommand.RaiseCanExecuteChanged();
             }
         }
     }
 
     public bool IsNotBusy => !IsBusy;
+
+    // Autorización a nivel de aplicación real vive en IReceiptPrintingService.ReprintAsync (sección
+    // 26 de la tarea: "do not rely only on button Visibility"); esto solo gobierna
+    // Visibility/CanExecute del botón para no ofrecer una acción que el servicio rechazaría igual.
+    public bool CanReprint => _currentUserSession.CurrentUser?.HasPermission(Permission.ReprintReceipt) ?? false;
+
+    public string? ReprintStatusMessage
+    {
+        get => _reprintStatusMessage;
+        private set => SetProperty(ref _reprintStatusMessage, value);
+    }
+
+    public string? ReprintErrorMessage
+    {
+        get => _reprintErrorMessage;
+        private set => SetProperty(ref _reprintErrorMessage, value);
+    }
 
     public string? GeneralError
     {
@@ -550,6 +586,9 @@ public sealed class SalesHistoryViewModel : ViewModelBase
             SelectedSaleDetail = new SaleHistoryDetailViewModel(detail);
             SetIsShowingDetailRequested(true);
             GeneralError = null;
+            ReprintStatusMessage = null;
+            ReprintErrorMessage = null;
+            _reprintCommand.RaiseCanExecuteChanged();
         }
         finally
         {
@@ -563,9 +602,53 @@ public sealed class SalesHistoryViewModel : ViewModelBase
     {
         SetIsShowingDetailRequested(false);
         SelectedSaleDetail = null;
+        ReprintStatusMessage = null;
+        ReprintErrorMessage = null;
 
         return Task.CompletedTask;
     }
+
+    // Reimpreso manual desde Detalle de venta (sección 23-26 de la tarea): la autorización real
+    // ocurre dentro de IReceiptPrintingService.ReprintAsync (Application), nunca solo aquí. No muta
+    // Sale/Payment/Inventory/RegisterSession/CashMovement: es una operación de solo salida.
+    private async Task ExecuteReprintAsync()
+    {
+        if (SelectedSaleDetail is null)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        ReprintStatusMessage = null;
+        ReprintErrorMessage = null;
+
+        try
+        {
+            var result = await _receiptPrintingService.ReprintAsync(SelectedSaleDetail.Detail.SaleId.Value);
+
+            if (result.Success)
+            {
+                ReprintStatusMessage = "Ticket reimpreso.";
+                return;
+            }
+
+            ReprintErrorMessage = ToReprintErrorMessage(result.Status);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private static string ToReprintErrorMessage(ReceiptPrintResultStatus status) => status switch
+    {
+        ReceiptPrintResultStatus.Skipped => "La impresora de tickets no está configurada.",
+        ReceiptPrintResultStatus.NotAuthorized => "No tienes permiso para reimprimir tickets.",
+        ReceiptPrintResultStatus.SaleNotFound => "No fue posible reimprimir: la venta ya no está disponible.",
+        ReceiptPrintResultStatus.PrinterUnavailable or ReceiptPrintResultStatus.PrintFailed =>
+            "No fue posible imprimir el ticket. Verifica la impresora e intenta de nuevo.",
+        _ => "No fue posible reimprimir el ticket.",
+    };
 
     private static DateTimeOffset? ToStartOfDayUtc(DateTime? localDate)
     {

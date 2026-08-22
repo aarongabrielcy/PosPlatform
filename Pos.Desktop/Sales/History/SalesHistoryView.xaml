@@ -233,12 +233,29 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!-- Row 0: Volver. Fila propia, nunca superpuesta con el título "Historial de ventas"
-                 de LISTA (sección 6). -->
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
-                <Button Content="&#8592; Volver al historial" Style="{StaticResource SecondaryButtonStyle}"
+            <!-- Row 0: Volver + Reimprimir ticket (BASIC-PRN-01, sección 23/53 de la tarea). La
+                 autorización real vive en IReceiptPrintingService.ReprintAsync (Application); esto
+                 solo gobierna Visibility/CanExecute (sección 26: "not only button Visibility"). -->
+            <Grid Grid.Row="0" Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0" Content="&#8592; Volver al historial" Style="{StaticResource SecondaryButtonStyle}"
                         Command="{Binding CloseDetailCommand}" />
-            </StackPanel>
+
+                <Button Grid.Column="1" Content="Reimprimir ticket" Margin="8,0,0,0"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Visibility="{Binding CanReprint, Converter={StaticResource BoolToVisibilityConverter}}"
+                        Command="{Binding ReprintCommand}" />
+
+                <StackPanel Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding ReprintStatusMessage}" Foreground="{StaticResource SuccessBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding ReprintErrorMessage}" Foreground="{StaticResource DangerBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
 
             <!-- Row 1: Header, solo el título (sección 8: separado de la metadata). -->
             <StackPanel Grid.Row="1" Margin="0,0,0,16">
