@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Pos.Application.Activation;
 using Pos.Application.Authentication;
 using Pos.Application.Installation;
+using Pos.Application.Receipts;
 using Pos.Application.RegisterSessions;
 using Pos.Desktop.Activation;
 using Pos.Desktop.AdministrativeNotifications;
@@ -23,6 +24,8 @@ using Pos.Desktop.Sales;
 using Pos.Desktop.Sales.History;
 using Pos.Desktop.Setup;
 using Pos.Desktop.Users;
+using Pos.Hardware.EscPos;
+using Pos.Hardware.Printing;
 using Pos.Infrastructure;
 using Pos.Infrastructure.Storage;
 
@@ -62,6 +65,14 @@ public class DependencyInjectionTests
         // ValidateOnBuild pueda resolver InitialSetupViewModel/LocalDatabaseInitializer.
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<IApplicationPathProvider>(pathProvider);
+
+        // BASIC-PRN-01: mismo registro que App.xaml.cs (ver comentario allí sobre por qué
+        // IReceiptPrintingService no vive en AddPosInfrastructure). Enabled=false: construir estos
+        // servicios nunca debe tocar el spooler real de Windows durante ValidateOnBuild.
+        services.AddSingleton(new ReceiptPrinterOptions { Enabled = false });
+        services.AddSingleton<IReceiptFormatter, EscPosReceiptFormatter>();
+        services.AddSingleton<IReceiptPrinter, WindowsSpoolReceiptPrinter>();
+        services.AddScoped<IReceiptPrintingService, ReceiptPrintingService>();
 
         services.AddTransient<ActivationViewModel>();
         services.AddTransient<ActivationWindow>();

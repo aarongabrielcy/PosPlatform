@@ -1,7 +1,10 @@
+using Pos.Application.Authentication;
+using Pos.Application.Receipts;
 using Pos.Application.Sales.History;
 using Pos.Desktop.Sales.History;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Sales;
+using Pos.Domain.Security;
 
 namespace Pos.Desktop.Tests.Sales.History;
 
@@ -35,7 +38,7 @@ public class SalesHistoryViewModelTests
     [Fact]
     public void ConstructorDefaultsFromAndToDateToTodayAccordingToTheInjectedClock()
     {
-        var viewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
 
         Assert.Equal(Now.ToLocalTime().Date, viewModel.FromDate);
         Assert.Equal(Now.ToLocalTime().Date, viewModel.ToDate);
@@ -51,7 +54,7 @@ public class SalesHistoryViewModelTests
             searchPageHandler: (_, _, _, _) => Task.FromResult(new SalesHistoryPageResult([item], false)),
             summaryHandler: (_, _) => Task.FromResult(new SalesHistorySummary(
                 1, 10m, "MXN", [new SalesHistoryPaymentAmount(PaymentMethod.Cash, 10m)])));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
 
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
@@ -65,7 +68,7 @@ public class SalesHistoryViewModelTests
     [Fact]
     public async Task LoadCommandWithNoResultsSetsTheEmptyStateMessage()
     {
-        var viewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
 
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
@@ -79,7 +82,7 @@ public class SalesHistoryViewModelTests
     public async Task LoadCommandLoadsFilterOptionsOnlyOnce()
     {
         var service = new FakeSalesHistoryService();
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
 
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
@@ -99,7 +102,7 @@ public class SalesHistoryViewModelTests
         var register = new SalesHistoryRegisterOption(RegisterId.New(), "Caja 1");
         var service = new FakeSalesHistoryService(
             filterOptionsHandler: _ => Task.FromResult(new SalesHistoryFilterOptions([cashier], [register])));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
 
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
@@ -123,7 +126,7 @@ public class SalesHistoryViewModelTests
         var item = CreateItem();
         var service = new FakeSalesHistoryService(
             searchPageHandler: (_, _, _, _) => Task.FromResult(new SalesHistoryPageResult([item], false)));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now), searchDebounceDelay: TimeSpan.Zero);
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now), searchDebounceDelay: TimeSpan.Zero);
 
         viewModel.SearchText = "agua";
         await viewModel.PendingSearchTask;
@@ -147,7 +150,7 @@ public class SalesHistoryViewModelTests
 
             return Task.FromResult(new SalesHistoryPageResult([CreateItem(registerName: "Caja NUEVA")], false));
         });
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now), searchDebounceDelay: TimeSpan.Zero);
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now), searchDebounceDelay: TimeSpan.Zero);
 
         viewModel.SearchText = "a";
         var staleTask = viewModel.PendingSearchTask;
@@ -184,7 +187,7 @@ public class SalesHistoryViewModelTests
 
             return Task.FromResult(new SalesHistoryPageResult([CreateItem(registerName: "Caja FILTRO")], false));
         });
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now), searchDebounceDelay: TimeSpan.Zero);
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now), searchDebounceDelay: TimeSpan.Zero);
 
         viewModel.SearchText = "a";
         var staleTask = viewModel.PendingSearchTask;
@@ -209,7 +212,7 @@ public class SalesHistoryViewModelTests
     public async Task ChangingADateFilterResetsToPageOneAndSearchesImmediately(string property)
     {
         var service = new FakeSalesHistoryService();
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         await viewModel.PendingSearchTask;
 
         if (property == nameof(SalesHistoryViewModel.FromDate))
@@ -231,7 +234,7 @@ public class SalesHistoryViewModelTests
     public async Task ChangingSelectedPaymentMethodSearchesImmediatelyWithoutDebounce()
     {
         var service = new FakeSalesHistoryService();
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now), searchDebounceDelay: TimeSpan.FromSeconds(30));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now), searchDebounceDelay: TimeSpan.FromSeconds(30));
 
         viewModel.SelectedPaymentMethod = PaymentMethod.Card;
         await viewModel.PendingSearchTask;
@@ -244,7 +247,7 @@ public class SalesHistoryViewModelTests
     {
         var cashierId = UserId.New();
         var service = new FakeSalesHistoryService();
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
 
         viewModel.SelectedCashier = new CashierFilterOption(cashierId, "Ana Pérez");
         await viewModel.PendingSearchTask;
@@ -258,7 +261,7 @@ public class SalesHistoryViewModelTests
     public async Task FromDateAfterToDateShowsAnInlineErrorAndDoesNotQuery()
     {
         var service = new FakeSalesHistoryService();
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         await viewModel.PendingSearchTask;
         var callsBeforeInvalidRange = service.SearchPageCallCount;
 
@@ -278,7 +281,7 @@ public class SalesHistoryViewModelTests
     {
         var service = new FakeSalesHistoryService(
             searchPageHandler: (_, _, _, _) => Task.FromResult(new SalesHistoryPageResult([CreateItem()], true)));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
         await viewModel.PendingSearchTask;
@@ -295,7 +298,7 @@ public class SalesHistoryViewModelTests
     public async Task PreviousPageCommandIsANoOpOnTheFirstPage()
     {
         var service = new FakeSalesHistoryService();
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         await viewModel.PendingSearchTask;
         var callsBefore = service.SearchPageCallCount;
 
@@ -312,7 +315,7 @@ public class SalesHistoryViewModelTests
     public async Task ClearFiltersCommandRestoresDefaultsAndReloadsAtPageOne()
     {
         var service = new FakeSalesHistoryService();
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         viewModel.SearchText = "algo";
         viewModel.SelectedPaymentMethod = PaymentMethod.Card;
         await viewModel.PendingSearchTask;
@@ -341,7 +344,7 @@ public class SalesHistoryViewModelTests
             [new SaleHistoryDetailLine("SKU-001", "Agua 1L", 1m, 10m, 10m, "MXN")],
             [new SaleHistoryDetailPayment(PaymentMethod.Cash, 10m, "MXN", Now, null)]);
         var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         var row = new SalesHistoryRowViewModel(CreateItem(saleId: saleId));
 
         viewModel.OpenDetailCommand.Execute(row);
@@ -357,7 +360,7 @@ public class SalesHistoryViewModelTests
     public async Task OpenDetailCommandShowsAnErrorAndStaysInTheListWhenTheServiceReturnsNull()
     {
         var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(null));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         var row = new SalesHistoryRowViewModel(CreateItem());
 
         viewModel.OpenDetailCommand.Execute(row);
@@ -376,7 +379,7 @@ public class SalesHistoryViewModelTests
             SaleId.New(), SaleStatus.Completed, Now, Now, UserId.New(), "Ana Pérez", RegisterId.New(), "Caja 1",
             RegisterSessionId.New(), 10m, 10m, "MXN", [], []);
         var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         viewModel.SearchText = "agua";
         await viewModel.PendingSearchTask;
         var callsBeforeDetail = service.SearchPageCallCount;
@@ -398,7 +401,7 @@ public class SalesHistoryViewModelTests
     [Fact]
     public void InitialStateIsList()
     {
-        var viewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
 
         Assert.True(viewModel.IsShowingList);
         Assert.False(viewModel.IsShowingDetail);
@@ -407,7 +410,7 @@ public class SalesHistoryViewModelTests
     [Fact]
     public void InitialSelectedDetailIsNull()
     {
-        var viewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
 
         Assert.Null(viewModel.SelectedSaleDetail);
     }
@@ -418,7 +421,7 @@ public class SalesHistoryViewModelTests
     [Fact]
     public void InitialViewDoesNotRenderDetail()
     {
-        var viewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
 
         Assert.False(viewModel.IsShowingDetail && viewModel.SelectedSaleDetail is null);
         Assert.False(viewModel.IsShowingDetail);
@@ -431,7 +434,7 @@ public class SalesHistoryViewModelTests
             SaleId.New(), SaleStatus.Completed, Now, Now, UserId.New(), "Ana Pérez", RegisterId.New(), "Caja 1",
             RegisterSessionId.New(), 10m, 10m, "MXN", [], []);
         var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
 
         Assert.NotEqual(viewModel.IsShowingList, viewModel.IsShowingDetail);
         Assert.True(viewModel.IsShowingList);
@@ -456,7 +459,7 @@ public class SalesHistoryViewModelTests
             SaleId.New(), SaleStatus.Completed, Now, Now, UserId.New(), "Ana Pérez", RegisterId.New(), "Caja 1",
             RegisterSessionId.New(), 10m, 10m, "MXN", [], []);
         var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         viewModel.OpenDetailCommand.Execute(new SalesHistoryRowViewModel(CreateItem()));
         await Task.Yield();
 
@@ -475,7 +478,7 @@ public class SalesHistoryViewModelTests
             SaleId.New(), SaleStatus.Completed, Now, Now, UserId.New(), "Ana Pérez", RegisterId.New(), "Caja 1",
             RegisterSessionId.New(), 10m, 10m, "MXN", [], []);
         var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         var expectedFrom = Now.ToLocalTime().Date.AddDays(-3);
         var expectedTo = Now.ToLocalTime().Date.AddDays(-1);
         viewModel.FromDate = expectedFrom;
@@ -498,7 +501,7 @@ public class SalesHistoryViewModelTests
             SaleId.New(), SaleStatus.Completed, Now, Now, UserId.New(), "Ana Pérez", RegisterId.New(), "Caja 1",
             RegisterSessionId.New(), 10m, 10m, "MXN", [], []);
         var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now), searchDebounceDelay: TimeSpan.Zero);
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now), searchDebounceDelay: TimeSpan.Zero);
         viewModel.SearchText = "agua";
         await viewModel.PendingSearchTask;
 
@@ -517,7 +520,7 @@ public class SalesHistoryViewModelTests
             SaleId.New(), SaleStatus.Completed, Now, Now, UserId.New(), "Ana Pérez", RegisterId.New(), "Caja 1",
             RegisterSessionId.New(), 10m, 10m, "MXN", [], []);
         var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         var expectedCashier = new CashierFilterOption(UserId.New(), "Ana Pérez");
         var expectedRegister = new RegisterFilterOption(RegisterId.New(), "Caja 2");
         viewModel.SelectedCashier = expectedCashier;
@@ -544,7 +547,7 @@ public class SalesHistoryViewModelTests
         var service = new FakeSalesHistoryService(
             searchPageHandler: (_, _, _, _) => Task.FromResult(new SalesHistoryPageResult([CreateItem()], true)),
             detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
-        var viewModel = new SalesHistoryViewModel(service, new FakeClock(Now));
+        var viewModel = new SalesHistoryViewModel(service, new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(Now));
         viewModel.LoadCommand.Execute(null);
         await Task.Yield();
         await viewModel.PendingSearchTask;
@@ -559,5 +562,107 @@ public class SalesHistoryViewModelTests
         await Task.Yield();
 
         Assert.Equal(2, viewModel.CurrentPage);
+    }
+
+    // ---------- Reimprimir ticket (BASIC-PRN-01, sección 23/26/48/53 de la tarea) ----------
+
+    private static AuthenticatedUser CreateUser(params Permission[] permissions) => new(
+        UserId.New(), OrganizationId.New(), RoleId.New(), "JPEREZ", "Juan Pérez", "Cajero", permissions);
+
+    [Fact]
+    public void CanReprintIsFalseWithoutTheReprintReceiptPermission()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateUser(Permission.ViewSalesHistory) };
+        var viewModel = new SalesHistoryViewModel(
+            new FakeSalesHistoryService(), session, new FakeReceiptPrintingService(), new FakeClock(Now));
+
+        Assert.False(viewModel.CanReprint);
+    }
+
+    [Fact]
+    public void CanReprintIsTrueWithTheReprintReceiptPermission()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = CreateUser(Permission.ViewSalesHistory, Permission.ReprintReceipt),
+        };
+        var viewModel = new SalesHistoryViewModel(
+            new FakeSalesHistoryService(), session, new FakeReceiptPrintingService(), new FakeClock(Now));
+
+        Assert.True(viewModel.CanReprint);
+    }
+
+    [Fact]
+    public async Task ReprintCommandOnSuccessSetsStatusMessageAndClearsAnyPreviousError()
+    {
+        var saleId = SaleId.New();
+        var detail = new SaleHistoryDetail(
+            saleId, SaleStatus.Completed, Now, Now, UserId.New(), "Ana Pérez", RegisterId.New(), "Caja 1",
+            RegisterSessionId.New(), 10m, 10m, "MXN", [], []);
+        var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
+        var printingService = new FakeReceiptPrintingService { ReprintResultStatus = ReceiptPrintResultStatus.Success };
+        var session = new FakeCurrentUserSession { CurrentUser = CreateUser(Permission.ReprintReceipt) };
+        var viewModel = new SalesHistoryViewModel(service, session, printingService, new FakeClock(Now));
+
+        viewModel.OpenDetailCommand.Execute(new SalesHistoryRowViewModel(CreateItem(saleId: saleId)));
+        await Task.Yield();
+
+        viewModel.ReprintCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Equal("Ticket reimpreso.", viewModel.ReprintStatusMessage);
+        Assert.Null(viewModel.ReprintErrorMessage);
+        Assert.Equal(1, printingService.ReprintCallCount);
+        Assert.Equal(saleId.Value, printingService.LastReprintSaleId);
+    }
+
+    [Fact]
+    public async Task ReprintCommandOnPrinterFailureSetsErrorMessageWithoutClaimingTheSaleFailed()
+    {
+        var saleId = SaleId.New();
+        var detail = new SaleHistoryDetail(
+            saleId, SaleStatus.Completed, Now, Now, UserId.New(), "Ana Pérez", RegisterId.New(), "Caja 1",
+            RegisterSessionId.New(), 10m, 10m, "MXN", [], []);
+        var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
+        var printingService = new FakeReceiptPrintingService { ReprintResultStatus = ReceiptPrintResultStatus.PrintFailed };
+        var session = new FakeCurrentUserSession { CurrentUser = CreateUser(Permission.ReprintReceipt) };
+        var viewModel = new SalesHistoryViewModel(service, session, printingService, new FakeClock(Now));
+
+        viewModel.OpenDetailCommand.Execute(new SalesHistoryRowViewModel(CreateItem(saleId: saleId)));
+        await Task.Yield();
+
+        viewModel.ReprintCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Null(viewModel.ReprintStatusMessage);
+        Assert.NotNull(viewModel.ReprintErrorMessage);
+        Assert.DoesNotContain("fallida", viewModel.ReprintErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task OpeningDetailClearsAnyPreviousReprintMessages()
+    {
+        var saleId = SaleId.New();
+        var detail = new SaleHistoryDetail(
+            saleId, SaleStatus.Completed, Now, Now, UserId.New(), "Ana Pérez", RegisterId.New(), "Caja 1",
+            RegisterSessionId.New(), 10m, 10m, "MXN", [], []);
+        var service = new FakeSalesHistoryService(detailHandler: (_, _) => Task.FromResult<SaleHistoryDetail?>(detail));
+        var printingService = new FakeReceiptPrintingService { ReprintResultStatus = ReceiptPrintResultStatus.Success };
+        var session = new FakeCurrentUserSession { CurrentUser = CreateUser(Permission.ReprintReceipt) };
+        var viewModel = new SalesHistoryViewModel(service, session, printingService, new FakeClock(Now));
+
+        viewModel.OpenDetailCommand.Execute(new SalesHistoryRowViewModel(CreateItem(saleId: saleId)));
+        await Task.Yield();
+        viewModel.ReprintCommand.Execute(null);
+        await Task.Yield();
+        Assert.NotNull(viewModel.ReprintStatusMessage);
+
+        viewModel.CloseDetailCommand.Execute(null);
+        await Task.Yield();
+        viewModel.OpenDetailCommand.Execute(new SalesHistoryRowViewModel(CreateItem(saleId: saleId)));
+        await Task.Yield();
+
+        Assert.Null(viewModel.ReprintStatusMessage);
+        Assert.Null(viewModel.ReprintErrorMessage);
     }
 }

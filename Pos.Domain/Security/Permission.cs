@@ -20,4 +20,5 @@ public enum Permission
     ViewSalesHistory,
     ViewProducts,
     ViewInventory,
+    ReprintReceipt,
 }

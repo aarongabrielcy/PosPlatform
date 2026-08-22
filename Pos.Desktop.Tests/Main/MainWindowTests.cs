@@ -173,7 +173,7 @@ public class MainWindowTests
                 [new Pos.Application.SalesCart.SalesCartLine(ProductId.New(), "SKU-001", "Agua 1L", 1m, 10m, 10m, "MXN", 5m, true)], "MXN"));
             var dashboardViewModel = new DashboardViewModel(session, registerSession, currentSalesCart, new FakeProductManagementService());
             var salesViewModel = new SalesViewModel(session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
-            var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
+            var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(DateTimeOffset.UtcNow));
             var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService(), session);
             var viewModel = new MainWindowViewModel(
                 session, registerSession, currentSalesCart, new Enforcement.FakeInstallationEnforcementStateService(),
@@ -294,7 +294,7 @@ public class MainWindowTests
             var salesViewModel = new SalesViewModel(session, new FakeCurrentRegisterSession(), salesCartService, new FakeProductManagementService(), new FakeCurrentSalesCart());
             var dashboardViewModel = new DashboardViewModel(
                 session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), new FakeProductManagementService());
-            var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
+            var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(DateTimeOffset.UtcNow));
             var viewModel = new MainWindowViewModel(
                 session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), new Enforcement.FakeInstallationEnforcementStateService(),
                 dashboardViewModel, salesViewModel, salesHistoryViewModel,
@@ -429,7 +429,7 @@ public class MainWindowTests
             session, registerSession, currentSalesCart, new FakeProductManagementService());
         var salesViewModel = new SalesViewModel(
             session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
-        var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeClock(DateTimeOffset.UtcNow));
+        var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(DateTimeOffset.UtcNow));
         var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService(), session);
         var inventoryViewModel = new InventoryViewModel(new FakeInventoryService(), session);
         var registerViewModel = new RegisterViewModel(

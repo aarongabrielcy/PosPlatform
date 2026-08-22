@@ -70,13 +70,14 @@ public class StandardRoleSeedingServiceTests
                 Permission.ViewCashTotals, Permission.ManageCashMovements, Permission.ManageProducts,
                 Permission.AdjustInventory, Permission.ViewReports, Permission.ViewProductAudit,
                 Permission.ViewSalesHistory, Permission.ViewProducts, Permission.ViewInventory,
+                Permission.ReprintReceipt,
             ]);
         var cashierRole = new Role(
             RoleId.New(), organization.Id, "Cashier", UtcNow,
             [
                 Permission.ProcessSale, Permission.OpenCashDrawer, Permission.OpenRegisterSession,
                 Permission.CloseRegisterSession, Permission.ViewSalesHistory, Permission.ViewProducts,
-                Permission.ViewInventory,
+                Permission.ViewInventory, Permission.ReprintReceipt,
             ]);
         var organizationRepository = new FakeOrganizationRepository([organization]);
         var roleRepository = new FakeRoleRepository([managerRole, cashierRole]);
@@ -334,6 +335,7 @@ public class StandardRoleSeedingServiceTests
         Assert.True(manager.HasPermission(Permission.ViewSalesHistory));
         Assert.True(manager.HasPermission(Permission.ViewProducts));
         Assert.True(manager.HasPermission(Permission.ViewInventory));
+        Assert.True(manager.HasPermission(Permission.ReprintReceipt));
     }
 
     [Fact]
@@ -363,6 +365,7 @@ public class StandardRoleSeedingServiceTests
         Assert.True(cashier.HasPermission(Permission.ViewSalesHistory));
         Assert.True(cashier.HasPermission(Permission.ViewProducts));
         Assert.True(cashier.HasPermission(Permission.ViewInventory));
+        Assert.True(cashier.HasPermission(Permission.ReprintReceipt));
     }
 
     [Fact]
@@ -439,6 +442,42 @@ public class StandardRoleSeedingServiceTests
 
         var reconciled = await roleRepository.GetByIdAsync(administratorRoleId, CancellationToken.None);
         Assert.True(reconciled!.HasPermission(Permission.ManageCashMovements));
+    }
+
+    // BASIC-PRN-01 (sección 25/49 de la tarea): un Cashier/Manager ya persistido antes de que
+    // ReprintReceipt existiera debe ganarlo en el próximo arranque, conservando su RoleId. A
+    // diferencia de ManageCashMovements, AMBOS roles lo ganan (Cashier también puede reimprimir).
+    [Fact]
+    public async Task ReconciliationAddsReprintReceiptToBothAnExistingManagerAndCashierPreservingRoleId()
+    {
+        var organization = CreateOrganization();
+        var managerRoleId = RoleId.New();
+        var managerRole = new Role(managerRoleId, organization.Id, "Manager", UtcNow, OldManagerPermissions);
+        var cashierRoleId = RoleId.New();
+        var cashierRole = new Role(cashierRoleId, organization.Id, "Cashier", UtcNow, OldCashierPermissions);
+        var organizationRepository = new FakeOrganizationRepository([organization]);
+        var roleRepository = new FakeRoleRepository([managerRole, cashierRole]);
+        var unitOfWork = new FakeUnitOfWork();
+        var service = new StandardRoleSeedingService(
+            organizationRepository, roleRepository, unitOfWork, new Common.Time.FakeClock(UtcNow));
+
+        await service.EnsureStandardRolesExistAsync(CancellationToken.None);
+
+        var reconciledManager = await roleRepository.GetByIdAsync(managerRoleId, CancellationToken.None);
+        var reconciledCashier = await roleRepository.GetByIdAsync(cashierRoleId, CancellationToken.None);
+        Assert.Equal(managerRoleId, reconciledManager!.Id);
+        Assert.True(reconciledManager.HasPermission(Permission.ReprintReceipt));
+        Assert.Equal(cashierRoleId, reconciledCashier!.Id);
+        Assert.True(reconciledCashier.HasPermission(Permission.ReprintReceipt));
+
+        // Segunda corrida: idempotente, sin cambios ni duplicados (sección 49 de la tarea).
+        var addCallCountAfterFirstRun = roleRepository.AddCallCount;
+        var roleCountAfterFirstRun = (await roleRepository.GetByOrganizationAsync(organization.Id, CancellationToken.None)).Count;
+
+        await service.EnsureStandardRolesExistAsync(CancellationToken.None);
+
+        Assert.Equal(addCallCountAfterFirstRun, roleRepository.AddCallCount);
+        Assert.Equal(roleCountAfterFirstRun, (await roleRepository.GetByOrganizationAsync(organization.Id, CancellationToken.None)).Count);
     }
 
     private static async Task<(FakeRoleRepository RoleRepository, Organization Organization)> SeedAsync()
