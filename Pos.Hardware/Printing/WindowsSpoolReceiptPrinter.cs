@@ -13,17 +13,17 @@ public sealed class WindowsSpoolReceiptPrinter : IReceiptPrinter
 {
     private const string DocumentName = "Ticket PosPlatform";
 
-    private readonly ReceiptPrinterOptions _options;
+    private readonly IReceiptPrinterOptionsProvider _optionsProvider;
     private readonly IWinSpoolGateway _gateway;
 
-    public WindowsSpoolReceiptPrinter(ReceiptPrinterOptions options)
-        : this(options, new Win32SpoolGateway())
+    public WindowsSpoolReceiptPrinter(IReceiptPrinterOptionsProvider optionsProvider)
+        : this(optionsProvider, new Win32SpoolGateway())
     {
     }
 
-    internal WindowsSpoolReceiptPrinter(ReceiptPrinterOptions options, IWinSpoolGateway gateway)
+    internal WindowsSpoolReceiptPrinter(IReceiptPrinterOptionsProvider optionsProvider, IWinSpoolGateway gateway)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _optionsProvider = optionsProvider ?? throw new ArgumentNullException(nameof(optionsProvider));
         _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
     }
 
@@ -31,15 +31,17 @@ public sealed class WindowsSpoolReceiptPrinter : IReceiptPrinter
     {
         ArgumentNullException.ThrowIfNull(receipt);
 
-        if (!_options.Enabled || string.IsNullOrWhiteSpace(_options.PrinterName))
+        var options = _optionsProvider.Current;
+
+        if (!options.Enabled || string.IsNullOrWhiteSpace(options.PrinterName))
         {
             return Task.FromResult(PrinterOutcome.NotConfigured());
         }
 
-        return Task.FromResult(PrintCore(receipt));
+        return Task.FromResult(PrintCore(receipt, options.PrinterName!));
     }
 
-    private PrinterOutcome PrintCore(FormattedReceipt receipt)
+    private PrinterOutcome PrintCore(FormattedReceipt receipt, string printerName)
     {
         var handle = IntPtr.Zero;
         var pageStarted = false;
@@ -47,7 +49,7 @@ public sealed class WindowsSpoolReceiptPrinter : IReceiptPrinter
 
         try
         {
-            if (!_gateway.OpenPrinter(_options.PrinterName!, out handle))
+            if (!_gateway.OpenPrinter(printerName, out handle))
             {
                 return PrinterOutcome.Unavailable($"OpenPrinter falló (código {_gateway.GetLastError()}).");
             }

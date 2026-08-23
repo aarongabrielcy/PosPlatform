@@ -5,15 +5,18 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Pos.Application.Activation;
 using Pos.Application.Authentication;
+using Pos.Application.Configuration;
 using Pos.Application.Installation;
 using Pos.Application.Receipts;
 using Pos.Application.RegisterSessions;
 using Pos.Desktop.Activation;
 using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
+using Pos.Desktop.Configuration;
 using Pos.Desktop.Dashboard;
 using Pos.Desktop.Enforcement;
 using Pos.Desktop.Inventory;
+using Pos.Desktop.LocalConfiguration;
 using Pos.Desktop.Login;
 using Pos.Desktop.Main;
 using Pos.Desktop.Products.Catalog;
@@ -66,13 +69,17 @@ public class DependencyInjectionTests
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         services.AddSingleton<IApplicationPathProvider>(pathProvider);
 
-        // BASIC-PRN-01: mismo registro que App.xaml.cs (ver comentario allí sobre por qué
-        // IReceiptPrintingService no vive en AddPosInfrastructure). Enabled=false: construir estos
-        // servicios nunca debe tocar el spooler real de Windows durante ValidateOnBuild.
-        services.AddSingleton(new ReceiptPrinterOptions { Enabled = false });
+        // BASIC-PRN-01/BASIC-CFG-01: mismo registro que App.xaml.cs (ver comentario allí sobre por
+        // qué IReceiptPrintingService/ILocalSettingsService no viven en AddPosInfrastructure).
+        // Enabled=false: construir estos servicios nunca debe tocar el spooler real de Windows
+        // durante ValidateOnBuild.
+        services.AddSingleton<IReceiptPrinterOptionsProvider>(sp =>
+            new ReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = false }, sp.GetRequiredService<ILocalSettingsStore>()));
         services.AddSingleton<IReceiptFormatter, EscPosReceiptFormatter>();
         services.AddSingleton<IReceiptPrinter, WindowsSpoolReceiptPrinter>();
+        services.AddSingleton<IPrinterDiscovery, WindowsPrinterDiscovery>();
         services.AddScoped<IReceiptPrintingService, ReceiptPrintingService>();
+        services.AddScoped<ILocalSettingsService, LocalSettingsService>();
 
         services.AddTransient<ActivationViewModel>();
         services.AddTransient<ActivationWindow>();
@@ -97,6 +104,7 @@ public class DependencyInjectionTests
         services.AddTransient<EditUserWindow>();
         services.AddTransient<ProductAuditViewModel>();
         services.AddTransient<ReportsViewModel>();
+        services.AddTransient<LocalConfigurationViewModel>();
         services.AddTransient<NotificationCenterViewModel>();
         services.AddTransient<InitialSetupViewModel>();
         services.AddTransient<InitialSetupWindow>();
@@ -308,6 +316,7 @@ public class DependencyInjectionTests
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<RegisterViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<UserManagementViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<ProductAuditViewModel>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<LocalConfigurationViewModel>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<NotificationCenterViewModel>());
         });
 

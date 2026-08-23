@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Pos.Application.Activation;
 using Pos.Application.Authentication;
+using Pos.Application.Configuration;
 using Pos.Application.Enforcement;
 using Pos.Application.Inventory;
 using Pos.Application.Installation;
@@ -23,6 +24,7 @@ using Pos.Desktop.Dashboard;
 using Pos.Desktop.Enforcement;
 using Pos.Desktop.InstallationHealth;
 using Pos.Desktop.Inventory;
+using Pos.Desktop.LocalConfiguration;
 using Pos.Desktop.Login;
 using Pos.Desktop.Main;
 using Pos.Desktop.Products;
@@ -105,10 +107,17 @@ namespace Pos.Desktop
                         // ESC/POS y el transporte de spooler son singletons de Pos.Hardware; Desktop es
                         // el único proyecto con permiso de referenciarlo y con Microsoft.Extensions.
                         // DependencyInjection disponible (Pos.Hardware no puede tener PackageReference).
+                        // BASIC-CFG-01: los valores leídos de appsettings.json/appsettings.Local.json
+                        // pasan a ser solo el nivel más bajo de precedencia (sección 35 de la tarea).
+                        // IReceiptPrinterOptionsProvider.Current se recalcula en RefreshAsync (llamado
+                        // más abajo tras _host.Start(), y de nuevo tras cada Guardar exitoso en
+                        // Configuración > Impresora) combinándolos con ILocalSettingsStore.
                         var receiptPrinterOptions = ReceiptPrinterOptionsFactory.Create(context.Configuration);
-                        services.AddSingleton(receiptPrinterOptions);
+                        services.AddSingleton<IReceiptPrinterOptionsProvider>(sp =>
+                            new ReceiptPrinterOptionsProvider(receiptPrinterOptions, sp.GetRequiredService<ILocalSettingsStore>()));
                         services.AddSingleton<IReceiptFormatter, EscPosReceiptFormatter>();
                         services.AddSingleton<IReceiptPrinter, WindowsSpoolReceiptPrinter>();
+                        services.AddSingleton<IPrinterDiscovery, WindowsPrinterDiscovery>();
 
                         // IReceiptPrintingService se registra aquí (no en AddPosInfrastructure) porque
                         // depende de IReceiptFormatter/IReceiptPrinter, exclusivos de Pos.Hardware/
@@ -116,6 +125,11 @@ namespace Pos.Desktop
                         // (Pos.Infrastructure.Tests) exige que el contenedor de AddPosInfrastructure sea
                         // válido por sí solo, sin depender de registros que solo aporta este proyecto.
                         services.AddScoped<IReceiptPrintingService, ReceiptPrintingService>();
+
+                        // BASIC-CFG-01: mismo motivo que IReceiptPrintingService arriba - depende de
+                        // IReceiptPrinterOptionsProvider, registrado solo aquí (necesita IConfiguration,
+                        // exclusivo de Pos.Desktop).
+                        services.AddScoped<ILocalSettingsService, LocalSettingsService>();
                         services.AddTransient<ActivationViewModel>();
                         services.AddTransient<ActivationWindow>();
                         services.AddTransient<SuspensionViewModel>();
@@ -139,6 +153,7 @@ namespace Pos.Desktop
                         services.AddTransient<EditUserWindow>();
                         services.AddTransient<ProductAuditViewModel>();
                         services.AddTransient<ReportsViewModel>();
+                        services.AddTransient<LocalConfigurationViewModel>();
                         services.AddTransient<NotificationCenterViewModel>();
                         services.AddTransient<InitialSetupViewModel>();
                         services.AddTransient<InitialSetupWindow>();
@@ -169,6 +184,14 @@ namespace Pos.Desktop
 
                 var pathProvider = _host.Services.GetRequiredService<IApplicationPathProvider>();
                 pathProvider.EnsureDataDirectoryExists();
+
+                // BASIC-CFG-01, sección 35/36: carga la configuración de impresora guardada en
+                // LocalAppData (si existe y es legible) antes de que cualquier venta pueda
+                // imprimir. Ausencia de archivo o archivo corrupto deja Current en los valores de
+                // appsettings/appsettings.Local.json (ver ReceiptPrinterOptionsProvider), nunca
+                // bloquea el arranque.
+                var receiptPrinterOptionsProvider = _host.Services.GetRequiredService<IReceiptPrinterOptionsProvider>();
+                await receiptPrinterOptionsProvider.RefreshAsync(CancellationToken.None);
 
                 _mainWindowScope = _host.Services.CreateScope();
 

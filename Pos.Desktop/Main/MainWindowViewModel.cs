@@ -14,6 +14,7 @@ using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Common;
 using Pos.Desktop.Dashboard;
 using Pos.Desktop.Inventory;
+using Pos.Desktop.LocalConfiguration;
 using Pos.Desktop.Products.Catalog;
 using Pos.Desktop.Register;
 using Pos.Desktop.Reports;
@@ -57,6 +58,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly UserManagementViewModel _userManagementViewModel;
     private readonly ProductAuditViewModel _productAuditViewModel;
     private readonly ReportsViewModel _reportsViewModel;
+    private readonly LocalConfigurationViewModel _localConfigurationViewModel;
     private readonly NotificationCenterViewModel _notificationCenterViewModel;
     private readonly AsyncRelayCommand _logoutCommand;
     private readonly AsyncRelayCommand _closeRegisterCommand;
@@ -94,6 +96,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         UserManagementViewModel userManagementViewModel,
         ProductAuditViewModel productAuditViewModel,
         ReportsViewModel reportsViewModel,
+        LocalConfigurationViewModel localConfigurationViewModel,
         NotificationCenterViewModel notificationCenterViewModel)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -109,6 +112,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         _userManagementViewModel = userManagementViewModel ?? throw new ArgumentNullException(nameof(userManagementViewModel));
         _productAuditViewModel = productAuditViewModel ?? throw new ArgumentNullException(nameof(productAuditViewModel));
         _reportsViewModel = reportsViewModel ?? throw new ArgumentNullException(nameof(reportsViewModel));
+        _localConfigurationViewModel = localConfigurationViewModel ?? throw new ArgumentNullException(nameof(localConfigurationViewModel));
         _notificationCenterViewModel = notificationCenterViewModel ?? throw new ArgumentNullException(nameof(notificationCenterViewModel));
 
         _logoutCommand = new AsyncRelayCommand(ExecuteLogoutAsync);
@@ -317,6 +321,7 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
             NavigationSection.Settings => _userManagementViewModel,
             NavigationSection.AuditProducts => _productAuditViewModel,
             NavigationSection.Reports => _reportsViewModel,
+            NavigationSection.LocalConfiguration => _localConfigurationViewModel,
             _ => _dashboardViewModel,
         };
 
@@ -369,6 +374,13 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         if (section == NavigationSection.Reports && _reportsViewModel.LoadCommand.CanExecute(null))
         {
             _reportsViewModel.LoadCommand.Execute(null);
+        }
+
+        // BASIC-CFG-01: recarga impresoras instaladas/valores efectivos al entrar a Configuración,
+        // mismo patrón que el resto de secciones (sin cache permanente, sin polling).
+        if (section == NavigationSection.LocalConfiguration && _localConfigurationViewModel.LoadCommand.CanExecute(null))
+        {
+            _localConfigurationViewModel.LoadCommand.Execute(null);
         }
     }
 
@@ -497,6 +509,16 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         if (user.HasPermission(Permission.ViewReports))
         {
             yield return new NavigationItem(NavigationSection.Reports, "Reportes");
+        }
+
+        // BASIC-CFG-01, sección 27/28: Configuración es funcionalidad administrativa sensible,
+        // gateada por Permission.ManageSettings - nunca por nombre de Role. Administrator la recibe
+        // automáticamente vía AdministrativePermissionSet.All(); Manager/Cashier nunca (no están en
+        // StandardRoles.ManagerPermissions()/CashierPermissions()). Ítem de navegación separado de
+        // "Usuarios" (NavigationSection.Settings, gateado por ManageUsers).
+        if (user.HasPermission(Permission.ManageSettings))
+        {
+            yield return new NavigationItem(NavigationSection.LocalConfiguration, "Configuración");
         }
     }
 

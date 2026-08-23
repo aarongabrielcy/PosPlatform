@@ -18,4 +18,8 @@ public enum NavigationSection
     // Register Closures, Cash Movements, Product Sales, Low Stock, Operator Activity), no seis
     // entradas de navegación separadas (sección 7 de la tarea).
     Reports,
+    // Configuración local de máquina (BASIC-CFG-01, sección 28-29): un ítem de navegación nuevo,
+    // separado de "Usuarios" (que reutiliza NavigationSection.Settings desde BASIC-USR-01). No
+    // reutiliza ese valor: "Settings" ya significa "Usuarios" en este enum.
+    LocalConfiguration,
 }

@@ -2,6 +2,7 @@ using Pos.Application.Authentication;
 using Pos.Application.Receipts;
 using Pos.Application.Sales.History;
 using Pos.Application.Tests.Bootstrap;
+using Pos.Application.Tests.Common.Time;
 using Pos.Application.Tests.Sales.History;
 using Pos.Domain.Common.Identifiers;
 using Pos.Domain.Organizations;
@@ -170,6 +171,58 @@ public sealed class ReceiptPrintingServiceTests
         Assert.Equal(0, fixture.Printer.PrintCallCount);
     }
 
+    // ---------- PrintTestAsync (BASIC-CFG-01, sección 15/16/49) ----------
+
+    [Fact]
+    public async Task PrintTestWithoutManageSettingsPermissionReturnsNotAuthorizedWithoutTouchingPrinter()
+    {
+        var fixture = CreateFixture(permissions: [Permission.ViewSalesHistory]);
+
+        var result = await fixture.Service.PrintTestAsync();
+
+        Assert.Equal(ReceiptPrintResultStatus.NotAuthorized, result.Status);
+        Assert.Equal(0, fixture.Printer.PrintCallCount);
+    }
+
+    [Fact]
+    public async Task PrintTestWithoutAuthenticatedUserReturnsNotAuthorized()
+    {
+        var fixture = CreateFixture(authenticated: false);
+
+        var result = await fixture.Service.PrintTestAsync();
+
+        Assert.Equal(ReceiptPrintResultStatus.NotAuthorized, result.Status);
+    }
+
+    [Fact]
+    public async Task PrintTestWhenPrinterDisabledReturnsSkippedWithoutTouchingFormatterOrPrinter()
+    {
+        var fixture = CreateFixture(
+            permissions: [Permission.ManageSettings],
+            printerOptions: new ReceiptPrinterOptions { Enabled = false });
+
+        var result = await fixture.Service.PrintTestAsync();
+
+        Assert.Equal(ReceiptPrintResultStatus.Skipped, result.Status);
+        Assert.Equal(0, fixture.Formatter.FormatCallCount);
+        Assert.Equal(0, fixture.Printer.PrintCallCount);
+    }
+
+    [Fact]
+    public async Task PrintTestWhenEnabledSendsAHarmlessReceiptWithoutTouchingSalesHistory()
+    {
+        var fixture = CreateFixture(
+            permissions: [Permission.ManageSettings],
+            printerOptions: new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" });
+
+        var result = await fixture.Service.PrintTestAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(1, fixture.Printer.PrintCallCount);
+        Assert.False(fixture.Formatter.LastReceipt!.IsReprint);
+        Assert.Equal(0, fixture.Query.GetDetailCallCount);
+    }
+
     private sealed record Fixture(
         ReceiptPrintingService Service, FakeReceiptFormatter Formatter, FakeReceiptPrinter Printer, FakeSalesHistoryQuery Query);
 
@@ -196,7 +249,9 @@ public sealed class ReceiptPrintingServiceTests
 
         var service = new ReceiptPrintingService(
             session, query, organizationRepository, formatter, printer,
-            printerOptions ?? new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20", AutoPrint = true });
+            new FixedReceiptPrinterOptionsProvider(
+                printerOptions ?? new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20", AutoPrint = true }),
+            new FakeClock(CompletedAtUtc));
 
         return new Fixture(service, formatter, printer, query);
     }

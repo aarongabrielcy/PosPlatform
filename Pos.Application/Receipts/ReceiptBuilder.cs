@@ -48,4 +48,35 @@ public static class ReceiptBuilder
     // mostrado en Historial de ventas.
     private static string ShortSaleReference(Guid saleId) =>
         saleId.ToString("N").Substring(0, 8).ToUpperInvariant();
+
+    // BASIC-CFG-01, sección 15: contenido de "Imprimir prueba" desde Configuración > Impresora.
+    // Nunca proviene de un SaleHistoryDetail real (no existe Sale): es un Receipt inofensivo
+    // construido a mano que ejercita el mismo IReceiptFormatter/IReceiptPrinter que una venta real,
+    // incluyendo el ancho de papel configurado y caracteres acentuados en español (á é í ó ú ñ Ñ),
+    // para que la prueba sea representativa del ticket real sin imprimir datos comerciales.
+    public static Receipt BuildTestReceipt(ReceiptPaperWidth paperWidth, DateTimeOffset nowUtc)
+    {
+        var widthLabel = paperWidth == ReceiptPaperWidth.Mm58 ? "58 mm" : "80 mm";
+
+        var lines = new List<ReceiptLine>
+        {
+            new("TEST", $"Prueba de impresión ({widthLabel})", 1m, 0m, 0m),
+            new("TEST-ES", "á é í ó ú ñ Ñ", 1m, 0m, 0m),
+        };
+
+        return new Receipt(
+            "PRUEBA",
+            nowUtc,
+            "POSPlatform",
+            "-",
+            "Sistema",
+            lines,
+            subtotal: 0m,
+            total: 0m,
+            currency: "-",
+            payments: [],
+            cashTendered: null,
+            changeDue: null,
+            isReprint: false);
+    }
 }
