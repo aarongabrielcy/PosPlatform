@@ -15,4 +15,8 @@ public enum UpdateProductResultStatus
     InvalidReorderPoint,
     DuplicateSku,
     DuplicateBarcode,
+
+    // BASIC-UX-01: usados exclusivamente por SetProductImageAsync.
+    InvalidImage,
+    ImageTooLarge,
 }

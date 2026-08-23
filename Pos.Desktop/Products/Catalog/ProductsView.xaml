@@ -17,6 +17,7 @@
             <converters:ProductCatalogQuantityTextConverter x:Key="QuantityTextConverter" />
             <converters:BooleanToActiveStatusTextConverter x:Key="IsActiveTextConverter" />
             <converters:ProductRecentActivityTooltipConverter x:Key="RecentActivityTooltipConverter" />
+            <converters:ProductImageSourceConverter x:Key="ProductImageSourceConverter" />
             <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         </ResourceDictionary>
     </UserControl.Resources>
@@ -87,6 +88,23 @@
                                   CommandParameter="{Binding SelectedProduct}" />
                 </DataGrid.InputBindings>
                 <DataGrid.Columns>
+                    <!-- Miniatura/placeholder (BASIC-UX-01, sección 17): un producto sin foto o con
+                         un archivo faltante/corrupto simplemente no muestra imagen (sección 20/42),
+                         nunca oculta las columnas textuales de identificación. -->
+                    <DataGridTemplateColumn Header="Foto" Width="52">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Grid Width="32" Height="32" Margin="2">
+                                    <Border Background="{StaticResource BorderBrush}" CornerRadius="4" />
+                                    <Image Stretch="UniformToFill" Source="{Binding ImageFileName, Converter={StaticResource ProductImageSourceConverter}}">
+                                        <Image.Clip>
+                                            <RectangleGeometry Rect="0,0,32,32" RadiusX="4" RadiusY="4" />
+                                        </Image.Clip>
+                                    </Image>
+                                </Grid>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="110" />
                     <DataGridTextColumn Header="Producto" Binding="{Binding Name}" Width="*" />
                     <DataGridTextColumn Header="Barcode" Binding="{Binding Barcode}" Width="120" />

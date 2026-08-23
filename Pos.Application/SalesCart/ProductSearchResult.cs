@@ -31,6 +31,9 @@ public sealed class ProductSearchResult
 
     public bool IsAvailable { get; }
 
+    // Nombre de archivo administrado (BASIC-UX-01); null = sin foto/placeholder en la búsqueda.
+    public string? ImageFileName { get; }
+
     public ProductSearchResult(
         ProductId productId,
         string sku,
@@ -39,7 +42,8 @@ public sealed class ProductSearchResult
         string currency,
         decimal availableQuantity,
         bool tracksInventory,
-        bool isActive = true)
+        bool isActive = true,
+        string? imageFileName = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sku);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -54,5 +58,6 @@ public sealed class ProductSearchResult
         TracksInventory = tracksInventory;
         IsActive = isActive;
         IsAvailable = isActive && (!tracksInventory || availableQuantity > 0m);
+        ImageFileName = imageFileName;
     }
 }

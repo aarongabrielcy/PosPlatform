@@ -26,5 +26,7 @@ internal sealed class ProductRecord
 
     public bool IsActive { get; set; }
 
+    public string? ImageFileName { get; set; }
+
     public DateTimeOffset CreatedAtUtc { get; set; }
 }

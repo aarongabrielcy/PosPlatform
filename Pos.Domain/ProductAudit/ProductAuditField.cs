@@ -13,4 +13,7 @@ public enum ProductAuditField
     ReorderPoint,
     IsActive,
     InventoryQuantity,
+
+    // BASIC-UX-01: cambios de foto de producto (agregar/reemplazar/quitar).
+    Image,
 }

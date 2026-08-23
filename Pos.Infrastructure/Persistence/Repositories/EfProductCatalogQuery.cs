@@ -87,6 +87,7 @@ public sealed class EfProductCatalogQuery : IProductCatalogQuery
                 x.product.SalePriceCurrency,
                 x.product.TracksInventory,
                 x.product.IsActive,
+                x.product.ImageFileName,
                 Quantity = x.inventoryItem != null ? x.inventoryItem.Quantity : 0m,
                 ReorderPoint = x.inventoryItem != null ? x.inventoryItem.ReorderPoint : 0m,
             })
@@ -106,7 +107,8 @@ public sealed class EfProductCatalogQuery : IProductCatalogQuery
                 r.TracksInventory,
                 r.Quantity,
                 r.ReorderPoint,
-                r.IsActive))
+                r.IsActive,
+                r.ImageFileName))
             .ToList();
 
         return new ProductCatalogPageResult(items, hasNextPage);

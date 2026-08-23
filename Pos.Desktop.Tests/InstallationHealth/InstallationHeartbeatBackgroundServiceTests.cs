@@ -148,6 +148,52 @@ public class InstallationHeartbeatBackgroundServiceTests
         Assert.Equal(InstallationEnforcementState.Allowed, enforcementStateService.Current);
     }
 
+    // Puente heartbeat -> conectividad POS Cloud (BASIC-UX-01, sección 30/52): reutiliza el mismo
+    // resultado de heartbeat que ya alimenta enforcement, sin ningún poll adicional.
+    [Theory]
+    [InlineData(InstallationHeartbeatSendOutcome.Success)]
+    [InlineData(InstallationHeartbeatSendOutcome.Suspended)]
+    [InlineData(InstallationHeartbeatSendOutcome.CredentialInvalid)]
+    [InlineData(InstallationHeartbeatSendOutcome.Decommissioned)]
+    public async Task ReachableOutcomesMarkConnectivityAsConnected(InstallationHeartbeatSendOutcome outcome)
+    {
+        var sender = new FakeInstallationHeartbeatSender(outcome);
+        var connectivityStateService = new FakeInstallationConnectivityStateService();
+        var service = CreateService(sender, connectivityStateService: connectivityStateService);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => connectivityStateService.ApplyHeartbeatOutcomeCallCount >= 1);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+
+        Assert.Equal(InstallationConnectivityState.Connected, connectivityStateService.Current);
+    }
+
+    [Fact]
+    public async Task NetworkFailureOutcomeMarksConnectivityAsOffline()
+    {
+        var sender = new FakeInstallationHeartbeatSender(InstallationHeartbeatSendOutcome.NetworkFailure);
+        var connectivityStateService = new FakeInstallationConnectivityStateService();
+        var service = CreateService(sender, connectivityStateService: connectivityStateService);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => connectivityStateService.ApplyHeartbeatOutcomeCallCount >= 1);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+
+        Assert.Equal(InstallationConnectivityState.Offline, connectivityStateService.Current);
+    }
+
     [Fact]
     public async Task StoppingTheServiceStopsFurtherScheduling()
     {
@@ -166,8 +212,11 @@ public class InstallationHeartbeatBackgroundServiceTests
     }
 
     private static InstallationHeartbeatBackgroundService CreateService(
-        FakeInstallationHeartbeatSender sender, FakeInstallationEnforcementStateService? enforcementStateService = null) =>
+        FakeInstallationHeartbeatSender sender,
+        FakeInstallationEnforcementStateService? enforcementStateService = null,
+        FakeInstallationConnectivityStateService? connectivityStateService = null) =>
         new(sender, enforcementStateService ?? new FakeInstallationEnforcementStateService(),
+            connectivityStateService ?? new FakeInstallationConnectivityStateService(),
             NullLogger<InstallationHeartbeatBackgroundService>.Instance, TinyInterval);
 
     private static async Task WaitUntilAsync(Func<bool> condition)

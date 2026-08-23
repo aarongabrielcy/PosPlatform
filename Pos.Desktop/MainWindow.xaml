@@ -139,6 +139,40 @@
                            Foreground="{StaticResource PrimaryTextBrush}" />
 
                 <StackPanel Grid.Column="3" Orientation="Horizontal">
+                    <!-- Fecha/hora local (sección 22/23 de la tarea): hora del sistema operativo,
+                         nunca de la nube; no afecta el UTC persistido en ventas/movimientos. -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,16,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding CurrentDateText}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" Margin="0,0,6,0" />
+                        <TextBlock Text="{Binding CurrentTimeText}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource PrimaryTextBrush}" FontWeight="SemiBold" FontSize="12" />
+                    </StackPanel>
+
+                    <!-- Indicador de conectividad POS Cloud (sección 27-38): CONTROL-PLANE
+                         únicamente, nunca "sincronizado" (Business Sync no existe todavía). El color
+                         del punto reutiliza los brushes ya definidos en AppColors.xaml; el estado
+                         también es legible por texto, no solo por color (sección 38). -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,16,0" VerticalAlignment="Center"
+                                ToolTip="Conectividad con POSPlatform Cloud (control plane). No indica sincronización de ventas/inventario.">
+                        <Border Width="8" Height="8" CornerRadius="4" Margin="0,0,6,0" VerticalAlignment="Center">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="{StaticResource BorderBrush}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CloudConnectivityState}" Value="Connected">
+                                            <Setter Property="Background" Value="{StaticResource SuccessBrush}" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding CloudConnectivityState}" Value="Offline">
+                                            <Setter Property="Background" Value="{StaticResource WarningBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                        </Border>
+                        <TextBlock Text="{Binding CloudStatusText}" VerticalAlignment="Center"
+                                   Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" />
+                    </StackPanel>
+
                     <StackPanel Orientation="Horizontal" Margin="0,0,16,0" VerticalAlignment="Center"
                                 Visibility="{Binding IsRegisterOpen, Converter={StaticResource BoolToVisibilityConverter}}">
                         <TextBlock Text="{Binding RegisterName}" FontWeight="SemiBold" VerticalAlignment="Center"

@@ -37,6 +37,9 @@ public sealed class ProductCatalogItem
 
     public bool HasRecentActivity => RecentActivity is not null;
 
+    // Nombre de archivo administrado (BASIC-UX-01); null = sin foto/placeholder en el catálogo.
+    public string? ImageFileName { get; }
+
     public ProductCatalogItem(
         ProductId productId,
         string sku,
@@ -48,6 +51,7 @@ public sealed class ProductCatalogItem
         decimal quantity,
         decimal reorderPoint,
         bool isActive,
+        string? imageFileName = null,
         ProductRecentActivity? recentActivity = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sku);
@@ -64,6 +68,7 @@ public sealed class ProductCatalogItem
         Quantity = quantity;
         ReorderPoint = reorderPoint;
         IsActive = isActive;
+        ImageFileName = imageFileName;
         RecentActivity = recentActivity;
     }
 }

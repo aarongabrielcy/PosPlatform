@@ -31,6 +31,7 @@ internal static class ProductMapper
                 cost,
                 record.TracksInventory,
                 record.IsActive,
+                record.ImageFileName,
                 record.CreatedAtUtc);
         }
         catch (DomainValidationException ex)
@@ -58,6 +59,7 @@ internal static class ProductMapper
             CostCurrency = product.Cost?.Currency,
             TracksInventory = product.TracksInventory,
             IsActive = product.IsActive,
+            ImageFileName = product.ImageFileName,
             CreatedAtUtc = product.CreatedAtUtc,
         };
     }
@@ -95,6 +97,7 @@ internal static class ProductMapper
         record.CostCurrency = product.Cost?.Currency;
         record.TracksInventory = product.TracksInventory;
         record.IsActive = product.IsActive;
+        record.ImageFileName = product.ImageFileName;
     }
 
     private static Money? ToCost(ProductRecord record)

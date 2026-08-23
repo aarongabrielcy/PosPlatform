@@ -68,7 +68,8 @@ public sealed class SalesCartService : ISalesCartService
                 product.SalePrice.Amount,
                 product.SalePrice.Currency,
                 availableQuantity,
-                product.TracksInventory));
+                product.TracksInventory,
+                imageFileName: product.ImageFileName));
         }
 
         return results;

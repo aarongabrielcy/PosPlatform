@@ -11,12 +11,14 @@ using Pos.Application.Enforcement;
 using Pos.Application.Inventory;
 using Pos.Application.Installation;
 using Pos.Application.Receipts;
+using Pos.Application.Products.ManageProduct;
 using Pos.Application.RegisterSessions;
 using Pos.Application.Sales.Checkout;
 using Pos.Application.SalesCart;
 using Pos.Application.Security;
 using Pos.Desktop.Activation;
 using Pos.Desktop.CashMovements;
+using Pos.Desktop.Common;
 using Pos.Desktop.Configuration;
 using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
@@ -29,6 +31,7 @@ using Pos.Desktop.Login;
 using Pos.Desktop.Main;
 using Pos.Desktop.Products;
 using Pos.Desktop.Products.Catalog;
+using Pos.Desktop.Products.Images;
 using Pos.Desktop.Register;
 using Pos.Desktop.RegisterSessions;
 using Pos.Desktop.Reports;
@@ -101,6 +104,17 @@ namespace Pos.Desktop
 
                         services.AddPosInfrastructure(activationBaseUrl);
                         services.AddHostedService<InstallationHeartbeatBackgroundService>();
+
+                        // BASIC-UX-01: IProductImageStore decodifica/normaliza con las APIs de
+                        // imaging de WPF, exclusivas de Pos.Desktop (igual motivo que
+                        // IReceiptFormatter/IReceiptPrinter más abajo). IProductPhotoService (ver
+                        // IProductPhotoService) se registra aquí, no en AddPosInfrastructure, por la
+                        // misma razón que IReceiptPrintingService: depende de IProductImageStore,
+                        // exclusivo de Pos.Desktop. IDesktopClock envuelve la hora local del sistema
+                        // para el header, separado de IClock (UTC, Application).
+                        services.AddSingleton<IProductImageStore, WpfProductImageStore>();
+                        services.AddScoped<IProductPhotoService, ProductPhotoService>();
+                        services.AddSingleton<IDesktopClock, SystemDesktopClock>();
 
                         // BASIC-PRN-01: opciones leídas una sola vez al arrancar (appsettings.json +
                         // appsettings.Local.json, ver ReceiptPrinterOptionsFactory). El formateador

@@ -27,14 +27,16 @@ public sealed partial class InstallationHeartbeatBackgroundService : BackgroundS
 
     private readonly IInstallationHeartbeatSender _sender;
     private readonly IInstallationEnforcementStateService _enforcementStateService;
+    private readonly IInstallationConnectivityStateService _connectivityStateService;
     private readonly ILogger<InstallationHeartbeatBackgroundService> _logger;
     private readonly TimeSpan _heartbeatInterval;
 
     public InstallationHeartbeatBackgroundService(
         IInstallationHeartbeatSender sender,
         IInstallationEnforcementStateService enforcementStateService,
+        IInstallationConnectivityStateService connectivityStateService,
         ILogger<InstallationHeartbeatBackgroundService> logger)
-        : this(sender, enforcementStateService, logger, DefaultHeartbeatInterval)
+        : this(sender, enforcementStateService, connectivityStateService, logger, DefaultHeartbeatInterval)
     {
     }
 
@@ -44,11 +46,13 @@ public sealed partial class InstallationHeartbeatBackgroundService : BackgroundS
     internal InstallationHeartbeatBackgroundService(
         IInstallationHeartbeatSender sender,
         IInstallationEnforcementStateService enforcementStateService,
+        IInstallationConnectivityStateService connectivityStateService,
         ILogger<InstallationHeartbeatBackgroundService> logger,
         TimeSpan heartbeatInterval)
     {
         _sender = sender ?? throw new ArgumentNullException(nameof(sender));
         _enforcementStateService = enforcementStateService ?? throw new ArgumentNullException(nameof(enforcementStateService));
+        _connectivityStateService = connectivityStateService ?? throw new ArgumentNullException(nameof(connectivityStateService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _heartbeatInterval = heartbeatInterval;
     }
@@ -87,6 +91,10 @@ public sealed partial class InstallationHeartbeatBackgroundService : BackgroundS
             // Puente heartbeat -> enforcement (sección 15/16 de la tarea): el estado de enforcement
             // en memoria debe reflejar un resultado confirmado sin esperar a un reinicio del proceso.
             await _enforcementStateService.ApplyHeartbeatOutcomeAsync(outcome, cancellationToken).ConfigureAwait(false);
+
+            // Puente heartbeat -> indicador de conectividad POS Cloud (BASIC-UX-01, sección 30):
+            // reutiliza el mismo resultado de heartbeat, sin ningún poll HTTP adicional.
+            _connectivityStateService.ApplyHeartbeatOutcome(outcome);
         }
         catch (OperationCanceledException)
         {

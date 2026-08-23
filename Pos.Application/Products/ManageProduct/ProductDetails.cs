@@ -34,6 +34,11 @@ public sealed class ProductDetails
 
     public decimal ReorderPoint { get; }
 
+    // Nombre de archivo administrado (BASIC-UX-01); null = sin foto, un estado normal. Pos.Desktop
+    // lo resuelve a una ruta bajo ApplicationPathProvider.ProductImagesDirectory; esta clase nunca
+    // expone rutas absolutas.
+    public string? ImageFileName { get; }
+
     public ProductDetails(
         ProductId productId,
         string sku,
@@ -46,7 +51,8 @@ public sealed class ProductDetails
         bool tracksInventory,
         bool isActive,
         decimal currentQuantity,
-        decimal reorderPoint)
+        decimal reorderPoint,
+        string? imageFileName = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sku);
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -64,5 +70,6 @@ public sealed class ProductDetails
         IsActive = isActive;
         CurrentQuantity = currentQuantity;
         ReorderPoint = reorderPoint;
+        ImageFileName = imageFileName;
     }
 }

@@ -177,6 +177,7 @@ public class MainWindowTests
             var productsViewModel = new ProductsViewModel(new CatalogFakeProductManagementService(), session);
             var viewModel = new MainWindowViewModel(
                 session, registerSession, currentSalesCart, new Enforcement.FakeInstallationEnforcementStateService(),
+                new Enforcement.FakeInstallationConnectivityStateService(), new Common.FakeDesktopClock(DateTime.Now),
                 dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
                 new InventoryViewModel(new FakeInventoryService(), session),
                 new RegisterViewModel(
@@ -298,6 +299,7 @@ public class MainWindowTests
             var salesHistoryViewModel = new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(DateTimeOffset.UtcNow));
             var viewModel = new MainWindowViewModel(
                 session, new FakeCurrentRegisterSession(), new FakeCurrentSalesCart(), new Enforcement.FakeInstallationEnforcementStateService(),
+                new Enforcement.FakeInstallationConnectivityStateService(), new Common.FakeDesktopClock(DateTime.Now),
                 dashboardViewModel, salesViewModel, salesHistoryViewModel,
                 new ProductsViewModel(new CatalogFakeProductManagementService(), session), new InventoryViewModel(new FakeInventoryService(), session),
                 new RegisterViewModel(
@@ -445,6 +447,7 @@ public class MainWindowTests
 
         return new MainWindowViewModel(
             session, registerSession, currentSalesCart, new Enforcement.FakeInstallationEnforcementStateService(),
+            new Enforcement.FakeInstallationConnectivityStateService(), new Common.FakeDesktopClock(DateTime.Now),
             dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
             inventoryViewModel, registerViewModel, userManagementViewModel, productAuditViewModel,
             reportsViewModel, Pos.Desktop.Tests.LocalConfiguration.LocalConfigurationViewModelTestFactory.CreateDefault(),

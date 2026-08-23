@@ -155,6 +155,10 @@ public static class DependencyInjection
         services.AddSingleton<IInstallationEnforcementStateStore, FileInstallationEnforcementStateStore>();
         services.AddSingleton<IInstallationEnforcementStateService, InstallationEnforcementStateService>();
 
+        // BASIC-UX-01: indicador de conectividad POS Cloud. En memoria, sin store propio (a
+        // diferencia del de enforcement): cada sesión debe empezar en Checking (sección 36).
+        services.AddSingleton<IInstallationConnectivityStateService, InstallationConnectivityStateService>();
+
         services.AddScoped<IInstallationActivationStateService, InstallationActivationStateService>();
 
         services.AddSingleton<IApplicationVersionProvider, AssemblyApplicationVersionProvider>();

@@ -1,4 +1,6 @@
+using System.IO;
 using System.Windows;
+using Microsoft.Win32;
 using Pos.Domain.Common.Identifiers;
 
 namespace Pos.Desktop.Products;
@@ -15,6 +17,7 @@ public partial class EditProductWindow : Window
         _viewModel.Saved += OnSaved;
         _viewModel.CancelRequested += OnCancelRequested;
         _viewModel.CartWarningRequested += OnCartWarningRequested;
+        _viewModel.SelectImageFileRequested += OnSelectImageFileRequested;
 
         DataContext = _viewModel;
 
@@ -52,11 +55,54 @@ public partial class EditProductWindow : Window
             MessageBoxImage.Information);
     }
 
+    // Único punto donde esta ventana toca un diálogo de Windows (sección 43: el archivo elegido se
+    // trata como entrada no confiable — la validación real de que sea una imagen decodificable
+    // ocurre en IProductImageStore, nunca aquí). El filtro de extensiones es solo una ayuda de UX,
+    // no la validación de seguridad.
+    private async void OnSelectImageFileRequested(object? sender, EventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Seleccionar foto del producto",
+            Filter = "Imágenes (*.jpg;*.jpeg;*.png)|*.jpg;*.jpeg;*.png",
+            CheckFileExists = true,
+        };
+
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        byte[] content;
+
+        try
+        {
+            content = await File.ReadAllBytesAsync(dialog.FileName);
+        }
+        catch (IOException)
+        {
+            MessageBox.Show(
+                this, "No fue posible leer el archivo elegido.", "PosPlatform",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            MessageBox.Show(
+                this, "No fue posible leer el archivo elegido.", "PosPlatform",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        await _viewModel.ApplySelectedImageAsync(content);
+    }
+
     private void OnWindowClosed(object? sender, EventArgs e)
     {
         _viewModel.Saved -= OnSaved;
         _viewModel.CancelRequested -= OnCancelRequested;
         _viewModel.CartWarningRequested -= OnCartWarningRequested;
+        _viewModel.SelectImageFileRequested -= OnSelectImageFileRequested;
         Closed -= OnWindowClosed;
     }
 }

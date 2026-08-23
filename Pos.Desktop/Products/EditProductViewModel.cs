@@ -12,10 +12,13 @@ namespace Pos.Desktop.Products;
 public sealed partial class EditProductViewModel : ViewModelBase
 {
     private readonly IProductManagementService _productManagementService;
+    private readonly IProductPhotoService _productPhotoService;
     private readonly ICurrentSalesCart _currentSalesCart;
     private readonly ILogger<EditProductViewModel> _logger;
     private readonly AsyncRelayCommand _saveCommand;
     private readonly AsyncRelayCommand _toggleActiveCommand;
+    private readonly AsyncRelayCommand _selectImageCommand;
+    private readonly AsyncRelayCommand _removeImageCommand;
     private readonly AsyncRelayCommand _cancelCommand;
 
     private ProductId _productId;
@@ -33,18 +36,24 @@ public sealed partial class EditProductViewModel : ViewModelBase
     private bool _isActive;
     private bool _isBusy;
     private string? _generalError;
+    private string? _imageFileName;
 
     public EditProductViewModel(
         IProductManagementService productManagementService,
+        IProductPhotoService productPhotoService,
         ICurrentSalesCart currentSalesCart,
         ILogger<EditProductViewModel> logger)
     {
         _productManagementService = productManagementService ?? throw new ArgumentNullException(nameof(productManagementService));
+        _productPhotoService = productPhotoService ?? throw new ArgumentNullException(nameof(productPhotoService));
         _currentSalesCart = currentSalesCart ?? throw new ArgumentNullException(nameof(currentSalesCart));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _saveCommand = new AsyncRelayCommand(ExecuteSaveAsync, () => !IsBusy && _isLoaded, HandleUnexpectedError);
         _toggleActiveCommand = new AsyncRelayCommand(ExecuteToggleActiveAsync, () => !IsBusy && _isLoaded, HandleUnexpectedError);
+        _selectImageCommand = new AsyncRelayCommand(ExecuteSelectImageAsync, () => !IsBusy && _isLoaded, HandleUnexpectedError);
+        _removeImageCommand = new AsyncRelayCommand(
+            ExecuteRemoveImageAsync, () => !IsBusy && _isLoaded && ImageFileName is not null, HandleUnexpectedError);
         _cancelCommand = new AsyncRelayCommand(ExecuteCancelAsync, () => !IsBusy);
     }
 
@@ -58,11 +67,21 @@ public sealed partial class EditProductViewModel : ViewModelBase
     // producto sigue en el carrito actual (TAREA 24C, sección 15).
     public event EventHandler? CartWarningRequested;
 
+    // El ViewModel nunca abre diálogos de Windows directamente (mismo criterio que
+    // NewProductRequested/EditProductRequested en MainWindowViewModel): el code-behind de la
+    // ventana atiende este evento abriendo Microsoft.Win32.OpenFileDialog y, si el usuario elige un
+    // archivo, llama de vuelta a ApplySelectedImageAsync con los bytes leídos.
+    public event EventHandler? SelectImageFileRequested;
+
     public CancellationToken CancellationToken { get; set; }
 
     public ICommand SaveCommand => _saveCommand;
 
     public ICommand ToggleActiveCommand => _toggleActiveCommand;
+
+    public ICommand SelectImageCommand => _selectImageCommand;
+
+    public ICommand RemoveImageCommand => _removeImageCommand;
 
     public ICommand CancelCommand => _cancelCommand;
 
@@ -159,6 +178,21 @@ public sealed partial class EditProductViewModel : ViewModelBase
 
     public string IsActiveText => IsActive ? "Activo" : "Inactivo";
 
+    // Nombre de archivo administrado (BASIC-UX-01); null = sin foto/placeholder. El binding de la
+    // miniatura en XAML usa ProductImageSourceConverter para resolverlo a un ImageSource, o nada
+    // (placeholder detrás) si es null/falta el archivo/está corrupto.
+    public string? ImageFileName
+    {
+        get => _imageFileName;
+        private set
+        {
+            if (SetProperty(ref _imageFileName, value))
+            {
+                _removeImageCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
     public bool IsBusy
     {
         get => _isBusy;
@@ -169,6 +203,8 @@ public sealed partial class EditProductViewModel : ViewModelBase
                 OnPropertyChanged(nameof(IsNotBusy));
                 _saveCommand.RaiseCanExecuteChanged();
                 _toggleActiveCommand.RaiseCanExecuteChanged();
+                _selectImageCommand.RaiseCanExecuteChanged();
+                _removeImageCommand.RaiseCanExecuteChanged();
                 _cancelCommand.RaiseCanExecuteChanged();
             }
         }
@@ -221,6 +257,7 @@ public sealed partial class EditProductViewModel : ViewModelBase
             ? details.ReorderPoint.ToString(CultureInfo.CurrentCulture)
             : string.Empty;
         IsActive = details.IsActive;
+        ImageFileName = details.ImageFileName;
     }
 
     private async Task ExecuteSaveAsync()
@@ -360,6 +397,69 @@ public sealed partial class EditProductViewModel : ViewModelBase
         }
     }
 
+    private Task ExecuteSelectImageAsync()
+    {
+        SelectImageFileRequested?.Invoke(this, EventArgs.Empty);
+
+        return Task.CompletedTask;
+    }
+
+    // Llamado desde el code-behind (EditProductWindow) tras leer el archivo elegido en
+    // OpenFileDialog. Validación real (decodificar/normalizar) ocurre en IProductImageStore
+    // (WpfProductImageStore); aquí solo se traduce el resultado a GeneralError, igual patrón que
+    // ExecuteSaveAsync/ExecuteToggleActiveAsync.
+    public async Task ApplySelectedImageAsync(byte[] content)
+    {
+        GeneralError = null;
+        IsBusy = true;
+
+        try
+        {
+            var result = await _productPhotoService.SetProductImageAsync(_productId, content, CancellationToken);
+
+            if (result.Success)
+            {
+                ApplyDetails(result.Product!);
+                return;
+            }
+
+            GeneralError = ToUpdateErrorMessage(result.Status);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task ExecuteRemoveImageAsync()
+    {
+        GeneralError = null;
+        IsBusy = true;
+
+        try
+        {
+            var result = await _productPhotoService.RemoveProductImageAsync(_productId, CancellationToken);
+
+            if (result.Success)
+            {
+                ApplyDetails(result.Product!);
+                return;
+            }
+
+            GeneralError = ToUpdateErrorMessage(result.Status);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     private Task ExecuteCancelAsync()
     {
         CancelRequested?.Invoke(this, EventArgs.Empty);
@@ -416,6 +516,8 @@ public sealed partial class EditProductViewModel : ViewModelBase
         UpdateProductResultStatus.InvalidReorderPoint => "El stock mínimo no es válido.",
         UpdateProductResultStatus.DuplicateSku => "Ya existe otro producto con ese SKU.",
         UpdateProductResultStatus.DuplicateBarcode => "Ya existe otro producto con ese código de barras.",
+        UpdateProductResultStatus.InvalidImage => "El archivo elegido no es una imagen JPEG/PNG válida.",
+        UpdateProductResultStatus.ImageTooLarge => "La imagen es demasiado grande. Elija un archivo más pequeño.",
         _ => "Ocurrió un error inesperado. Intente nuevamente.",
     };
 
