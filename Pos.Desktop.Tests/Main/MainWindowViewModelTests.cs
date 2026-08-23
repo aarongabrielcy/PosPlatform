@@ -11,6 +11,7 @@ using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
 using Pos.Desktop.Dashboard;
 using Pos.Desktop.Inventory;
+using Pos.Desktop.LocalConfiguration;
 using Pos.Desktop.Main;
 using FakeInventoryService = Pos.Desktop.Tests.Inventory.FakeInventoryService;
 using Pos.Desktop.Products.Catalog;
@@ -321,6 +322,46 @@ public class MainWindowViewModelTests
         Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.Sales);
         Assert.DoesNotContain(viewModel.NavigationItems, i => i.Section == NavigationSection.Products);
         Assert.DoesNotContain(viewModel.NavigationItems, i => i.Section == NavigationSection.Settings);
+    }
+
+    // BASIC-CFG-01, sección 27/28: Configuración se gatea con ManageSettings, nunca con RoleName.
+    [Fact]
+    public void NavigationItemsIncludeLocalConfigurationForAUserWithManageSettings()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "ADMIN", "Admin Uno", "Administrador",
+                [Permission.ProcessSale, Permission.ManageSettings]),
+        };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.Contains(viewModel.NavigationItems, i => i.Section == NavigationSection.LocalConfiguration);
+    }
+
+    [Fact]
+    public void NavigationItemsExcludeLocalConfigurationForAUserWithoutManageSettings()
+    {
+        var session = new FakeCurrentUserSession { CurrentUser = CreateManageProductsUser() };
+        var viewModel = CreateViewModel(session: session);
+
+        Assert.DoesNotContain(viewModel.NavigationItems, i => i.Section == NavigationSection.LocalConfiguration);
+    }
+
+    [Fact]
+    public void SelectingLocalConfigurationNavigatesToTheLocalConfigurationViewModel()
+    {
+        var session = new FakeCurrentUserSession
+        {
+            CurrentUser = new AuthenticatedUser(
+                UserId.New(), OrganizationId.New(), RoleId.New(), "ADMIN", "Admin Uno", "Administrador",
+                [Permission.ManageSettings]),
+        };
+        var viewModel = CreateViewModel(session: session);
+
+        viewModel.SelectedNavigationItem = viewModel.NavigationItems.Single(i => i.Section == NavigationSection.LocalConfiguration);
+
+        Assert.IsType<Pos.Desktop.LocalConfiguration.LocalConfigurationViewModel>(viewModel.CurrentViewModel);
     }
 
     [Fact]
@@ -1000,6 +1041,7 @@ public class MainWindowViewModelTests
         InventoryViewModel? inventoryViewModel = null,
         RegisterViewModel? registerViewModel = null,
         ReportsViewModel? reportsViewModel = null,
+        LocalConfigurationViewModel? localConfigurationViewModel = null,
         FakeAdministrativeNotificationService? notificationService = null,
         FakeProductAuditService? productAuditService = null,
         Enforcement.FakeInstallationEnforcementStateService? enforcementStateService = null)
@@ -1018,6 +1060,7 @@ public class MainWindowViewModelTests
             NullLogger<RegisterViewModel>.Instance);
         reportsViewModel ??= new ReportsViewModel(
             new Pos.Desktop.Tests.Reports.FakeOperationalReportsService(), new FakeClock(DateTimeOffset.UtcNow));
+        localConfigurationViewModel ??= Pos.Desktop.Tests.LocalConfiguration.LocalConfigurationViewModelTestFactory.CreateDefault();
         var userManagementViewModel = new UserManagementViewModel(new FakeUserManagementService());
         var productAuditViewModel = new ProductAuditViewModel(productAuditService ?? new FakeProductAuditService());
         var notificationCenterViewModel = new NotificationCenterViewModel(notificationService ?? new FakeAdministrativeNotificationService());
@@ -1026,7 +1069,7 @@ public class MainWindowViewModelTests
             session, registerSession, currentSalesCart, enforcementStateService,
             dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
             inventoryViewModel, registerViewModel, userManagementViewModel, productAuditViewModel,
-            reportsViewModel, notificationCenterViewModel);
+            reportsViewModel, localConfigurationViewModel, notificationCenterViewModel);
     }
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>

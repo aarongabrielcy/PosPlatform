@@ -17,21 +17,22 @@ public sealed class EscPosReceiptFormatter : IReceiptFormatter
     private const int Columns58mm = 32;
     private const int Columns80mm = 48;
 
-    private readonly ReceiptPrinterOptions _options;
+    private readonly IReceiptPrinterOptionsProvider _optionsProvider;
 
-    public EscPosReceiptFormatter(ReceiptPrinterOptions options)
+    public EscPosReceiptFormatter(IReceiptPrinterOptionsProvider optionsProvider)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        _optionsProvider = optionsProvider ?? throw new ArgumentNullException(nameof(optionsProvider));
     }
 
     public FormattedReceipt Format(Receipt receipt)
     {
         ArgumentNullException.ThrowIfNull(receipt);
 
-        var columns = GetColumns(_options.PaperWidth);
+        var options = _optionsProvider.Current;
+        var columns = GetColumns(options.PaperWidth);
         var lines = BuildTextLines(receipt, columns);
 
-        return new FormattedReceipt(BuildPayload(lines, columns, _options.CutPaper));
+        return new FormattedReceipt(BuildPayload(lines, columns, options.CutPaper));
     }
 
     internal static int GetColumns(ReceiptPaperWidth paperWidth) => paperWidth switch

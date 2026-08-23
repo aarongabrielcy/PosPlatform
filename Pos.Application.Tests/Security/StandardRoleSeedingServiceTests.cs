@@ -480,6 +480,46 @@ public class StandardRoleSeedingServiceTests
         Assert.Equal(roleCountAfterFirstRun, (await roleRepository.GetByOrganizationAsync(organization.Id, CancellationToken.None)).Count);
     }
 
+    // BASIC-CFG-01, sección 27/50: ManageSettings solo llega a Administrator vía
+    // AdministrativePermissionSet.All(); no está en StandardRoles.ManagerPermissions()/
+    // CashierPermissions(), así que Manager/Cashier nunca lo reciben.
+    [Fact]
+    public async Task ManagerAndCashierNeverReceiveManageSettings()
+    {
+        var (roleRepository, organization) = await SeedAsync();
+
+        var roles = await roleRepository.GetByOrganizationAsync(organization.Id, CancellationToken.None);
+        Assert.False(roles.Single(r => r.Name == "Manager").HasPermission(Permission.ManageSettings));
+        Assert.False(roles.Single(r => r.Name == "Cashier").HasPermission(Permission.ManageSettings));
+    }
+
+    // Mismo escenario que ReconciliationToppsUpAnExistingAdministratorRoleMissingNewPermissions,
+    // enfocado específicamente en ManageSettings: un Administrator ya persistido antes de agregar
+    // este Permission lo gana en el próximo arranque; Manager (reconciliado en la misma corrida)
+    // nunca lo gana.
+    [Fact]
+    public async Task ReconciliationAddsManageSettingsOnlyToAdministratorNeverToManager()
+    {
+        var organization = CreateOrganization();
+        var administratorRoleId = RoleId.New();
+        var administratorRole = new Role(
+            administratorRoleId, organization.Id, "Administrator", UtcNow, OldAdministratorPermissions);
+        var managerRoleId = RoleId.New();
+        var managerRole = new Role(managerRoleId, organization.Id, "Manager", UtcNow, OldManagerPermissions);
+        var organizationRepository = new FakeOrganizationRepository([organization]);
+        var roleRepository = new FakeRoleRepository([administratorRole, managerRole]);
+        var unitOfWork = new FakeUnitOfWork();
+        var service = new StandardRoleSeedingService(
+            organizationRepository, roleRepository, unitOfWork, new Common.Time.FakeClock(UtcNow));
+
+        await service.EnsureStandardRolesExistAsync(CancellationToken.None);
+
+        var reconciledAdmin = await roleRepository.GetByIdAsync(administratorRoleId, CancellationToken.None);
+        var reconciledManager = await roleRepository.GetByIdAsync(managerRoleId, CancellationToken.None);
+        Assert.True(reconciledAdmin!.HasPermission(Permission.ManageSettings));
+        Assert.False(reconciledManager!.HasPermission(Permission.ManageSettings));
+    }
+
     private static async Task<(FakeRoleRepository RoleRepository, Organization Organization)> SeedAsync()
     {
         var organization = CreateOrganization();

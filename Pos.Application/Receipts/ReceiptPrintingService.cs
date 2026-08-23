@@ -1,4 +1,5 @@
 using Pos.Application.Authentication;
+using Pos.Application.Common.Time;
 using Pos.Application.Organizations;
 using Pos.Application.Sales.History;
 using Pos.Domain.Common.Identifiers;
@@ -19,7 +20,8 @@ public sealed class ReceiptPrintingService : IReceiptPrintingService
     private readonly IOrganizationRepository _organizationRepository;
     private readonly IReceiptFormatter _receiptFormatter;
     private readonly IReceiptPrinter _receiptPrinter;
-    private readonly ReceiptPrinterOptions _printerOptions;
+    private readonly IReceiptPrinterOptionsProvider _printerOptionsProvider;
+    private readonly IClock _clock;
 
     public ReceiptPrintingService(
         ICurrentUserSession currentUserSession,
@@ -27,14 +29,16 @@ public sealed class ReceiptPrintingService : IReceiptPrintingService
         IOrganizationRepository organizationRepository,
         IReceiptFormatter receiptFormatter,
         IReceiptPrinter receiptPrinter,
-        ReceiptPrinterOptions printerOptions)
+        IReceiptPrinterOptionsProvider printerOptionsProvider,
+        IClock clock)
     {
         _currentUserSession = currentUserSession ?? throw new ArgumentNullException(nameof(currentUserSession));
         _salesHistoryQuery = salesHistoryQuery ?? throw new ArgumentNullException(nameof(salesHistoryQuery));
         _organizationRepository = organizationRepository ?? throw new ArgumentNullException(nameof(organizationRepository));
         _receiptFormatter = receiptFormatter ?? throw new ArgumentNullException(nameof(receiptFormatter));
         _receiptPrinter = receiptPrinter ?? throw new ArgumentNullException(nameof(receiptPrinter));
-        _printerOptions = printerOptions ?? throw new ArgumentNullException(nameof(printerOptions));
+        _printerOptionsProvider = printerOptionsProvider ?? throw new ArgumentNullException(nameof(printerOptionsProvider));
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
     }
 
     public async Task<ReceiptPrintResult> PrintAfterSaleAsync(
@@ -47,7 +51,7 @@ public sealed class ReceiptPrintingService : IReceiptPrintingService
             return ReceiptPrintResult.Of(ReceiptPrintResultStatus.Skipped);
         }
 
-        if (!_printerOptions.Enabled || !_printerOptions.AutoPrint)
+        if (!_printerOptionsProvider.Current.Enabled || !_printerOptionsProvider.Current.AutoPrint)
         {
             return ReceiptPrintResult.Of(ReceiptPrintResultStatus.Skipped);
         }
@@ -64,12 +68,42 @@ public sealed class ReceiptPrintingService : IReceiptPrintingService
             return ReceiptPrintResult.Of(ReceiptPrintResultStatus.NotAuthorized);
         }
 
-        if (!_printerOptions.Enabled)
+        if (!_printerOptionsProvider.Current.Enabled)
         {
             return ReceiptPrintResult.Of(ReceiptPrintResultStatus.Skipped);
         }
 
         return await PrintCoreAsync(user, saleId, isReprint: true, cashTendered: null, changeDue: null, cancellationToken);
+    }
+
+    public async Task<ReceiptPrintResult> PrintTestAsync(CancellationToken cancellationToken = default)
+    {
+        var user = _currentUserSession.CurrentUser;
+
+        if (user is null || !user.HasPermission(Permission.ManageSettings))
+        {
+            return ReceiptPrintResult.Of(ReceiptPrintResultStatus.NotAuthorized);
+        }
+
+        var options = _printerOptionsProvider.Current;
+
+        if (!options.Enabled)
+        {
+            return ReceiptPrintResult.Of(ReceiptPrintResultStatus.Skipped);
+        }
+
+        var receipt = ReceiptBuilder.BuildTestReceipt(options.PaperWidth, _clock.UtcNow);
+        var formatted = _receiptFormatter.Format(receipt);
+        var outcome = await _receiptPrinter.PrintAsync(formatted, cancellationToken);
+
+        return ReceiptPrintResult.Of(outcome.Status switch
+        {
+            PrinterOutcomeStatus.Success => ReceiptPrintResultStatus.Success,
+            PrinterOutcomeStatus.NotConfigured => ReceiptPrintResultStatus.Skipped,
+            PrinterOutcomeStatus.PrinterUnavailable => ReceiptPrintResultStatus.PrinterUnavailable,
+            PrinterOutcomeStatus.PrintFailed => ReceiptPrintResultStatus.PrintFailed,
+            _ => ReceiptPrintResultStatus.PrintFailed,
+        });
     }
 
     private async Task<ReceiptPrintResult> PrintCoreAsync(

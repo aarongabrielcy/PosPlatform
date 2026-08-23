@@ -10,6 +10,7 @@ using Pos.Application.CashMovements;
 using Pos.Application.Common.Persistence;
 using Pos.Application.Common.Time;
 using Pos.Application.Common.Versioning;
+using Pos.Application.Configuration;
 using Pos.Application.Enforcement;
 using Pos.Application.Installation;
 using Pos.Application.InstallationHealth;
@@ -31,6 +32,7 @@ using Pos.Application.Users;
 using Pos.Application.Users.UserManagement;
 using Pos.Infrastructure.Activation;
 using Pos.Infrastructure.Authentication;
+using Pos.Infrastructure.Configuration;
 using Pos.Infrastructure.Enforcement;
 using Pos.Infrastructure.InstallationHealth;
 using Pos.Infrastructure.Persistence;
@@ -141,6 +143,11 @@ public static class DependencyInjection
         }
 
         services.AddSingleton<IInstallationActivationRecordStore, FileInstallationActivationRecordStore>();
+
+        // BASIC-CFG-01: configuración local de máquina (impresora/cajón). Singleton, mismo criterio
+        // que los demás stores de archivo local (Activation/Enforcement): es un simple wrapper de
+        // I/O sin estado por-scope que valga la pena aislar.
+        services.AddSingleton<ILocalSettingsStore, FileLocalSettingsStore>();
 
         // Singleton: debe observarse de forma idéntica desde InstallationHeartbeatBackgroundService
         // (ámbito raíz del Host) y desde los servicios Scoped que protegen mutaciones (ver

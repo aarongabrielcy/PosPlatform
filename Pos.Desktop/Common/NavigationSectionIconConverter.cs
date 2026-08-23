@@ -35,6 +35,16 @@ public sealed class NavigationSectionIconConverter : IValueConverter
     private static readonly Geometry ReportsIcon = Geometry.Parse(
         "M1,14 H15 V15.5 H1 Z M2,9 H5 V14 H2 Z M6.5,5 H9.5 V14 H6.5 Z M11,2 H14 V14 H11 Z");
 
+    // Engrane simple (BASIC-CFG-01, sección 28/29): distinto del ícono ya usado por "Usuarios"
+    // (SettingsIcon, heredado del placeholder original "Configuración" renombrado en BASIC-USR-01),
+    // reconocible como "configuración de máquina" sin depender únicamente del texto de la etiqueta.
+    private static readonly Geometry LocalConfigurationIcon = Geometry.Parse(
+        "M6.5,1 H9.5 L9.9,3 A5,5 0 0,1 11.6,3.8 L13.4,2.7 L15.3,4.6 L14.2,6.4 A5,5 0 0,1 15,8.1 " +
+        "L17,8.5 V9.5 L15,9.9 A5,5 0 0,1 14.2,11.6 L15.3,13.4 L13.4,15.3 L11.6,14.2 A5,5 0 0,1 9.9,15 " +
+        "L9.5,17 H6.5 L6.1,15 A5,5 0 0,1 4.4,14.2 L2.6,15.3 L0.7,13.4 L1.8,11.6 A5,5 0 0,1 1,9.9 " +
+        "L-1,9.5 V8.5 L1,8.1 A5,5 0 0,1 1.8,6.4 L0.7,4.6 L2.6,2.7 L4.4,3.8 A5,5 0 0,1 6.1,3 Z " +
+        "M8,5.5 A3,3 0 1,0 8.001,5.5 Z");
+
     // Mismo trazo que IconHistory en Icons.xaml (TAREA 25B, sección 9): reloj/historial, ya usado
     // para "Ver movimientos de stock" en Inventario, reutilizado aquí para el ítem de navegación
     // "Historial" en vez de duplicar geometría.
@@ -59,6 +69,7 @@ public sealed class NavigationSectionIconConverter : IValueConverter
             NavigationSection.Settings => SettingsIcon,
             NavigationSection.Audit or NavigationSection.AuditProducts => AuditIcon,
             NavigationSection.Reports => ReportsIcon,
+            NavigationSection.LocalConfiguration => LocalConfigurationIcon,
             _ => DashboardIcon,
         };
     }

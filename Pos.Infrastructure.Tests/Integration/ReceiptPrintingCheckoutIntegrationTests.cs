@@ -98,7 +98,8 @@ public class ReceiptPrintingCheckoutIntegrationTests
             new EfOrganizationRepository(context),
             new FakeReceiptFormatter(),
             printer,
-            new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20", AutoPrint = true });
+            new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20", AutoPrint = true }),
+            new SystemClock());
 
         var printResult = await printingService.PrintAfterSaleAsync(saleId, cashTendered: 20m, changeDue: 0m);
 
@@ -135,7 +136,8 @@ public class ReceiptPrintingCheckoutIntegrationTests
             new EfOrganizationRepository(context),
             reprintFormatter,
             succeedingPrinter,
-            new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" });
+            new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }),
+            new SystemClock());
 
         var reprintResult = await reprintService.ReprintAsync(saleId);
 
@@ -183,7 +185,8 @@ public class ReceiptPrintingCheckoutIntegrationTests
             new EfOrganizationRepository(context),
             new FakeReceiptFormatter(),
             printer,
-            new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" });
+            new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }),
+            new SystemClock());
 
         var result = await printingService.ReprintAsync(sale.Id);
 

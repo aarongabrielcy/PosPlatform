@@ -19,7 +19,7 @@ public class WindowsSpoolReceiptPrinterTests
     {
         var gateway = new FakeWinSpoolGateway();
         var printer = new WindowsSpoolReceiptPrinter(
-            new ReceiptPrinterOptions { Enabled = false, PrinterName = "TM-T20" }, gateway);
+            new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = false, PrinterName = "TM-T20" }), gateway);
 
         var outcome = await printer.PrintAsync(SampleReceipt);
 
@@ -32,7 +32,7 @@ public class WindowsSpoolReceiptPrinterTests
     {
         var gateway = new FakeWinSpoolGateway();
         var printer = new WindowsSpoolReceiptPrinter(
-            new ReceiptPrinterOptions { Enabled = true, PrinterName = "  " }, gateway);
+            new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = true, PrinterName = "  " }), gateway);
 
         var outcome = await printer.PrintAsync(SampleReceipt);
 
@@ -45,7 +45,7 @@ public class WindowsSpoolReceiptPrinterTests
     {
         var gateway = new FakeWinSpoolGateway();
         var printer = new WindowsSpoolReceiptPrinter(
-            new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }, gateway);
+            new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }), gateway);
 
         var outcome = await printer.PrintAsync(SampleReceipt);
 
@@ -59,7 +59,7 @@ public class WindowsSpoolReceiptPrinterTests
     {
         var gateway = new FakeWinSpoolGateway();
         var printer = new WindowsSpoolReceiptPrinter(
-            new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }, gateway);
+            new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }), gateway);
 
         await printer.PrintAsync(SampleReceipt);
 
@@ -73,7 +73,7 @@ public class WindowsSpoolReceiptPrinterTests
     {
         var gateway = new FakeWinSpoolGateway { OpenPrinterResult = false };
         var printer = new WindowsSpoolReceiptPrinter(
-            new ReceiptPrinterOptions { Enabled = true, PrinterName = "Missing" }, gateway);
+            new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = true, PrinterName = "Missing" }), gateway);
 
         var outcome = await printer.PrintAsync(SampleReceipt);
 
@@ -87,7 +87,7 @@ public class WindowsSpoolReceiptPrinterTests
     {
         var gateway = new FakeWinSpoolGateway { StartDocPrinterResult = false };
         var printer = new WindowsSpoolReceiptPrinter(
-            new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }, gateway);
+            new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }), gateway);
 
         var outcome = await printer.PrintAsync(SampleReceipt);
 
@@ -101,7 +101,7 @@ public class WindowsSpoolReceiptPrinterTests
     {
         var gateway = new FakeWinSpoolGateway { WritePrinterResult = false };
         var printer = new WindowsSpoolReceiptPrinter(
-            new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }, gateway);
+            new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }), gateway);
 
         var outcome = await printer.PrintAsync(SampleReceipt);
 
@@ -116,7 +116,7 @@ public class WindowsSpoolReceiptPrinterTests
     {
         var gateway = new FakeWinSpoolGateway { WritePrinterBytesWrittenOverride = 1 };
         var printer = new WindowsSpoolReceiptPrinter(
-            new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }, gateway);
+            new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }), gateway);
 
         var outcome = await printer.PrintAsync(SampleReceipt);
 
@@ -128,12 +128,40 @@ public class WindowsSpoolReceiptPrinterTests
     {
         var gateway = new FakeWinSpoolGateway { ThrowOnWritePrinter = new InvalidOperationException("boom") };
         var printer = new WindowsSpoolReceiptPrinter(
-            new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }, gateway);
+            new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { Enabled = true, PrinterName = "TM-T20" }), gateway);
 
         var outcome = await printer.PrintAsync(SampleReceipt);
 
         Assert.Equal(PrinterOutcomeStatus.PrintFailed, outcome.Status);
         Assert.Contains("boom", outcome.TechnicalDetail);
         Assert.Equal(1, gateway.ClosePrinterCallCount);
+    }
+
+    // BASIC-CFG-01, sección 32/33: un cambio de impresora reflejado en el provider (sin reconstruir
+    // WindowsSpoolReceiptPrinter) debe usarse en la siguiente impresión sin reiniciar la aplicación.
+    [Fact]
+    public async Task PrintUsesTheCurrentPrinterNameFromTheProviderWithoutReconstructingThePrinter()
+    {
+        var gateway = new FakeWinSpoolGateway();
+        var mutableProvider = new MutableReceiptPrinterOptionsProvider(
+            new ReceiptPrinterOptions { Enabled = true, PrinterName = "Printer A" });
+        var printer = new WindowsSpoolReceiptPrinter(mutableProvider, gateway);
+
+        await printer.PrintAsync(SampleReceipt);
+        Assert.Equal("Printer A", gateway.LastPrinterName);
+
+        mutableProvider.Current = new ReceiptPrinterOptions { Enabled = true, PrinterName = "Printer B" };
+        await printer.PrintAsync(SampleReceipt);
+
+        Assert.Equal("Printer B", gateway.LastPrinterName);
+    }
+
+    private sealed class MutableReceiptPrinterOptionsProvider : IReceiptPrinterOptionsProvider
+    {
+        public MutableReceiptPrinterOptionsProvider(ReceiptPrinterOptions current) => Current = current;
+
+        public ReceiptPrinterOptions Current { get; set; }
+
+        public Task RefreshAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

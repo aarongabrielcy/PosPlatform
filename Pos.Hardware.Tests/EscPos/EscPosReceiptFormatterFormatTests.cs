@@ -14,7 +14,7 @@ public sealed class EscPosReceiptFormatterFormatTests
     [Fact]
     public void FormatPayloadStartsWithInitializeAndCodePage850Selection()
     {
-        var formatter = new EscPosReceiptFormatter(new ReceiptPrinterOptions());
+        var formatter = new EscPosReceiptFormatter(new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions()));
         var payload = formatter.Format(BuildReceipt()).Payload;
 
         Assert.Equal(EscPosCommands.Initialize, payload.Take(EscPosCommands.Initialize.Length).ToArray());
@@ -26,7 +26,7 @@ public sealed class EscPosReceiptFormatterFormatTests
     [Fact]
     public void FormatPayloadEndsWithFeedAndWithoutCutWhenCutPaperDisabled()
     {
-        var formatter = new EscPosReceiptFormatter(new ReceiptPrinterOptions { CutPaper = false });
+        var formatter = new EscPosReceiptFormatter(new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { CutPaper = false }));
         var payload = formatter.Format(BuildReceipt()).Payload.ToArray();
 
         Assert.DoesNotContain(GetAllSlices(payload, EscPosCommands.PartialCut.Length), s => s.SequenceEqual(EscPosCommands.PartialCut));
@@ -36,7 +36,7 @@ public sealed class EscPosReceiptFormatterFormatTests
     [Fact]
     public void FormatPayloadEndsWithCutCommandWhenCutPaperEnabled()
     {
-        var formatter = new EscPosReceiptFormatter(new ReceiptPrinterOptions { CutPaper = true });
+        var formatter = new EscPosReceiptFormatter(new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions { CutPaper = true }));
         var payload = formatter.Format(BuildReceipt()).Payload.ToArray();
 
         Assert.Equal(EscPosCommands.PartialCut, payload[^EscPosCommands.PartialCut.Length..]);
@@ -45,7 +45,7 @@ public sealed class EscPosReceiptFormatterFormatTests
     [Fact]
     public void FormatPayloadContainsEncodedSpanishCharactersFromCashierName()
     {
-        var formatter = new EscPosReceiptFormatter(new ReceiptPrinterOptions());
+        var formatter = new EscPosReceiptFormatter(new FixedReceiptPrinterOptionsProvider(new ReceiptPrinterOptions()));
         var receipt = BuildReceipt(cashierDisplayName: "Ñoño Muñoz");
         var payload = formatter.Format(receipt).Payload.ToArray();
 

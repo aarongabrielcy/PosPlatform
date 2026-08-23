@@ -185,6 +185,7 @@ public class MainWindowTests
                 new UserManagementViewModel(new FakeUserManagementService()),
                 new ProductAuditViewModel(new FakeProductAuditService()),
                 new ReportsViewModel(new Pos.Desktop.Tests.Reports.FakeOperationalReportsService(), new FakeClock(DateTimeOffset.UtcNow)),
+                Pos.Desktop.Tests.LocalConfiguration.LocalConfigurationViewModelTestFactory.CreateDefault(),
                 new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
             _ = new MainWindow(viewModel);
 
@@ -305,6 +306,7 @@ public class MainWindowTests
                 new UserManagementViewModel(new FakeUserManagementService()),
                 new ProductAuditViewModel(new FakeProductAuditService()),
                 new ReportsViewModel(new Pos.Desktop.Tests.Reports.FakeOperationalReportsService(), new FakeClock(DateTimeOffset.UtcNow)),
+                Pos.Desktop.Tests.LocalConfiguration.LocalConfigurationViewModelTestFactory.CreateDefault(),
                 new NotificationCenterViewModel(new FakeAdministrativeNotificationService()));
             var window = new MainWindow(viewModel);
 
@@ -445,7 +447,8 @@ public class MainWindowTests
             session, registerSession, currentSalesCart, new Enforcement.FakeInstallationEnforcementStateService(),
             dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
             inventoryViewModel, registerViewModel, userManagementViewModel, productAuditViewModel,
-            reportsViewModel, notificationCenterViewModel);
+            reportsViewModel, Pos.Desktop.Tests.LocalConfiguration.LocalConfigurationViewModelTestFactory.CreateDefault(),
+            notificationCenterViewModel);
     }
 
     private static AuthenticatedUser CreateAuthenticatedUser(string displayName, string roleName) =>

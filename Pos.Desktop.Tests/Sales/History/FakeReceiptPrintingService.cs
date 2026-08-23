@@ -23,4 +23,9 @@ internal sealed class FakeReceiptPrintingService : IReceiptPrintingService
 
         return Task.FromResult(ReceiptPrintResult.Of(ReprintResultStatus));
     }
+
+    public ReceiptPrintResultStatus PrintTestResultStatus { get; set; } = ReceiptPrintResultStatus.Success;
+
+    public Task<ReceiptPrintResult> PrintTestAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(ReceiptPrintResult.Of(PrintTestResultStatus));
 }
