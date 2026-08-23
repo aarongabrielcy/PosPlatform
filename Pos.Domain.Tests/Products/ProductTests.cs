@@ -466,6 +466,73 @@ public class ProductTests
         Assert.True(product.IsActive);
     }
 
+    // ---------- Foto de producto (BASIC-UX-01, sección 5/47) ----------
+
+    [Fact]
+    public void NewProductHasNoImageByDefault()
+    {
+        var product = CreateProduct();
+
+        Assert.Null(product.ImageFileName);
+    }
+
+    [Fact]
+    public void ChangeImageSetsTheManagedFileNameWithoutChangingProductId()
+    {
+        var product = CreateProduct();
+        var originalId = product.Id;
+
+        product.ChangeImage("abc123.jpg");
+
+        Assert.Equal("abc123.jpg", product.ImageFileName);
+        Assert.Equal(originalId, product.Id);
+    }
+
+    [Fact]
+    public void ChangeImageCanReplaceAnExistingFileNameWithoutChangingProductId()
+    {
+        var product = CreateProduct();
+        var originalId = product.Id;
+        product.ChangeImage("first.jpg");
+
+        product.ChangeImage("second.jpg");
+
+        Assert.Equal("second.jpg", product.ImageFileName);
+        Assert.Equal(originalId, product.Id);
+    }
+
+    [Fact]
+    public void ChangeImageRejectsNullOrWhitespace()
+    {
+        var product = CreateProduct();
+
+        Assert.Throws<ArgumentException>(() => product.ChangeImage(""));
+        Assert.Throws<ArgumentException>(() => product.ChangeImage("   "));
+    }
+
+    [Fact]
+    public void RemoveImageClearsTheFileNameWithoutChangingProductId()
+    {
+        var product = CreateProduct();
+        var originalId = product.Id;
+        product.ChangeImage("abc123.jpg");
+
+        product.RemoveImage();
+
+        Assert.Null(product.ImageFileName);
+        Assert.Equal(originalId, product.Id);
+    }
+
+    [Fact]
+    public void RemoveImageOnAProductWithoutAPhotoIsANoOp()
+    {
+        var product = CreateProduct();
+
+        product.RemoveImage();
+
+        Assert.Null(product.ImageFileName);
+    }
+
     [Fact]
     public void ChangeSalePriceWithIncompatibleCurrencyDoesNotModifySalePriceOrCost()
     {
@@ -509,6 +576,7 @@ public class ProductTests
             cost,
             true,
             true,
+            null,
             FixedUtcNow);
 
         Assert.Equal(id, product.Id);
@@ -525,6 +593,26 @@ public class ProductTests
     }
 
     [Fact]
+    public void RehydrateRestoresTheImageFileName()
+    {
+        var product = Product.Rehydrate(
+            ProductId.New(),
+            OrganizationId.New(),
+            new Sku("PROD-001"),
+            null,
+            "Producto de prueba",
+            null,
+            new Money(100m, "MXN"),
+            null,
+            true,
+            true,
+            "existing.jpg",
+            FixedUtcNow);
+
+        Assert.Equal("existing.jpg", product.ImageFileName);
+    }
+
+    [Fact]
     public void RehydrateRestoresInactiveState()
     {
         var product = Product.Rehydrate(
@@ -538,6 +626,7 @@ public class ProductTests
             null,
             true,
             false,
+            null,
             FixedUtcNow);
 
         Assert.False(product.IsActive);
@@ -557,6 +646,7 @@ public class ProductTests
             null,
             true,
             true,
+            null,
             FixedUtcNow));
     }
 
@@ -574,6 +664,7 @@ public class ProductTests
             null,
             true,
             true,
+            null,
             FixedUtcNow));
     }
 
@@ -591,6 +682,7 @@ public class ProductTests
             new Money(50m, "USD"),
             true,
             true,
+            null,
             FixedUtcNow));
     }
 }

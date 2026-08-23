@@ -45,6 +45,65 @@ public class MainWindowViewModelTests
         Assert.Equal("Cajero", viewModel.RoleName);
     }
 
+    // ---------- Fecha/hora local del header (BASIC-UX-01, sección 22-24/51) ----------
+
+    [Fact]
+    public void ExposesLocalDateAndTimeFormattedForSpanishMexico()
+    {
+        var clock = new Pos.Desktop.Tests.Common.FakeDesktopClock(new DateTime(2026, 8, 22, 18, 45, 0));
+        var viewModel = CreateViewModel(clock: clock);
+
+        Assert.Equal("22/08/2026", viewModel.CurrentDateText);
+        Assert.Equal("18:45", viewModel.CurrentTimeText);
+    }
+
+    // ---------- Indicador de conectividad POS Cloud (BASIC-UX-01, sección 27-38/52/55) ----------
+
+    [Fact]
+    public void StartsCheckingCloudConnectivityBeforeAnyHeartbeatOutcomeIsKnown()
+    {
+        var connectivityStateService = new Enforcement.FakeInstallationConnectivityStateService();
+        var viewModel = CreateViewModel(connectivityStateService: connectivityStateService);
+
+        Assert.Equal(Pos.Application.Enforcement.InstallationConnectivityState.Checking, viewModel.CloudConnectivityState);
+        Assert.Equal("Comprobando POS Cloud...", viewModel.CloudStatusText);
+    }
+
+    [Fact]
+    public void ConnectedCloudStateShowsATruthfulControlPlaneMessage()
+    {
+        var connectivityStateService = new Enforcement.FakeInstallationConnectivityStateService();
+        var viewModel = CreateViewModel(connectivityStateService: connectivityStateService);
+
+        connectivityStateService.RaiseStateChanged(Pos.Application.Enforcement.InstallationConnectivityState.Connected);
+
+        Assert.Equal("POS Cloud conectado", viewModel.CloudStatusText);
+        Assert.DoesNotContain("sincroniz", viewModel.CloudStatusText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void OfflineCloudStateStillCommunicatesLocalOperationIsAvailable()
+    {
+        var connectivityStateService = new Enforcement.FakeInstallationConnectivityStateService();
+        var viewModel = CreateViewModel(connectivityStateService: connectivityStateService);
+
+        connectivityStateService.RaiseStateChanged(Pos.Application.Enforcement.InstallationConnectivityState.Offline);
+
+        Assert.Equal("Sin conexión · operación local disponible", viewModel.CloudStatusText);
+    }
+
+    [Fact]
+    public void DisposingStopsReactingToFurtherConnectivityStateChanges()
+    {
+        var connectivityStateService = new Enforcement.FakeInstallationConnectivityStateService();
+        var viewModel = CreateViewModel(connectivityStateService: connectivityStateService);
+
+        viewModel.Dispose();
+        connectivityStateService.RaiseStateChanged(Pos.Application.Enforcement.InstallationConnectivityState.Connected);
+
+        Assert.Equal(Pos.Application.Enforcement.InstallationConnectivityState.Checking, viewModel.CloudConnectivityState);
+    }
+
     // ---------- Aviso de enforcement en la app en ejecución (sección 17/38 de la tarea) ----------
 
     [Fact]
@@ -1044,12 +1103,16 @@ public class MainWindowViewModelTests
         LocalConfigurationViewModel? localConfigurationViewModel = null,
         FakeAdministrativeNotificationService? notificationService = null,
         FakeProductAuditService? productAuditService = null,
-        Enforcement.FakeInstallationEnforcementStateService? enforcementStateService = null)
+        Enforcement.FakeInstallationEnforcementStateService? enforcementStateService = null,
+        Enforcement.FakeInstallationConnectivityStateService? connectivityStateService = null,
+        Pos.Desktop.Tests.Common.FakeDesktopClock? clock = null)
     {
         session ??= new FakeCurrentUserSession();
         registerSession ??= new FakeCurrentRegisterSession();
         currentSalesCart ??= new FakeCurrentSalesCart();
         enforcementStateService ??= new Enforcement.FakeInstallationEnforcementStateService();
+        connectivityStateService ??= new Enforcement.FakeInstallationConnectivityStateService();
+        clock ??= new Pos.Desktop.Tests.Common.FakeDesktopClock(new DateTime(2026, 8, 22, 18, 45, 0));
         dashboardViewModel ??= new DashboardViewModel(session, registerSession, currentSalesCart, new CatalogFakeProductManagementService());
         salesViewModel ??= new SalesViewModel(session, registerSession, new FakeSalesCartService(), new FakeProductManagementService(), currentSalesCart);
         salesHistoryViewModel ??= new SalesHistoryViewModel(new FakeSalesHistoryService(), new FakeCurrentUserSession(), new FakeReceiptPrintingService(), new FakeClock(DateTimeOffset.UtcNow));
@@ -1067,6 +1130,7 @@ public class MainWindowViewModelTests
 
         return new MainWindowViewModel(
             session, registerSession, currentSalesCart, enforcementStateService,
+            connectivityStateService, clock,
             dashboardViewModel, salesViewModel, salesHistoryViewModel, productsViewModel,
             inventoryViewModel, registerViewModel, userManagementViewModel, productAuditViewModel,
             reportsViewModel, localConfigurationViewModel, notificationCenterViewModel);

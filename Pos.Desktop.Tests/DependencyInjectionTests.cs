@@ -12,6 +12,7 @@ using Pos.Application.RegisterSessions;
 using Pos.Desktop.Activation;
 using Pos.Desktop.AdministrativeNotifications;
 using Pos.Desktop.Audit.Products;
+using Pos.Desktop.Common;
 using Pos.Desktop.Configuration;
 using Pos.Desktop.Dashboard;
 using Pos.Desktop.Enforcement;
@@ -51,10 +52,15 @@ public class DependencyInjectionTests
 
         public string BackupDirectory { get; }
 
+        public string ProductImagesDirectory => Path.Combine(DataDirectory, "ProductImages");
+
         public void EnsureDataDirectoryExists() =>
             throw new InvalidOperationException("No debe invocarse durante la prueba de composición.");
 
         public void EnsureBackupDirectoryExists() =>
+            throw new InvalidOperationException("No debe invocarse durante la prueba de composición.");
+
+        public void EnsureProductImagesDirectoryExists() =>
             throw new InvalidOperationException("No debe invocarse durante la prueba de composición.");
     }
 
@@ -80,6 +86,10 @@ public class DependencyInjectionTests
         services.AddSingleton<IPrinterDiscovery, WindowsPrinterDiscovery>();
         services.AddScoped<IReceiptPrintingService, ReceiptPrintingService>();
         services.AddScoped<ILocalSettingsService, LocalSettingsService>();
+
+        // BASIC-UX-01: mismo registro que App.xaml.cs. MainWindowViewModel depende de IDesktopClock
+        // para el reloj del header.
+        services.AddSingleton<IDesktopClock, SystemDesktopClock>();
 
         services.AddTransient<ActivationViewModel>();
         services.AddTransient<ActivationWindow>();

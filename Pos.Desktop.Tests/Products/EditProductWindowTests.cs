@@ -37,7 +37,7 @@ public class EditProductWindowTests
     }
 
     private static EditProductViewModel CreateViewModel(FakeProductManagementService service) =>
-        new(service, new FakeCurrentSalesCart(), NullLogger<EditProductViewModel>.Instance);
+        new(service, new FakeProductPhotoService(), new FakeCurrentSalesCart(), NullLogger<EditProductViewModel>.Instance);
 
     // TAREA 24B (corrección de layout): verifica que los cuatro botones del área inferior sigan
     // presentes y cableados a sus comandos tras reorganizar el StackPanel en un Grid con zonas
@@ -83,6 +83,34 @@ public class EditProductWindowTests
 
             Assert.NotNull(binding);
             Assert.Equal(nameof(EditProductViewModel.CancelCommand), binding.Path.Path);
+        });
+
+    // ---------- Foto del producto (BASIC-UX-01, sección 55) ----------
+
+    [Fact]
+    public void SelectImageButtonIsBoundToTheSelectImageCommandProperty() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(new FakeProductManagementService());
+            var window = new EditProductWindow(viewModel);
+
+            var binding = BindingOperations.GetBinding(window.SelectImageButton, Button.CommandProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(nameof(EditProductViewModel.SelectImageCommand), binding.Path.Path);
+        });
+
+    [Fact]
+    public void RemoveImageButtonIsBoundToTheRemoveImageCommandProperty() =>
+        RunOnStaThread(() =>
+        {
+            var viewModel = CreateViewModel(new FakeProductManagementService());
+            var window = new EditProductWindow(viewModel);
+
+            var binding = BindingOperations.GetBinding(window.RemoveImageButton, Button.CommandProperty);
+
+            Assert.NotNull(binding);
+            Assert.Equal(nameof(EditProductViewModel.RemoveImageCommand), binding.Path.Path);
         });
 
     [Fact]

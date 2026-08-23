@@ -64,6 +64,12 @@ internal sealed class ProductRecordConfiguration : IEntityTypeConfiguration<Prod
             .HasColumnName("is_active")
             .IsRequired();
 
+        // Nullable/additiva (BASIC-UX-01, sección 9/45): solo el nombre de archivo administrado por
+        // IProductImageStore, nunca una ruta absoluta. Productos existentes quedan con null.
+        builder.Property(record => record.ImageFileName)
+            .HasColumnName("image_file_name")
+            .HasMaxLength(255);
+
         builder.Property(record => record.CreatedAtUtc)
             .HasColumnName("created_at_utc_ticks")
             .HasConversion<DateTimeOffsetToTicksConverter>()

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Pos.Application.AdministrativeNotifications;
 using Pos.Application.Authentication;
 using Pos.Application.Enforcement;
@@ -37,10 +38,15 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private const double SidebarExpandedWidth = 240d;
     private const double SidebarCollapsedWidth = 68d;
 
+    private const double ClockRefreshIntervalSeconds = 30d;
+
     private readonly ICurrentUserSession _session;
     private readonly ICurrentRegisterSession _registerSession;
     private readonly ICurrentSalesCart _currentSalesCart;
     private readonly IInstallationEnforcementStateService _enforcementStateService;
+    private readonly IInstallationConnectivityStateService _connectivityStateService;
+    private readonly IDesktopClock _clock;
+    private readonly DispatcherTimer _clockTimer;
 
     // Capturado en el hilo que construye este ViewModel (el hilo de UI en producción — ver
     // App.xaml.cs ShowMainWindow) en vez de depender de System.Windows.Application.Current: evita
@@ -72,6 +78,9 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
     private string? _logoutBlockedMessage;
     private string? _closeRegisterBlockedMessage;
     private string? _enforcementBannerText;
+    private string _currentDateText = string.Empty;
+    private string _currentTimeText = string.Empty;
+    private InstallationConnectivityState _cloudConnectivityState = InstallationConnectivityState.Checking;
     private object _currentViewModel;
     private NavigationItem? _selectedNavigationItem;
     private bool _isSidebarExpanded = true;
@@ -87,6 +96,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         ICurrentRegisterSession registerSession,
         ICurrentSalesCart currentSalesCart,
         IInstallationEnforcementStateService enforcementStateService,
+        IInstallationConnectivityStateService connectivityStateService,
+        IDesktopClock clock,
         DashboardViewModel dashboardViewModel,
         SalesViewModel salesViewModel,
         SalesHistoryViewModel salesHistoryViewModel,
@@ -103,6 +114,8 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         _registerSession = registerSession ?? throw new ArgumentNullException(nameof(registerSession));
         _currentSalesCart = currentSalesCart ?? throw new ArgumentNullException(nameof(currentSalesCart));
         _enforcementStateService = enforcementStateService ?? throw new ArgumentNullException(nameof(enforcementStateService));
+        _connectivityStateService = connectivityStateService ?? throw new ArgumentNullException(nameof(connectivityStateService));
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _dashboardViewModel = dashboardViewModel ?? throw new ArgumentNullException(nameof(dashboardViewModel));
         _salesViewModel = salesViewModel ?? throw new ArgumentNullException(nameof(salesViewModel));
         _salesHistoryViewModel = salesHistoryViewModel ?? throw new ArgumentNullException(nameof(salesHistoryViewModel));
@@ -134,8 +147,22 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         _userManagementViewModel.EditUserRequested += OnUserManagementEditUserRequested;
         _notificationCenterViewModel.OpenNotificationRequested += OnNotificationCenterOpenNotificationRequested;
         _enforcementStateService.StateChanged += OnEnforcementStateChanged;
+        _connectivityStateService.StateChanged += OnConnectivityStateChanged;
 
         UpdateEnforcementBanner(_enforcementStateService.Current);
+        _cloudConnectivityState = _connectivityStateService.Current;
+
+        // Un solo DispatcherTimer a nivel de shell (sección 24 de la tarea: "no crear un timer
+        // costoso por View"), con la cadencia mínima suficiente para un reloj que solo muestra
+        // HH:mm (sección 24: "actualizar cada 30-60 segundos es suficiente"). Se refresca una vez
+        // de inmediato para no mostrar la hora vacía hasta el primer Tick.
+        _clockTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
+        {
+            Interval = TimeSpan.FromSeconds(ClockRefreshIntervalSeconds),
+        };
+        _clockTimer.Tick += OnClockTimerTick;
+        RefreshClock();
+        _clockTimer.Start();
 
         _topLevelNavigationItems = BuildNavigationItems().ToList();
         NavigationItems = new ObservableCollection<NavigationItem>();
@@ -230,6 +257,42 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         : string.Empty;
 
     public string RegisterStatusText => IsRegisterOpen ? "Caja abierta" : string.Empty;
+
+    // Fecha/hora local del sistema operativo (sección 22/23 de la tarea), formateada en español de
+    // México ("22/08/2026" / "18:45"). Nunca se obtiene de la nube ni afecta el UTC persistido.
+    public string CurrentDateText
+    {
+        get => _currentDateText;
+        private set => SetProperty(ref _currentDateText, value);
+    }
+
+    public string CurrentTimeText
+    {
+        get => _currentTimeText;
+        private set => SetProperty(ref _currentTimeText, value);
+    }
+
+    // Estado de conectividad CONTROL-PLANE (sección 27-38 de la tarea), NUNCA Business Sync (que no
+    // existe todavía). El enlace XAML del header usa DataTrigger sobre este enum para el color del
+    // indicador, reutilizando los brushes ya definidos en AppColors.xaml.
+    public InstallationConnectivityState CloudConnectivityState
+    {
+        get => _cloudConnectivityState;
+        private set
+        {
+            if (SetProperty(ref _cloudConnectivityState, value))
+            {
+                OnPropertyChanged(nameof(CloudStatusText));
+            }
+        }
+    }
+
+    public string CloudStatusText => CloudConnectivityState switch
+    {
+        InstallationConnectivityState.Connected => "POS Cloud conectado",
+        InstallationConnectivityState.Offline => "Sin conexión · operación local disponible",
+        _ => "Comprobando POS Cloud...",
+    };
 
     public string? LogoutBlockedMessage
     {
@@ -722,6 +785,23 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         _dispatcher.Invoke(() => UpdateEnforcementBanner(state));
     }
 
+    // Igual patrón de marshaling que OnEnforcementStateChanged: InstallationHeartbeatBackgroundService
+    // también dispara este evento desde un hilo distinto al de UI.
+    private void OnConnectivityStateChanged(object? sender, InstallationConnectivityState state)
+    {
+        _dispatcher.Invoke(() => CloudConnectivityState = state);
+    }
+
+    private void OnClockTimerTick(object? sender, EventArgs e) => RefreshClock();
+
+    private void RefreshClock()
+    {
+        var now = _clock.Now;
+        var culture = CultureInfo.GetCultureInfo("es-MX");
+        CurrentDateText = now.ToString("dd/MM/yyyy", culture);
+        CurrentTimeText = now.ToString("HH:mm", culture);
+    }
+
     private void UpdateEnforcementBanner(InstallationEnforcementState state)
     {
         EnforcementBannerText = state switch
@@ -736,5 +816,11 @@ public sealed class MainWindowViewModel : ViewModelBase, IDisposable
         };
     }
 
-    public void Dispose() => _enforcementStateService.StateChanged -= OnEnforcementStateChanged;
+    public void Dispose()
+    {
+        _enforcementStateService.StateChanged -= OnEnforcementStateChanged;
+        _connectivityStateService.StateChanged -= OnConnectivityStateChanged;
+        _clockTimer.Stop();
+        _clockTimer.Tick -= OnClockTimerTick;
+    }
 }

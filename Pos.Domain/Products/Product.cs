@@ -26,6 +26,11 @@ public sealed class Product
 
     public bool IsActive { get; private set; }
 
+    // Fotografía opcional del producto (BASIC-UX-01, sección 5): solo el nombre de archivo
+    // administrado por PosPlatform bajo ApplicationPathProvider.ProductImagesDirectory, nunca una
+    // ruta absoluta de máquina. null significa "sin foto", un estado válido y normal.
+    public string? ImageFileName { get; private set; }
+
     public DateTimeOffset CreatedAtUtc { get; }
 
     public Product(
@@ -39,7 +44,7 @@ public sealed class Product
         Money? cost,
         bool tracksInventory,
         DateTimeOffset createdAtUtc)
-        : this(id, organizationId, sku, barcode, name, description, salePrice, cost, tracksInventory, true, createdAtUtc)
+        : this(id, organizationId, sku, barcode, name, description, salePrice, cost, tracksInventory, true, null, createdAtUtc)
     {
     }
 
@@ -54,6 +59,7 @@ public sealed class Product
         Money? cost,
         bool tracksInventory,
         bool isActive,
+        string? imageFileName,
         DateTimeOffset createdAtUtc)
     {
         var validSalePrice = EnsureSalePrice(salePrice);
@@ -71,9 +77,11 @@ public sealed class Product
         TracksInventory = tracksInventory;
         CreatedAtUtc = EnsureUtc(createdAtUtc);
         IsActive = isActive;
+        ImageFileName = NormalizeImageFileName(imageFileName);
     }
 
-    // Reconstruye estado ya persistido, incluyendo IsActive, sin pasar por Activate/Deactivate.
+    // Reconstruye estado ya persistido, incluyendo IsActive/ImageFileName, sin pasar por
+    // Activate/Deactivate/ChangeImage.
     public static Product Rehydrate(
         ProductId id,
         OrganizationId organizationId,
@@ -85,8 +93,9 @@ public sealed class Product
         Money? cost,
         bool tracksInventory,
         bool isActive,
+        string? imageFileName,
         DateTimeOffset createdAtUtc) =>
-        new(id, organizationId, sku, barcode, name, description, salePrice, cost, tracksInventory, isActive, createdAtUtc);
+        new(id, organizationId, sku, barcode, name, description, salePrice, cost, tracksInventory, isActive, imageFileName, createdAtUtc);
 
     public void Rename(string name)
     {
@@ -144,6 +153,22 @@ public sealed class Product
         IsActive = false;
     }
 
+    // Fija/reemplaza la foto del producto con un nombre de archivo administrado ya generado por
+    // IProductImageStore (nunca una ruta absoluta ni el nombre original del archivo elegido por el
+    // usuario). Reemplazar una foto existente simplemente sobrescribe la referencia: la limpieza
+    // del archivo administrado anterior es responsabilidad de la capa de aplicación, después de
+    // persistir este cambio (BASIC-UX-01, sección 13).
+    public void ChangeImage(string imageFileName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(imageFileName);
+        ImageFileName = imageFileName;
+    }
+
+    public void RemoveImage()
+    {
+        ImageFileName = null;
+    }
+
     private static ProductId EnsureNotEmpty(ProductId id)
     {
         if (id.Value == Guid.Empty)
@@ -197,6 +222,9 @@ public sealed class Product
 
         return trimmed;
     }
+
+    private static string? NormalizeImageFileName(string? imageFileName) =>
+        string.IsNullOrWhiteSpace(imageFileName) ? null : imageFileName;
 
     private static Money EnsureSalePrice(Money salePrice)
     {

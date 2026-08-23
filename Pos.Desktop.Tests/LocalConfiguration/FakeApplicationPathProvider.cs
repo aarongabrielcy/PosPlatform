@@ -18,11 +18,17 @@ internal sealed class FakeApplicationPathProvider : IApplicationPathProvider
 
     public string BackupDirectory { get; }
 
+    public string ProductImagesDirectory => Path.Combine(DataDirectory, "ProductImages");
+
     public void EnsureDataDirectoryExists()
     {
     }
 
     public void EnsureBackupDirectoryExists()
+    {
+    }
+
+    public void EnsureProductImagesDirectoryExists()
     {
     }
 }

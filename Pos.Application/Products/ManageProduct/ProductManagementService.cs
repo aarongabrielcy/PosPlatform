@@ -106,7 +106,8 @@ public sealed class ProductManagementService : IProductManagementService
                 product.SalePrice.Currency,
                 availableQuantity,
                 product.TracksInventory,
-                product.IsActive));
+                product.IsActive,
+                product.ImageFileName));
         }
 
         return results;
@@ -171,7 +172,7 @@ public sealed class ProductManagementService : IProductManagementService
             .Select(item => recentActivity.TryGetValue(item.ProductId, out var activity)
                 ? new ProductCatalogItem(
                     item.ProductId, item.Sku, item.Barcode, item.Name, item.SalePriceAmount, item.Currency,
-                    item.TracksInventory, item.Quantity, item.ReorderPoint, item.IsActive, activity)
+                    item.TracksInventory, item.Quantity, item.ReorderPoint, item.IsActive, item.ImageFileName, activity)
                 : item)
             .ToList();
 
@@ -635,7 +636,8 @@ public sealed class ProductManagementService : IProductManagementService
             product.TracksInventory,
             product.IsActive,
             quantity,
-            reorderPoint);
+            reorderPoint,
+            product.ImageFileName);
     }
 
     private async Task<decimal> ResolveQuantityAsync(BranchId branchId, Product product, CancellationToken cancellationToken)

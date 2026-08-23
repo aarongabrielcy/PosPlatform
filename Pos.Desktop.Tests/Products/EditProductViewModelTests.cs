@@ -10,8 +10,11 @@ namespace Pos.Desktop.Tests.Products;
 public class EditProductViewModelTests
 {
     private static EditProductViewModel CreateViewModel(
-        FakeProductManagementService service, FakeCurrentSalesCart? currentSalesCart = null) =>
-        new(service, currentSalesCart ?? new FakeCurrentSalesCart(), NullLogger<EditProductViewModel>.Instance);
+        FakeProductManagementService service,
+        FakeCurrentSalesCart? currentSalesCart = null,
+        FakeProductPhotoService? photoService = null) =>
+        new(service, photoService ?? new FakeProductPhotoService(), currentSalesCart ?? new FakeCurrentSalesCart(),
+            NullLogger<EditProductViewModel>.Instance);
 
     private static ProductDetails CreateDetails(
         ProductId? productId = null,
@@ -21,15 +24,19 @@ public class EditProductViewModelTests
         bool tracksInventory = true,
         bool isActive = true,
         decimal currentQuantity = 8m,
-        decimal reorderPoint = 2m) =>
+        decimal reorderPoint = 2m,
+        string? imageFileName = null) =>
         new(
             productId ?? ProductId.New(), sku, barcode, name, "Descripción", 10m, "MXN", 5m,
-            tracksInventory, isActive, currentQuantity, reorderPoint);
+            tracksInventory, isActive, currentQuantity, reorderPoint, imageFileName);
 
     private static async Task<EditProductViewModel> CreateLoadedViewModelAsync(
-        FakeProductManagementService service, ProductDetails details, FakeCurrentSalesCart? currentSalesCart = null)
+        FakeProductManagementService service,
+        ProductDetails details,
+        FakeCurrentSalesCart? currentSalesCart = null,
+        FakeProductPhotoService? photoService = null)
     {
-        var viewModel = CreateViewModel(service, currentSalesCart);
+        var viewModel = CreateViewModel(service, currentSalesCart, photoService);
         await viewModel.LoadAsync(details.ProductId);
 
         return viewModel;
@@ -74,6 +81,82 @@ public class EditProductViewModelTests
         await viewModel.LoadAsync(ProductId.New());
 
         Assert.False(string.IsNullOrEmpty(viewModel.GeneralError));
+    }
+
+    // ---------- Foto del producto (BASIC-UX-01, sección 47/50/55) ----------
+
+    [Fact]
+    public async Task LoadAsyncExposesTheLoadedImageFileName()
+    {
+        var details = CreateDetails(imageFileName: "abc123.jpg");
+        var service = new FakeProductManagementService(getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details));
+
+        var viewModel = await CreateLoadedViewModelAsync(service, details);
+
+        Assert.Equal("abc123.jpg", viewModel.ImageFileName);
+    }
+
+    [Fact]
+    public async Task RemoveImageCommandCannotExecuteWithoutAnExistingPhoto()
+    {
+        var details = CreateDetails(imageFileName: null);
+        var service = new FakeProductManagementService(getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details));
+
+        var viewModel = await CreateLoadedViewModelAsync(service, details);
+
+        Assert.False(viewModel.RemoveImageCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task ApplySelectedImageUpdatesImageFileNameOnSuccessWithoutChangingProductId()
+    {
+        var details = CreateDetails(imageFileName: null);
+        var service = new FakeProductManagementService(getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details));
+        var updated = CreateDetails(productId: details.ProductId, imageFileName: "newfile.jpg");
+        var photoService = new FakeProductPhotoService(
+            setHandler: (_, _, _) => Task.FromResult(UpdateProductResult.SuccessResult(updated)));
+
+        var viewModel = await CreateLoadedViewModelAsync(service, details, photoService: photoService);
+
+        await viewModel.ApplySelectedImageAsync([1, 2, 3]);
+
+        Assert.Equal("newfile.jpg", viewModel.ImageFileName);
+        Assert.Equal(details.ProductId, viewModel.ProductId);
+        Assert.Equal(1, photoService.SetProductImageCallCount);
+    }
+
+    [Fact]
+    public async Task ApplySelectedImageSurfacesInvalidImageAsAGeneralError()
+    {
+        var details = CreateDetails(imageFileName: null);
+        var service = new FakeProductManagementService(getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details));
+        var photoService = new FakeProductPhotoService(
+            setHandler: (_, _, _) => Task.FromResult(UpdateProductResult.Failure(UpdateProductResultStatus.InvalidImage)));
+
+        var viewModel = await CreateLoadedViewModelAsync(service, details, photoService: photoService);
+
+        await viewModel.ApplySelectedImageAsync([0xFF]);
+
+        Assert.False(string.IsNullOrEmpty(viewModel.GeneralError));
+        Assert.Null(viewModel.ImageFileName);
+    }
+
+    [Fact]
+    public async Task RemoveImageCommandClearsImageFileNameOnSuccess()
+    {
+        var details = CreateDetails(imageFileName: "abc123.jpg");
+        var service = new FakeProductManagementService(getByIdHandler: (_, _) => Task.FromResult<ProductDetails?>(details));
+        var updated = CreateDetails(productId: details.ProductId, imageFileName: null);
+        var photoService = new FakeProductPhotoService(
+            removeHandler: (_, _) => Task.FromResult(UpdateProductResult.SuccessResult(updated)));
+
+        var viewModel = await CreateLoadedViewModelAsync(service, details, photoService: photoService);
+
+        viewModel.RemoveImageCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Null(viewModel.ImageFileName);
+        Assert.Equal(1, photoService.RemoveProductImageCallCount);
     }
 
     [Fact]

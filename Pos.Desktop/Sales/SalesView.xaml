@@ -13,6 +13,7 @@
                 <ResourceDictionary Source="/Pos.Desktop;component/Themes/Icons.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <converters:ProductAvailabilityStatusConverter x:Key="ProductAvailabilityStatusConverter" />
+            <converters:ProductImageSourceConverter x:Key="ProductImageSourceConverter" />
             <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
         </ResourceDictionary>
     </UserControl.Resources>
@@ -86,6 +87,23 @@
                     <MouseBinding MouseAction="LeftDoubleClick" Command="{Binding AddSelectedProductCommand}" />
                 </DataGrid.InputBindings>
                 <DataGrid.Columns>
+                    <!-- Miniatura/placeholder (BASIC-UX-01, sección 17/18): ayuda al cajero a
+                         identificar el producto correcto cuando el cliente no sabe el nombre exacto
+                         o hay nombres similares; nunca reemplaza SKU/nombre textual. -->
+                    <DataGridTemplateColumn Header="Foto" Width="52">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Grid Width="32" Height="32" Margin="2">
+                                    <Border Background="{StaticResource BorderBrush}" CornerRadius="4" />
+                                    <Image Stretch="UniformToFill" Source="{Binding ImageFileName, Converter={StaticResource ProductImageSourceConverter}}">
+                                        <Image.Clip>
+                                            <RectangleGeometry Rect="0,0,32,32" RadiusX="4" RadiusY="4" />
+                                        </Image.Clip>
+                                    </Image>
+                                </Grid>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                     <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="120" />
                     <DataGridTextColumn Header="Producto" Binding="{Binding Name}" Width="*" />
                     <DataGridTextColumn Header="Precio" Width="110">
