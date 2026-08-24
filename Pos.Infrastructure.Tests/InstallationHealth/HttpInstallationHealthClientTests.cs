@@ -130,6 +130,53 @@ public class HttpInstallationHealthClientTests
         AssertNoSensitiveValuesLogged(logger);
     }
 
+    // INST-ENF-02 (BASIC-REL-01, sección 6/9): regresión del mecanismo detrás de la corrección de
+    // DependencyInjection.HttpClientTimeout. Antes de acotar HttpClient.Timeout explícitamente, una
+    // petición colgada bloqueaba hasta el valor por defecto de 100s, empujando directamente el
+    // siguiente ciclo de heartbeat fuera del intervalo nominal de ~60s (ver
+    // InstallationHeartbeatBackgroundService, que encadena "enviar -> esperar el intervalo" sin
+    // ejecutar heartbeats en paralelo consigo mismo). Este test prueba que, con un Timeout acotado,
+    // una petición que nunca respondería por sí sola se clasifica como NetworkFailure con rapidez en
+    // vez de bloquear indefinidamente — la misma mecánica de la que depende la corrección real en
+    // Pos.Infrastructure.DependencyInjection.
+    [Fact]
+    public async Task RequestThatHangsBeyondTheConfiguredTimeoutIsClassifiedAsNetworkFailureWithoutBlockingIndefinitely()
+    {
+        var httpClient = new HttpClient(new HangingHttpMessageHandler())
+        {
+            BaseAddress = new Uri("http://localhost/"),
+            Timeout = TimeSpan.FromMilliseconds(200),
+        };
+        var logger = new CapturingLogger<HttpInstallationHealthClient>();
+        var client = new HttpInstallationHealthClient(httpClient, logger);
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var result = await client.SendHeartbeatAsync(Credential, "1.4.2", ClientReportedAtUtc, CancellationToken.None);
+        stopwatch.Stop();
+
+        Assert.Equal(InstallationHeartbeatClientStatus.NetworkFailure, result.Status);
+
+        // Margen generoso (bien por debajo del Timeout por defecto de 100s que causaba el síntoma
+        // original) para no volverse intermitente bajo contención de thread pool cuando la suite
+        // completa corre en paralelo — el punto de esta prueba es "acotado", no precisión exacta.
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromSeconds(30),
+            $"Se esperaba que la petición fallara muy por debajo del Timeout por defecto de 100s, pero tardó {stopwatch.Elapsed}.");
+    }
+
+    // A diferencia de StubHttpMessageHandler (que no reenvía el CancellationToken real al delegado
+    // de la prueba), este handler dedicado sí lo observa — necesario para que HttpClient.Timeout
+    // pueda cancelar la petición colgada en vez de bloquear indefinidamente.
+    private sealed class HangingHttpMessageHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.NoContent);
+        }
+    }
+
     private static HttpResponseMessage JsonResponse(HttpStatusCode statusCode, string json)
     {
         var response = new HttpResponseMessage(statusCode)

@@ -54,6 +54,8 @@ public class DependencyInjectionTests
 
         public string ProductImagesDirectory => Path.Combine(DataDirectory, "ProductImages");
 
+        public string LogsDirectory => Path.Combine(DataDirectory, "..", "Logs");
+
         public void EnsureDataDirectoryExists() =>
             throw new InvalidOperationException("No debe invocarse durante la prueba de composición.");
 
@@ -61,6 +63,9 @@ public class DependencyInjectionTests
             throw new InvalidOperationException("No debe invocarse durante la prueba de composición.");
 
         public void EnsureProductImagesDirectoryExists() =>
+            throw new InvalidOperationException("No debe invocarse durante la prueba de composición.");
+
+        public void EnsureLogsDirectoryExists() =>
             throw new InvalidOperationException("No debe invocarse durante la prueba de composición.");
     }
 
@@ -1053,6 +1058,19 @@ public class DependencyInjectionTests
             Assert.Same(root, scopeA.ServiceProvider.GetRequiredService<IInstallationHeartbeatSender>());
             Assert.Same(root, scopeB.ServiceProvider.GetRequiredService<IInstallationHeartbeatSender>());
         }
+    }
+
+    // INST-ENF-02 (BASIC-REL-01, sección 6/9/40): regresión directa de la corrección del root cause.
+    // Sin un Timeout explícito, HttpClient usa 100s por defecto; InstallationHeartbeatBackgroundService
+    // encadena "enviar heartbeat -> esperar el intervalo" sin ejecutar heartbeats en paralelo consigo
+    // mismo, así que una sola petición lenta empuja directamente el siguiente intento fuera del
+    // intervalo nominal de ~60s. Este valor debe permanecer muy por debajo de ese intervalo para que
+    // el peor caso de recuperación quede acotado, tal como exige la sección 40.
+    [Fact]
+    public void HttpClientTimeoutIsBoundedWellBelowTheHeartbeatInterval()
+    {
+        Assert.True(DependencyInjection.HttpClientTimeout > TimeSpan.Zero);
+        Assert.True(DependencyInjection.HttpClientTimeout <= TimeSpan.FromSeconds(30));
     }
 
     [Fact]

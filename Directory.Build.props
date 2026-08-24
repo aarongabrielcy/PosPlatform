@@ -10,6 +10,13 @@
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <!-- BASIC-REL-01, sección 23/24: fuente única de versión para toda la solución. El SDK deriva
+         AssemblyVersion/FileVersion/InformationalVersion de este único valor (InformationalVersion
+         agrega automáticamente un sufijo "+<git sha>" en builds deterministas — ver
+         AssemblyApplicationVersionProvider, que ya lo recorta). Cambiar la versión comercial de
+         Basic V1 solo requiere editar esta línea, nunca los csproj individuales. -->
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
 </Project>

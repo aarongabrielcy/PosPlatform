@@ -7,6 +7,7 @@ public sealed class ApplicationPathProvider : IApplicationPathProvider
     private const string DatabaseFileName = "pos.db";
     private const string BackupFolderName = "Backups";
     private const string ProductImagesFolderName = "ProductImages";
+    private const string LogsFolderName = "Logs";
 
     public ApplicationPathProvider()
         : this(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData))
@@ -21,6 +22,7 @@ public sealed class ApplicationPathProvider : IApplicationPathProvider
         DatabasePath = Path.Combine(DataDirectory, DatabaseFileName);
         BackupDirectory = Path.Combine(DataDirectory, BackupFolderName);
         ProductImagesDirectory = Path.Combine(DataDirectory, ProductImagesFolderName);
+        LogsDirectory = Path.Combine(localApplicationDataDirectory, ApplicationFolderName, LogsFolderName);
     }
 
     public string DataDirectory { get; }
@@ -30,6 +32,8 @@ public sealed class ApplicationPathProvider : IApplicationPathProvider
     public string BackupDirectory { get; }
 
     public string ProductImagesDirectory { get; }
+
+    public string LogsDirectory { get; }
 
     public void EnsureDataDirectoryExists()
     {
@@ -44,5 +48,10 @@ public sealed class ApplicationPathProvider : IApplicationPathProvider
     public void EnsureProductImagesDirectoryExists()
     {
         Directory.CreateDirectory(ProductImagesDirectory);
+    }
+
+    public void EnsureLogsDirectoryExists()
+    {
+        Directory.CreateDirectory(LogsDirectory);
     }
 }

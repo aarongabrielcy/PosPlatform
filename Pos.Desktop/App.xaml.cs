@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Pos.Application.Activation;
 using Pos.Application.Authentication;
+using Pos.Application.Common.Versioning;
 using Pos.Application.Configuration;
 using Pos.Application.Enforcement;
 using Pos.Application.Inventory;
@@ -45,8 +46,11 @@ using Pos.Domain.Common.Identifiers;
 using Pos.Hardware.EscPos;
 using Pos.Hardware.Printing;
 using Pos.Infrastructure;
+using Pos.Infrastructure.Logging;
 using Pos.Infrastructure.Persistence.Initialization;
 using Pos.Infrastructure.Storage;
+using System.Threading.Tasks;
+using System.Windows.Threading;
 
 namespace Pos.Desktop
 {
@@ -67,6 +71,18 @@ namespace Pos.Desktop
         [LoggerMessage(Level = LogLevel.Critical, Message = "Fallo al inicializar la base de datos local.")]
         private static partial void LogDatabaseInitializationFailure(ILogger logger, Exception exception);
 
+        [LoggerMessage(Level = LogLevel.Information, Message = "Aplicación iniciada. Versión {Version}.")]
+        private static partial void LogApplicationStartup(ILogger logger, string version);
+
+        [LoggerMessage(Level = LogLevel.Information, Message = "Aplicación cerrada normalmente.")]
+        private static partial void LogApplicationShutdown(ILogger logger);
+
+        [LoggerMessage(Level = LogLevel.Critical, Message = "Excepción fatal no controlada ({Source}).")]
+        private static partial void LogUnhandledFatalException(ILogger logger, string source, Exception exception);
+
+        [LoggerMessage(Level = LogLevel.Error, Message = "Excepción de una Task en segundo plano nunca observada.")]
+        private static partial void LogUnobservedTaskException(ILogger logger, Exception exception);
+
         [LoggerMessage(Level = LogLevel.Critical, Message = "La instalación local presenta un estado inconsistente ({InstallationState}).")]
         private static partial void LogInvalidInstallationState(ILogger logger, InstallationState installationState);
 
@@ -76,6 +92,15 @@ namespace Pos.Desktop
         protected override async void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // BASIC-REL-01, sección 20/21: registrados tan pronto como sea posible en el arranque
+            // para cubrir la mayor superficie posible de excepciones fatales no controladas, tanto
+            // las lanzadas más adelante en el ciclo de vida de la UI (DispatcherUnhandledException)
+            // como las de threads fuera del Dispatcher (AppDomain.UnhandledException) y Tasks en
+            // segundo plano cuya excepción nunca fue observada (TaskScheduler.UnobservedTaskException).
+            DispatcherUnhandledException += OnDispatcherUnhandledException;
+            AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
+            TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
             // Evita que WPF cierre la aplicación por ShutdownMode.OnLastWindowClose (el valor
             // por defecto) cuando InitialSetupWindow o LoginWindow —únicas ventanas abiertas
@@ -100,6 +125,25 @@ namespace Pos.Desktop
                         {
                             throw new InvalidOperationException(
                                 "La configuración 'Activation:BaseUrl' es obligatoria (ver appsettings.json).");
+                        }
+
+                        // BASIC-REL-01, sección 26-33 (REL-CLOUD-URL-01): la URL de producción exacta
+                        // de POS Cloud todavía no existe en este repositorio/configuración (backlog,
+                        // sección 28/43) — no se inventa. En su lugar, esta es la frontera de release
+                        // que impide empaquetar un build Release apuntando silenciosamente a
+                        // localhost/HTTP: ReleaseBuildInfo.IsReleaseBuild refleja la configuración de
+                        // compilación real del ejecutable (Debug/Release, ver ReleaseBuildInfo), no
+                        // una variable de entorno que pudiera olvidarse de configurar en la máquina
+                        // del cliente. En Debug (desarrollo), localhost sigue permitido sin cambios.
+                        var endpointValidation = PosCloudEndpointPolicy.Validate(
+                            activationBaseUrl, ReleaseBuildInfo.IsReleaseBuild);
+
+                        if (!endpointValidation.IsValid)
+                        {
+                            throw new InvalidOperationException(
+                                "Configuración de POS Cloud inválida para un build de Release: " +
+                                $"{DescribeEndpointValidationFailure(endpointValidation.Status)} " +
+                                "(clave 'Activation:BaseUrl').");
                         }
 
                         services.AddPosInfrastructure(activationBaseUrl);
@@ -195,6 +239,12 @@ namespace Pos.Desktop
                 // arranque, así que Start() sigue sin bloquear el hilo de UI de forma perceptible
                 // (ver Pos.Desktop.InstallationHealth.InstallationHeartbeatBackgroundService).
                 _host.Start();
+
+                // BASIC-REL-01, sección 16: primer evento útil del ciclo de vida de la aplicación,
+                // ya con el proveedor de registros persistentes disponible.
+                var startupLogger = _host.Services.GetRequiredService<ILogger<App>>();
+                var startupVersionProvider = _host.Services.GetRequiredService<IApplicationVersionProvider>();
+                LogApplicationStartup(startupLogger, startupVersionProvider.GetVersion());
 
                 var pathProvider = _host.Services.GetRequiredService<IApplicationPathProvider>();
                 pathProvider.EnsureDataDirectoryExists();
@@ -880,17 +930,27 @@ namespace Pos.Desktop
             }
 
             var printingService = _mainWindowScope.ServiceProvider.GetRequiredService<IReceiptPrintingService>();
+            var logger = _mainWindowScope.ServiceProvider.GetRequiredService<ILogger<App>>();
 
             decimal? cashTendered = summary.PaymentMethod == CheckoutPaymentMethod.Cash ? summary.CashTendered : null;
             decimal? changeDue = summary.PaymentMethod == CheckoutPaymentMethod.Cash ? summary.ChangeAmount : null;
 
             try
             {
-                return await printingService.PrintAfterSaleAsync(summary.SaleId, cashTendered, changeDue);
+                var result = await printingService.PrintAfterSaleAsync(summary.SaleId, cashTendered, changeDue);
+
+                // Sección 16/17: falla esperable de hardware (impresora apagada/sin papel/no
+                // instalada), nunca una excepción — se registra como advertencia, no como error.
+                if (result.Status is ReceiptPrintResultStatus.PrinterUnavailable or ReceiptPrintResultStatus.PrintFailed)
+                {
+                    LogReceiptPrintOutcomeWarning(logger, result.Status);
+                }
+
+                return result;
             }
             catch (Exception ex)
             {
-                LogReceiptPrintFailed(_mainWindowScope.ServiceProvider.GetRequiredService<ILogger<App>>(), ex);
+                LogReceiptPrintFailed(logger, ex);
                 return ReceiptPrintResult.Of(ReceiptPrintResultStatus.PrintFailed);
             }
         }
@@ -909,12 +969,125 @@ namespace Pos.Desktop
         [LoggerMessage(Level = LogLevel.Error, Message = "Error inesperado al imprimir el ticket tras el cobro.")]
         private static partial void LogReceiptPrintFailed(ILogger logger, Exception exception);
 
+        [LoggerMessage(Level = LogLevel.Warning, Message = "No fue posible imprimir el ticket tras el cobro (estado {Status}).")]
+        private static partial void LogReceiptPrintOutcomeWarning(ILogger logger, ReceiptPrintResultStatus status);
+
+        private static string DescribeEndpointValidationFailure(PosCloudEndpointValidationStatus status) => status switch
+        {
+            PosCloudEndpointValidationStatus.Missing => "no se configuró ningún valor.",
+            PosCloudEndpointValidationStatus.InvalidUrl => "el valor configurado no es una URL absoluta válida.",
+            PosCloudEndpointValidationStatus.RequiresHttps => "debe usar HTTPS en un build de Release.",
+            PosCloudEndpointValidationStatus.LocalhostNotAllowed => "no puede apuntar a localhost/127.0.0.1/::1 en un build de Release.",
+            _ => "es inválido.",
+        };
+
+        // BASIC-REL-01, sección 20/21: registrados en OnStartup tan pronto como sea posible.
+        // Ninguno de los tres marca la excepción como "manejada" para mantener vivo un estado
+        // potencialmente corrupto (sección 20) — Dispatcher/AppDomain terminan el proceso
+        // deliberadamente después de registrar y avisar al usuario con un mensaje seguro en español
+        // (sección 21), nunca con el stack trace crudo. TaskScheduler.UnobservedTaskException es la
+        // única excepción a esa regla: no representa un proceso muriendo, solo una Task en segundo
+        // plano cuya excepción nunca fue observada, y SetObserved() es el mecanismo estándar de
+        // .NET para reconocerla sin ocultar un fallo activo (la falla original ya ocurrió y no se
+        // "mantiene vivo" ningún estado corrupto al observarla aquí).
+        private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+        {
+            LogFatal("DispatcherUnhandledException", e.Exception);
+            ShowFatalErrorMessage();
+
+            e.Handled = true;
+            Shutdown(-10);
+        }
+
+        private void OnAppDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            if (e.ExceptionObject is Exception exception)
+            {
+                LogFatal("AppDomainUnhandledException", exception);
+            }
+
+            ShowFatalErrorMessage();
+        }
+
+        private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            LogUnobserved(e.Exception);
+            e.SetObserved();
+        }
+
+        private void LogFatal(string source, Exception exception)
+        {
+            try
+            {
+                var hostLogger = _host?.Services.GetService<ILogger<App>>();
+
+                if (hostLogger is not null)
+                {
+                    LogUnhandledFatalException(hostLogger, source, exception);
+                    return;
+                }
+
+                // El Host no está disponible (falla muy temprana del arranque, antes de _host.Start()):
+                // registra directamente, sin pasar por DI, para no perder evidencia diagnóstica.
+                using var fallbackProvider = new RotatingFileLoggerProvider(new ApplicationPathProvider().LogsDirectory);
+                LogUnhandledFatalException(fallbackProvider.CreateLogger(nameof(App)), source, exception);
+            }
+            catch
+            {
+                // El registro de diagnóstico nunca debe impedir mostrar el aviso al usuario ni
+                // terminar el proceso (sección 20): un fallo aquí se ignora deliberadamente.
+            }
+        }
+
+        private void LogUnobserved(Exception exception)
+        {
+            try
+            {
+                var hostLogger = _host?.Services.GetService<ILogger<App>>();
+
+                if (hostLogger is not null)
+                {
+                    LogUnobservedTaskException(hostLogger, exception);
+                    return;
+                }
+
+                using var fallbackProvider = new RotatingFileLoggerProvider(new ApplicationPathProvider().LogsDirectory);
+                LogUnobservedTaskException(fallbackProvider.CreateLogger(nameof(App)), exception);
+            }
+            catch
+            {
+            }
+        }
+
+        // Sección 21: nunca stack trace, archivos internos ni material sensible — el detalle técnico
+        // vive únicamente en los registros.
+        private static void ShowFatalErrorMessage()
+        {
+            try
+            {
+                MessageBox.Show(
+                    "Ocurrió un error inesperado.\nRevise los registros de PosPlatform o contacte a soporte.",
+                    "PosPlatform",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            catch
+            {
+            }
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
             _mainWindowScope?.ServiceProvider.GetService<ICurrentSalesCart>()?.Clear();
 
             var session = _mainWindowScope?.ServiceProvider.GetService<ICurrentUserSession>();
             session?.Clear();
+
+            var exitLogger = _host?.Services.GetService<ILogger<App>>();
+            if (exitLogger is not null)
+            {
+                LogApplicationShutdown(exitLogger);
+            }
 
             _mainWindowScope?.Dispose();
 
