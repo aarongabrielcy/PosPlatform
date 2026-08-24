@@ -14,6 +14,24 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <!-- BASIC-INS-01, sección 24/25: sin esto, el SDK deriva AssemblyProduct/AssemblyTitle del nombre
+       interno del proyecto ("Pos.Desktop"), que terminaría visible en las propiedades de archivo del
+       ejecutable publicado (y de ahí en Detalles de Windows / Aplicaciones instaladas) — el instalador
+       de Inno Setup toma el nombre visible ("PosPlatform") de sus propios #define, no de estos
+       metadatos, pero mantenerlos alineados evita una inconsistencia cosmética innecesaria.
+       GenerateAssemblyCompanyAttribute=false (en vez de <Company></Company>, que el SDK trata igual
+       que "no establecido" y reemplaza de todas formas por AssemblyName — verificado en el publish
+       real: CompanyName seguía mostrando "Pos.Desktop") deja CompanyName realmente vacío, sin
+       inventar una razón social (sección 27 de la tarea de instalador). No se renombra el proyecto ni
+       el ensamblado (AssemblyName sigue siendo Pos.Desktop / Pos.Desktop.exe, sección 25: "no realizar
+       un renombrado riesgoso solo por motivos cosméticos").
+  -->
+  <PropertyGroup>
+    <AssemblyTitle>PosPlatform</AssemblyTitle>
+    <Product>PosPlatform</Product>
+    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
   </ItemGroup>
