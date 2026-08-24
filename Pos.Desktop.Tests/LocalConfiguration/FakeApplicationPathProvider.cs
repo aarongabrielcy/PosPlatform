@@ -10,6 +10,7 @@ internal sealed class FakeApplicationPathProvider : IApplicationPathProvider
         DataDirectory = Path.Combine(root, "PosPlatform", "Data");
         DatabasePath = Path.Combine(DataDirectory, "pos.db");
         BackupDirectory = Path.Combine(DataDirectory, "Backups");
+        LogsDirectory = Path.Combine(root, "PosPlatform", "Logs");
     }
 
     public string DataDirectory { get; }
@@ -20,6 +21,8 @@ internal sealed class FakeApplicationPathProvider : IApplicationPathProvider
 
     public string ProductImagesDirectory => Path.Combine(DataDirectory, "ProductImages");
 
+    public string LogsDirectory { get; }
+
     public void EnsureDataDirectoryExists()
     {
     }
@@ -29,6 +32,10 @@ internal sealed class FakeApplicationPathProvider : IApplicationPathProvider
     }
 
     public void EnsureProductImagesDirectoryExists()
+    {
+    }
+
+    public void EnsureLogsDirectoryExists()
     {
     }
 }

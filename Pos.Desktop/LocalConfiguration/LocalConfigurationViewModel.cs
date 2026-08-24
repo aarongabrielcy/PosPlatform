@@ -93,6 +93,7 @@ public sealed class LocalConfigurationViewModel : ViewModelBase
 
         ApplicationVersion = _versionProvider.GetVersion();
         SettingsFilePath = Path.Combine(_pathProvider.DataDirectory, "Config", "settings.json");
+        LogsDirectoryPath = _pathProvider.LogsDirectory;
     }
 
     public ICommand LoadCommand => _loadCommand;
@@ -208,6 +209,8 @@ public sealed class LocalConfigurationViewModel : ViewModelBase
     public string ApplicationVersion { get; }
 
     public string SettingsFilePath { get; }
+
+    public string LogsDirectoryPath { get; }
 
     public string ActivationStatusText { get; private set; } = string.Empty;
 

@@ -128,6 +128,29 @@ public class InstallationHeartbeatBackgroundServiceTests
         Assert.Equal(InstallationEnforcementState.Suspended, enforcementStateService.Current);
     }
 
+    // INST-ENF-02 (BASIC-REL-01, sección 5/40): la recuperación de Suspended -> Allowed debe ocurrir
+    // en el primer heartbeat exitoso confirmado, sin depender de ningún reintento adicional ni de un
+    // reinicio del proceso. TinyInterval prueba esto sin ningún sleep real de 60s (sección 8/47).
+    [Fact]
+    public async Task SuspendedStateBecomesAllowedAfterTheNextSuccessfulHeartbeat()
+    {
+        var sender = new FakeInstallationHeartbeatSender(InstallationHeartbeatSendOutcome.Success);
+        var enforcementStateService = new FakeInstallationEnforcementStateService(InstallationEnforcementState.Suspended);
+        var service = CreateService(sender, enforcementStateService);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitUntilAsync(() => enforcementStateService.ApplyHeartbeatOutcomeCallCount >= 1);
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+
+        Assert.Equal(InstallationEnforcementState.Allowed, enforcementStateService.Current);
+    }
+
     [Fact]
     public async Task NetworkFailureOutcomeIsStillForwardedButDoesNotChangeEnforcementState()
     {

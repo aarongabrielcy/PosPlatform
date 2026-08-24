@@ -128,6 +128,7 @@ public static class DependencyInjection
             var httpClient = new HttpClient
             {
                 BaseAddress = new Uri(NormalizeBaseUrl(installationActivationBaseUrl), UriKind.Absolute),
+                Timeout = HttpClientTimeout,
             };
 
             return ActivatorUtilities.CreateInstance<HttpInstallationActivationClient>(sp, httpClient);
@@ -170,6 +171,7 @@ public static class DependencyInjection
             var httpClient = new HttpClient
             {
                 BaseAddress = new Uri(NormalizeBaseUrl(installationActivationBaseUrl), UriKind.Absolute),
+                Timeout = HttpClientTimeout,
             };
 
             return ActivatorUtilities.CreateInstance<HttpInstallationHealthClient>(sp, httpClient);
@@ -179,6 +181,19 @@ public static class DependencyInjection
 
         return services;
     }
+
+    // INST-ENF-02 (BASIC-REL-01, sección 6/9): sin este límite explícito, HttpClient usa su Timeout
+    // por defecto de 100 segundos. InstallationHeartbeatBackgroundService encadena "enviar heartbeat
+    // -> esperar el intervalo" (nunca concurrente consigo mismo), así que una sola petición lenta o
+    // colgada empuja directamente el siguiente intento fuera del intervalo nominal de ~60s — el
+    // síntoma observado (recuperación de Suspended -> Allowed tardando varios minutos en vez de un
+    // ciclo) es exactamente ese acoplamiento sin límite entre la duración de la petición HTTP y la
+    // cadencia del heartbeat, no la cadencia en sí (que permanece sin tocar). 20s deja margen amplio
+    // para latencia real de red y sigue siendo mucho menor que el intervalo de 60s, así que el peor
+    // caso (heartbeat colgado + espera completa) permanece acotado a aproximadamente un intervalo
+    // más el tiempo de la petición, tal como exige la sección 40. Se aplica también al cliente de
+    // Activation por el mismo motivo (bloquearía el diálogo modal de activación en el arranque).
+    internal static readonly TimeSpan HttpClientTimeout = TimeSpan.FromSeconds(20);
 
     // HttpClient exige que BaseAddress termine en "/" para que las rutas relativas sin "/" inicial
     // (p. ej. "api/v1/installation-auth/enroll") se combinen agregando el segmento en lugar de

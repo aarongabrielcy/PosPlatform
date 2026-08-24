@@ -140,6 +140,9 @@
                             <TextBlock Text="Archivo de configuración local" Style="{StaticResource DetailLabelStyle}" />
                             <TextBlock Text="{Binding SettingsFilePath}" Style="{StaticResource DetailValueStyle}" />
 
+                            <TextBlock Text="Ruta de registros" Style="{StaticResource DetailLabelStyle}" />
+                            <TextBlock Text="{Binding LogsDirectoryPath}" Style="{StaticResource DetailValueStyle}" />
+
                             <TextBlock Text="Activación" Style="{StaticResource DetailLabelStyle}" />
                             <TextBlock Text="{Binding ActivationStatusText}" Style="{StaticResource DetailValueStyle}" />
                         </StackPanel>

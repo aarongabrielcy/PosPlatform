@@ -83,18 +83,42 @@ public sealed partial class InstallationHeartbeatBackgroundService : BackgroundS
 
     private async Task SendOnceAsync(CancellationToken cancellationToken)
     {
+        // Instrumentación INST-ENF-02 (sección 7 de la tarea de release foundation): duración real
+        // del intento y transiciones de enforcement/conectividad, para poder diagnosticar una
+        // recuperación lenta sin adivinar. Nunca registra la Installation Credential ni encabezados
+        // de autorización (sección 9/18/19) — solo el resultado clasificado y la duración.
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        LogHeartbeatAttemptStarted(_logger);
+
+        var previousEnforcement = _enforcementStateService.Current;
+        var previousConnectivity = _connectivityStateService.Current;
+
         try
         {
             var outcome = await _sender.SendHeartbeatAsync(cancellationToken).ConfigureAwait(false);
+            stopwatch.Stop();
+            LogHeartbeatCompleted(_logger, outcome.ToString(), stopwatch.ElapsedMilliseconds);
             LogOutcome(outcome);
 
             // Puente heartbeat -> enforcement (sección 15/16 de la tarea): el estado de enforcement
             // en memoria debe reflejar un resultado confirmado sin esperar a un reinicio del proceso.
             await _enforcementStateService.ApplyHeartbeatOutcomeAsync(outcome, cancellationToken).ConfigureAwait(false);
 
+            var newEnforcement = _enforcementStateService.Current;
+            if (newEnforcement != previousEnforcement)
+            {
+                LogEnforcementTransition(_logger, previousEnforcement.ToString(), newEnforcement.ToString());
+            }
+
             // Puente heartbeat -> indicador de conectividad POS Cloud (BASIC-UX-01, sección 30):
             // reutiliza el mismo resultado de heartbeat, sin ningún poll HTTP adicional.
             _connectivityStateService.ApplyHeartbeatOutcome(outcome);
+
+            var newConnectivity = _connectivityStateService.Current;
+            if (newConnectivity != previousConnectivity)
+            {
+                LogConnectivityTransition(_logger, previousConnectivity.ToString(), newConnectivity.ToString());
+            }
         }
         catch (OperationCanceledException)
         {
@@ -136,6 +160,18 @@ public sealed partial class InstallationHeartbeatBackgroundService : BackgroundS
                 break;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Intento de heartbeat de instalación iniciado.")]
+    private static partial void LogHeartbeatAttemptStarted(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Heartbeat de instalación completado. Resultado={Outcome}, duración={ElapsedMilliseconds}ms.")]
+    private static partial void LogHeartbeatCompleted(ILogger logger, string outcome, long elapsedMilliseconds);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Transición de estado de enforcement: {PreviousState} -> {NewState}.")]
+    private static partial void LogEnforcementTransition(ILogger logger, string previousState, string newState);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Transición de conectividad con POS Cloud: {PreviousState} -> {NewState}.")]
+    private static partial void LogConnectivityTransition(ILogger logger, string previousState, string newState);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Heartbeat de instalación enviado correctamente.")]
     private static partial void LogHeartbeatSucceeded(ILogger logger);

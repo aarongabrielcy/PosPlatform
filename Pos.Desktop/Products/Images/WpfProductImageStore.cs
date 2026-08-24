@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows.Media.Imaging;
+using Microsoft.Extensions.Logging;
 using Pos.Application.Products.ManageProduct;
 using Pos.Infrastructure.Storage;
 
@@ -21,17 +22,19 @@ namespace Pos.Desktop.Products.Images;
 //   control, manteniendo calidad visual razonable para una miniatura de POS.
 // - Nombre de archivo: GUID generado por la aplicación + ".jpg", nunca el nombre original elegido
 //   por el usuario (previene colisiones, caracteres inseguros y path traversal).
-public sealed class WpfProductImageStore : IProductImageStore
+public sealed partial class WpfProductImageStore : IProductImageStore
 {
     private const int MaxInputBytes = 8 * 1024 * 1024;
     private const int MaxDimensionPixels = 800;
     private const int JpegQualityLevel = 85;
 
     private readonly IApplicationPathProvider _pathProvider;
+    private readonly ILogger<WpfProductImageStore> _logger;
 
-    public WpfProductImageStore(IApplicationPathProvider pathProvider)
+    public WpfProductImageStore(IApplicationPathProvider pathProvider, ILogger<WpfProductImageStore> logger)
     {
         _pathProvider = pathProvider ?? throw new ArgumentNullException(nameof(pathProvider));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public Task<ProductImageStoreResult> SaveAsync(byte[] content, CancellationToken cancellationToken = default)
@@ -63,6 +66,7 @@ public sealed class WpfProductImageStore : IProductImageStore
         {
             // El archivo no se pudo decodificar como imagen real: nunca se confía únicamente en la
             // extensión (sección 10/43).
+            LogInvalidImage(_logger, ex);
             return Task.FromResult(ProductImageStoreResult.Failure(ProductImageStoreStatus.InvalidImage));
         }
 
@@ -96,17 +100,25 @@ public sealed class WpfProductImageStore : IProductImageStore
                 File.Delete(fullPath);
             }
         }
-        catch (IOException)
+        catch (IOException ex)
         {
             // Best-effort (sección 15): un huérfano ocasional por un archivo bloqueado no es un
-            // bloqueante para Basic V1.
+            // bloqueante para Basic V1, pero queda registrado para diagnóstico (sección 16).
+            LogDeleteFailed(_logger, ex);
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            LogDeleteFailed(_logger, ex);
         }
 
         return Task.CompletedTask;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "El archivo de fotografía de producto no es una imagen válida o no se pudo decodificar.")]
+    private static partial void LogInvalidImage(ILogger logger, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No fue posible eliminar el archivo de fotografía de producto administrado.")]
+    private static partial void LogDeleteFailed(ILogger logger, Exception exception);
 
     private static System.Windows.Media.Imaging.BitmapSource Normalize(BitmapFrame source)
     {

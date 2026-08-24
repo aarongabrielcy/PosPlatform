@@ -54,6 +54,8 @@ public class DependencyInjectionTests
 
         public string ProductImagesDirectory => Path.Combine(DataDirectory, "ProductImages");
 
+        public string LogsDirectory => Path.Combine(DataDirectory, "..", "Logs");
+
         public void EnsureDataDirectoryExists() =>
             throw new InvalidOperationException("No debe invocarse durante la prueba de composición.");
 
@@ -61,6 +63,9 @@ public class DependencyInjectionTests
             throw new InvalidOperationException("No debe invocarse durante la prueba de composición.");
 
         public void EnsureProductImagesDirectoryExists() =>
+            throw new InvalidOperationException("No debe invocarse durante la prueba de composición.");
+
+        public void EnsureLogsDirectoryExists() =>
             throw new InvalidOperationException("No debe invocarse durante la prueba de composición.");
     }
 
